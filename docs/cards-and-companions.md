@@ -35,7 +35,7 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 | Mythic | 40–50% | 5 |
 | Ancient | 65%, fixed (very rare) | 6 |
 
-**The sword asset** is Ray's ink katana (`reference/sword-ink.png`), traced to vector with potrace (`reference/sword-trace.svg`) and embedded as `SWORD.d`: a Path2D in lower-arm space, with the grip in the fist, the guard just past it, and the blade running on along the arm with its curve. Long stretches only the blade.
+**The sword asset** is Ray's ink katana (`reference/sword-ink.png`), traced to vector with potrace (`reference/sword-trace.svg`) and embedded as `SWORD.d`: a Path2D in lower-arm space, with the grip in the fist, the guard just past it, and the blade running on along the arm with its curve. Long stretches only the blade. Under the ink sits a pale grey fill (`SWORD.fill`, made by `tests/sword-fill.py`) so it reads as a solid object: the ink's silhouette with its gaps closed, the guard's disc filled in and the tassel left out. The sword is drawn under the front arm, so the lead fist wraps over the grip.
 
 **Sword stances (`SWORD_HOLD`, `swordHold`):** the sword is drawn 1.5× the traced size, and the wrist turns it about the fist (`swordW`, eased) toward each stance's angle, set in the body frame:
 - **Standing or walking:** both hands on the grip in front, the blade angled up and out toward where you face, swaying a little with the stance.
