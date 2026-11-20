@@ -37,6 +37,12 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 
 **The sword asset** is Ray's ink katana (`reference/sword-ink.png`), traced to vector with potrace (`reference/sword-trace.svg`) and embedded as `SWORD.d`: a Path2D in lower-arm space, with the grip in the fist, the guard just past it, and the blade running on along the arm with its curve. Long stretches only the blade.
 
+**Sword stances (`SWORD_HOLD`, `swordHold`):** the sword is drawn 1.5× the traced size, and the wrist turns it about the fist (`swordW`, eased) toward each stance's angle, set in the body frame:
+- **Standing or walking:** both hands on the grip in front, the blade angled up and out toward where you face, swaying a little with the stance.
+- **Sprinting, ground-dashing or sliding:** one hand, the arm swept back and the blade trailing behind with its tip just off the ground.
+- **Jumping and the somersault:** one hand, the arm as the jump has it, the blade out forward and a little up. It tumbles with the flip.
+- **Attacking, parrying, stunned or wall-sliding:** the blade lines up with the forearm, so the moves strike along it. The punch swoosh follows the fist, not the tip.
+
 **Holding a weapon:** the fighter holds it in the lead hand (`drawSword`). Hits from that arm reach out to the blade's tip. **Every** hit they land does the weapon's damage, worked through its modifiers (`wpnHit`), on the bot and on the Divine General (who takes his usual 60%). Ray will design proper weapon movesets later; this is the test setup.
 
 ### Modifiers (`MODS`)

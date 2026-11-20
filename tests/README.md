@@ -44,6 +44,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node weapon-mods.js` | Every weapon modifier in a fight (on the bot, and a set of them against the Divine General); checks the stacking / curse / bless maths, Anchor, and page errors. |
 | `node forge-shot.js` | The forge, start to finish: opens it on the Sword, sets Legendary and four modifiers (one cursed, one stacked), screenshots the forge, the picker and the cards screen, then lands a sword jab. |
 | `node sword-shot.js` | The traced katana in the player's hand: standing and through a jab (`out/sword-hand.png`). |
+| `node sword-stances.js` | The sword stances: standing (both facings), walking, sprinting, dashing, jumping, the somersault and a jab (`out/sword-stances.png`). |
 | `node stage-shot.js` | The Practice stage with both fighters standing, plus close-ups of the wall corner and the open edge (`out/stage*.png`). |
 | `node edge-shot.js` | The open edge up close: the corner's ink work, and the fighter standing on the lip, just off it, hanging on the cliff and above it (`out/edge.png`). Nothing should overlap the terrain wrongly. |
 | `node dg-sweep.js` | Quake into his sweep follow-up on the player: once taking it (prints the sideways ragdoll), once parrying as the stun wears off (no damage), once from further away; frame sheets `out/sweep-*.png`. |
