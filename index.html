@@ -274,10 +274,18 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   //  - sprinting or ground-dashing: one hand, the arm swept back and the blade trailing behind, tip just off the ground;
   //  - in the air (jumps, the somersault): one hand, arm as it is, the sword sitting naturally across the fist.
   //  - attacking: the blade lines up with the forearm, so the moves strike along it as before.
-  const SWORD_HOLD = { scale: 1.7, guard: { fa1: -0.55, fa2: -1.05, ba1: -0.42, ba2: -1.0, abs: -2.22 }, trail: { fa1: 0.95, fa2: -0.05, abs: 1.12 }, air: -1.8 };
+  const SWORD_HOLD = { scale: 1.7, guard: { fa1: -0.55, fa2: -1.05, ba1: -0.42, ba2: -1.0, abs: -2.22 }, trail: { fa1: 0.95, fa2: -0.05, abs: 1.12 }, air: -1.8,
+    parry: { up: -2.25, fore: -2.85, back: 0.12, abs: -0.5, turnX: 0.86, turnY: 0.95 } };   // parry, a hanging guard: both fists raised above the head on the hilt (up / fore = the upper arm's and forearm's angles in the body frame; back = how far behind the lead fist the other one is), the blade hanging diagonally down across the face and body; turnX / turnY foreshorten it a little (its flat turned toward us)
   function swordHold(f, tg) {
     const S_ = SWORD_HOLD, P_ = f.punch, nt = { ...tg };
-    if (P_.on || f.parryT > 0 || f.lockT > 0 || f.staggerT > 0 || f.wallSlide) { f.swordAim = { rel: 0, rate: 30 }; return tg; }   // its own pose: the blade along the forearm
+    f.swordTurnTo = 0;
+    if (f.parryT > 0 || f.lockT > 0) {   // the sword parry: hilt to the cheek in both hands, blade turned down across the body
+      const Pp = S_.parry, jit = f.parryT > 0 ? tg.fa1 - (XGUARD.fa1 - (tg.tl - XGUARD.tl) - 0.5 * Math.min(1, (PARRY_WIN - f.parryT) / 0.05)) : 0;   // keep the parry's shake
+      const u = Pp.up - tg.tl + jit * 0.4, fo = Pp.fore - Pp.up;   // angles relative to the torso / upper arm
+      Object.assign(nt, { fa1: u, fa2: fo, ba1: u + Pp.back, ba2: fo - Pp.back * 0.5 });
+      f.swordAim = { abs: Pp.abs, rate: 40 }; f.swordTurnTo = 1; return nt;
+    }
+    if (P_.on || f.staggerT > 0 || f.wallSlide) { f.swordAim = { rel: 0, rate: 30 }; return tg; }   // its own pose: the blade along the forearm
     const run = f.onGround && ((f.dashT > 0 && !f.dashAir) || f.slideT > 0 || (f.sprint > 0.55 && Math.abs(f.vx) > 220));
     if (!f.onGround && !(f.dashT > 0 && !f.dashAir)) { f.swordAim = { abs: S_.air, rate: 14 }; return tg; }   // jumps and the somersault: one hand, the arm as it is, blade out forward and a little up (it tumbles with the flip)
     if (run) { const T_ = S_.trail; nt.fa1 = T_.fa1 + 0.06 * Math.sin(f.run || 0); nt.fa2 = T_.fa2; f.swordAim = { abs: T_.abs, rate: 12 }; return nt; }
@@ -1649,6 +1657,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (pl.wpn) {   // the wrist turns the sword toward its stance angle (ABS: in the body frame; REL: against the forearm)
       const H = pl.swordAim || { rel: 0 }, w = H.abs !== undefined ? H.abs - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2) : H.rel;
       pl.swordW = (pl.swordW || 0) + wrapA(w - (pl.swordW || 0)) * (1 - Math.exp(-(H.rate || 18) * dt));
+      pl.swordTurn = (pl.swordTurn || 0) + ((pl.swordTurnTo || 0) - (pl.swordTurn || 0)) * (1 - Math.exp(-30 * dt));
     }
     R0 = rig();
     swordShed(pl, R0, dt);
@@ -2028,12 +2037,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const swordLen = (W) => W.blade * Math.max(0.5, 1 + W.long / 100);
   const swordK = (W) => W ? swordLen(W) / SWORD.len : 1;
   // the sword's frame: turned at the wrist by w (radians, against the forearm) and scaled by sc, both about the fist
-  const swordMat = (m, w = 0, sc = 1) => chain(m, T(0, 19), R(w), Sc(sc, sc), T(0, -19));   // (the fist sits at 0,19 in the forearm)
+  const swordMat = (m, w = 0, sc = 1, turn = 0) => chain(m, T(0, 19), R(w), Sc(sc * (1 - (1 - SWORD_HOLD.parry.turnX) * turn), sc * (1 - (1 - SWORD_HOLD.parry.turnY) * turn)), T(0, -19));   // turn: foreshortened as it turns toward us (the parry)   // (the fist sits at 0,19 in the forearm)
   const swordTip = (R, W, w = 0) => apply(swordMat(R.fa.lo, w, SWORD_HOLD.scale), SWORD.tip[0], SWORD.guard + (SWORD.tip[1] - SWORD.guard) * swordK(W));
   // ink shed off the blade as it moves fast in an attack: small flecks from the outer half, carried a little along the swing
   function swordShed(f, R, dt) {
     if (!f.wpn || !R) return;
-    const C = SWORD_FX, M = swordMat(R.fa.lo, f.swordW || 0, SWORD_HOLD.scale), tip = swordTip(R, f.wpn, f.swordW || 0), gd = apply(M, 0, SWORD.guard), prev = f.swordTipPrev;
+    const C = SWORD_FX, M = swordMat(R.fa.lo, f.swordW || 0, SWORD_HOLD.scale, f.swordTurn || 0), tip = swordTip(R, f.wpn, f.swordW || 0), gd = apply(M, 0, SWORD.guard), prev = f.swordTipPrev;
     f.swordTipPrev = tip;
     const GH = f.swordGhosts || (f.swordGhosts = []), now = f.time || 0;
     while (GH.length && now - GH[0].t >= C.life) GH.shift();
@@ -2057,7 +2066,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
   }
   function drawSword(m0, W, ink = INK, w = 0, sc = 1, f = null) {
-    const G = SWORD.guard, k = swordK(W), m = swordMat(m0, w, sc);
+    const G = SWORD.guard, k = swordK(W), m = swordMat(m0, w, sc, f ? f.swordTurn || 0 : 0);
     if (f) {   // held: afterimages of the swing behind it, then the sword with its outline
       const now = f.time || 0;
       for (const gh of f.swordGhosts || []) { const a = SWORD_FX.alpha * (1 - (now - gh.t) / SWORD_FX.life); if (a <= 0) continue; ctx.save(); ctx.globalAlpha = a; paintSword(gh.m, gh.k, ink, SWORD_FX.outline); ctx.restore(); }

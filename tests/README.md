@@ -47,6 +47,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node sword-stances.js` | The sword stances: standing (both facings), walking, sprinting, dashing, jumping, the somersault and a jab (`out/sword-stances.png`). |
 | `node sword-coat-shot.js` | The held sword standing, then a few frames through a jab (`out/sword-coat.png`). |
 | `node sword-afterimage.js` | The sword's swing afterimages, one frame apart through a jab > cross > uppercut (`out/sword-afterimage.png`). |
+| `node sword-parry.js` | The sword parry (hanging guard), frame by frame facing right, and once facing left (`out/sword-parry.png`). |
 | `node stage-shot.js` | The Practice stage with both fighters standing, plus close-ups of the wall corner and the open edge (`out/stage*.png`). |
 | `node edge-shot.js` | The open edge up close: the corner's ink work, and the fighter standing on the lip, just off it, hanging on the cliff and above it (`out/edge.png`). Nothing should overlap the terrain wrongly. |
 | `node dg-sweep.js` | Quake into his sweep follow-up on the player: once taking it (prints the sideways ragdoll), once parrying as the stun wears off (no damage), once from further away; frame sheets `out/sweep-*.png`. |
