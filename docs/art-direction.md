@@ -71,5 +71,6 @@ Ray asked for the platform and wall to look brutalist and concrete-like in the g
   - a few hairline cracks;
   - ink hatching and shade tucked under the lip.
 - **Top:** expansion joints running back toward the vanishing point, and a shadow where it meets the wall.
-- **Ink lines:** bold ink on the floor's front edge and the wall's front corner, lighter on the edges going back. The open end's lip still splinters into dry bristles.
+- **Ink lines:** bold ink on the floor's front edge and the wall's front corner, lighter on the edges going back. At the open end, the corner line runs on down the cliff and fades out. Ray had the old splintering bristle strokes off the lip removed.
+- **Cliff occlusion:** anyone below the floor line at the open end is mid-depth, behind the cliff's front face. That strip of the backdrop is redrawn over them, so sliding down the cliff you go behind the corner.
 - **Background:** the graph paper stays for Practice only. Other maps will have their own dull colours.
