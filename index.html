@@ -34,7 +34,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     </div>
   </div>
   <p class="keys">
-    <span><kbd>Esc</kbd> or <kbd>Start</kbd> pause: practice settings and controls</span>
+    <span><kbd>Esc</kbd> or <kbd>Start</kbd> pause: practice settings and controls · left click attack · right click ability</span>
   </p>
 </div>
 
@@ -579,8 +579,9 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     for (const a of now) if (!padHeld.has(a)) pressed.add(a);
     padHeld.clear(); for (const a of now) padHeld.add(a);
   }
-  const held = (a) => down.has(a) || padHeld.has(a);
-  window.addEventListener('blur', () => down.clear());
+  const mouseHeld = new Set();   // actions held on the mouse buttons (left = punch, right = ability), only in a fight
+  const held = (a) => down.has(a) || padHeld.has(a) || mouseHeld.has(a);
+  window.addEventListener('blur', () => { down.clear(); mouseHeld.clear(); });
   // keys go to the page as soon as it loads; any click on the page keeps them there
   const grab = () => { try { window.focus(); canvas.focus({ preventScroll: true }); } catch (e) {} };
   window.addEventListener('pointerdown', grab);
@@ -3230,7 +3231,8 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     ['Move', 'A D  or  ← →', 'Left stick / D-pad'],
     ['Jump (again in the air to flip, or off a wall)', 'W  ↑  Space', 'A / Y'],
     ['Crouch, slide, fast fall', 'S  ↓', 'Down'],
-    ['Attack (a direction changes the move)', 'J  X', 'X / B'],
+    ['Attack (a direction changes the move)', 'J  X  or  left click', 'X / B'],
+    ['Ability, aimed with the mouse (once you have one)', 'Right click', '–'],
     ['Dash with a direction, parry alone', 'Shift', 'Bumpers / Triggers'],
     ['Bot parries on / off', 'P', 'Back'],
     ['Hitboxes on / off', 'H', 'Pause menu'],
@@ -3241,7 +3243,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   window.__menu = menu;
   function openMenu() { menu.sig = loadoutSig(); menu.open = true; menu.screen = 'pause'; menu.sel = 0; menu.controls = false; menu.t = 0; menu.selT = 0; menu.k = MENU_ITEMS.map(it => it.get && it.get() ? 1 : 0); }
   function closeMenu() {
-    menu.open = false; menu.screen = 'pause'; menu.controls = false; pressed.clear(); canvas.style.cursor = '';
+    menu.open = false; menu.screen = 'pause'; menu.controls = false; pressed.clear();
     if (menu.sig && loadoutSig() !== menu.sig) { menu.sig = null; resetRound(); }   // a changed loadout starts a fresh round
   }
   function menuSelect(i) { if (i !== menu.sel) { menu.sel = i; menu.selT = 0; } }
@@ -3267,7 +3269,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   }
   // layout (game px): the menu card sits high so the controls pop-up can rise from the bottom beneath it
   const MCARD = { x0: 410, x1: 870, y0: 18, y1: 418 }, MROW0 = 114, MROW = 35;
-  const CPOP = { x0: 130, x1: 1150, y0: 424, y1: 706 };
+  const CPOP = { x0: 130, x1: 1150, y0: 388, y1: 712 };   // tall enough for every row plus the close hint
   // mouse: hover picks, click activates, a click off the pop-up closes it
   function gamePt(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / view.s, (e.clientY - r.top) / view.s]; }
   function menuRowAt(x, y) {
@@ -3285,8 +3287,24 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (menu.screen === 'cards') { cardsHover(...gamePt(e)); return; }
     const i = menuRowAt(...gamePt(e)); if (i >= 0) menuSelect(i);
   });
-  canvas.addEventListener('pointerleave', () => { cards.hoverTab = -1; canvas.style.cursor = ''; });
+  canvas.addEventListener('pointerleave', () => { cards.hoverTab = -1; aim.on = false; });
+  // in a fight: left click punches, right click is the ability button; the mouse position is the aim (for abilities only:
+  // hit directions still come from the movement keys)
+  const aim = { x: GW / 2, y: GH / 2, on: false };
+  window.__aim = aim;
+  const fighting = () => game.mode === 'practice' && !menu.open;
+  const MOUSE_ACT = { 0: 'punch', 2: 'ability' };
+  window.addEventListener('pointermove', (e) => { if (e.target === canvas) { [aim.x, aim.y] = gamePt(e); aim.on = true; } });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());   // right click is a game button, not the browser menu
+  window.addEventListener('pointerup', (e) => { const a = MOUSE_ACT[e.button]; if (a) mouseHeld.delete(a); });
   canvas.addEventListener('pointerdown', (e) => {
+    if (fighting()) {
+      [aim.x, aim.y] = gamePt(e); aim.on = true;
+      const a = MOUSE_ACT[e.button];
+      if (a) { e.preventDefault(); if (!mouseHeld.has(a)) pressed.add(a); mouseHeld.add(a); }
+      return;
+    }
+    if (e.button !== 0) return;   // in the menus only the left button clicks
     if (game.mode === 'home') { homeClick(...gamePt(e)); return; }
     if (!menu.open) return;
     const [x, y] = gamePt(e);
@@ -3295,6 +3313,53 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     const i = menuRowAt(x, y);
     if (i >= 0) { menuSelect(i); menuActivate(i); }
   });
+
+  // the cursors, painted once into small images: an ink crosshair while fighting (for aiming abilities), and a dry-brush
+  // ink arrow in the menus. Each has a paper-coloured halo so it reads on the dark ink and the hatched ground.
+  function inkCursor(kind) {
+    const N = 40, out = {};
+    for (const k of [1, 2]) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = N * k;
+      const c = cv.getContext('2d'); c.scale(k, k);
+      const paint = (halo) => {
+        c.fillStyle = halo ? 'rgba(246,241,230,0.95)' : '#15120f';
+        const hw = halo ? 2.6 : 0, fill = (p) => { c.fill(p); if (halo) { c.lineWidth = hw * 2; c.lineJoin = 'round'; c.strokeStyle = c.fillStyle; c.stroke(p); } };
+        if (kind === 'aim') {   // a ring in four broken brush arcs, ticks crossing the gaps, a dot in the middle
+          const cx = 20, cy = 20, r = 10.5;
+          for (let i = 0; i < 4; i++) {
+            const a0 = i * Math.PI / 2 + 0.3, a1 = (i + 1) * Math.PI / 2 - 0.3, pts = [];
+            for (let j = 0; j <= 6; j++) { const a = a0 + (a1 - a0) * j / 6; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+            fill(brushPath(pts, 2.6, 0.12, 0.3, 0.3, 1200 + i));
+          }
+          for (let i = 0; i < 4; i++) {
+            const a = i * Math.PI / 2, ux = Math.cos(a), uy = Math.sin(a);
+            fill(brushPath([[cx + ux * 17, cy + uy * 17], [cx + ux * 11.5, cy + uy * 11.5], [cx + ux * 6.5, cy + uy * 6.5]], 2.4, 0.05, 0.75, 0, 1210 + i));
+          }
+          const d = new Path2D(); d.arc(cx, cy, 1.7, 0, TAU); fill(d);
+        } else {   // a solid ink arrowhead with a dry-brush tail flicked off it
+          const head = new Path2D(); head.moveTo(3, 3); head.lineTo(3.5, 26); head.lineTo(9.5, 20.5); head.lineTo(20.5, 20); head.closePath();
+          fill(head);
+          fill(brushPath([[8, 19], [12.5, 27.5], [16.5, 36]], 4.8, 0.05, 0.85, 0.3, 1220));
+          for (const [dx, dy, sd] of [[-1.6, 0.4, 1223], [1.7, -0.3, 1224]]) fill(brushPath([[11 + dx, 24 + dy], [14.5 + dx, 31 + dy], [17 + dx * 1.6, 37]], 0.9, 0.1, 0.7, 0.2, sd));   // loose bristles off the tail
+          if (!halo) { c.fillStyle = 'rgba(246,241,230,0.55)'; c.fill(brushPath([[5.5, 9], [6, 18], [9, 19]], 0.9, 0.2, 0.6, 0, 1221)); }   // a dry streak through the ink
+        }
+      };
+      paint(true); paint(false);
+      out[k] = cv.toDataURL();
+    }
+    const hot = kind === 'aim' ? '20 20' : '3 3', fb = kind === 'aim' ? 'crosshair' : 'default';
+    return [`image-set(url(${out[1]}) 1x, url(${out[2]}) 2x) ${hot}, ${fb}`, `-webkit-image-set(url(${out[1]}) 1x, url(${out[2]}) 2x) ${hot}, ${fb}`, `url(${out[1]}) ${hot}, ${fb}`];
+  }
+  const CURSORS = { aim: inkCursor('aim'), menu: inkCursor('menu') };
+  let cursorNow = '';
+  function updateCursor() {   // crosshair in the arena, the ink arrow everywhere else
+    const want = fighting() ? 'aim' : 'menu';
+    if (want === cursorNow) return;
+    cursorNow = want;
+    for (const v of CURSORS[want]) { canvas.style.cursor = ''; canvas.style.cursor = v; if (canvas.style.cursor) break; }   // the first form this browser accepts
+  }
+  window.__cursor = () => cursorNow;
+  window.__cursorImages = () => CURSORS;   // test hook
 
   // an ink-bordered sheet of paper: four dry-brush strokes that overshoot at the corners
   function inkCard(c, seed) {
@@ -3445,7 +3510,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     cards.t += dt; cards.selT += dt;
     CARD_TABS.forEach((_, i) => { const k = cards.hk[i] || 0; cards.hk[i] = k + ((i === cards.hoverTab ? 1 : 0) - k) * Math.min(1, dt * 16); });
     if (P('pause')) { closeMenu(); return; }
-    if (P('back')) { menu.screen = 'pause'; canvas.style.cursor = ''; return; }
+    if (P('back')) { menu.screen = 'pause'; return; }
     const n = CARD_TABS.length;   // bumpers flip through the categories from anywhere on the screen
     if (P('tabL') || P('tabR')) { setTab((cards.tab + (P('tabR') ? 1 : n - 1)) % n); if (cards.row === R_TABS) cardsFocus(R_TABS, cards.tab); }
     const g = galleryCards(), passN = equipped.passives.length + 1, rowLen = [CARD_SLOTS.length, passN, n, g.length];
@@ -3479,13 +3544,12 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   function cardsHover(x, y) {
     const h = cardsHit(x, y);
     cards.hoverTab = h && h.row === R_TABS ? h.col : -1;   // a tab under the mouse only lifts to show it can be clicked
-    canvas.style.cursor = cards.hoverTab >= 0 ? 'pointer' : '';
     if (h && h.row >= 0 && h.row !== R_TABS) cardsFocus(h.row, h.col);
   }   // hovering never touches the category tabs: they switch on a click, select on the tab, or the bumpers
   function cardsClick(x, y) {
     const h = cardsHit(x, y);
     if (!h) return;
-    if (h.row === -1) { menu.screen = 'pause'; canvas.style.cursor = ''; return; }   // the back link
+    if (h.row === -1) { menu.screen = 'pause'; return; }   // the back link
     cardsFocus(h.row, h.col); cardsActivate(h.row, h.col);
   }
 
@@ -3722,6 +3786,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       if (game.mode === 'home') { pollPad(); homeStep(dt); drawHome(); }
       else { if (menu.open) { pollPad(); menuStep(dt); } else update(dt); draw(); }
     }
+    updateCursor();
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

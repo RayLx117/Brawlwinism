@@ -9,11 +9,17 @@ Ray asked for every item here, so keep them intact unless Ray changes them.
 | A / D, ← / → | Move. A short guarded walk ramps into a speedster sprint. |
 | W / ↑ / Space | Jump. Press again in the air for a somersault double jump. W/↑ also counts as "up" for the flip kick. |
 | S / ↓ | Crouch while standing; you can crouch-walk slowly. Pressed at full run, or during/just after a ground dash, it slides. In the air it fast falls, with the lead foot pointed down. |
-| J / X | Attack; see `moveset.md`. |
+| J / X or left click | Attack; see `moveset.md`. The direction still comes from the movement keys, not the mouse. |
+| Right click | Ability button (nothing uses it yet). Abilities will aim at the mouse crosshair (`aim` / `__aim` holds its position in game coordinates). Right click never opens the browser menu on the game. |
 | Shift | With a direction: dash (8 ways in the air). With no direction: an instant parry. While Shift is held in the air, W/↑ aims instead of jumping. |
 | P | Bot parries on or off. |
 | H | Show hitboxes. |
 | Esc | Pause menu. |
+
+Mouse and keyboard is the main way to play:
+- **Cursor:** in the arena (Practice with the menu closed), the cursor is an ink crosshair: a ring in four broken brush arcs, ticks crossing the gaps and a dot in the middle. In every menu, it's a solid ink arrowhead with a dry-brush tail. Both have a pale paper halo so they read on dark ink.
+- **How the cursors are made:** each is painted once into a small image at 1x and 2x, then set as the canvas's CSS cursor, so it moves at the system's own speed.
+- **Clicks in the menus:** only the left button picks things there, and it never punches.
 
 The controller works with the stick or d-pad: A/Y jump, X/B punch, bumpers or triggers act as Shift, Back toggles bot parry, and Start opens the pause menu.
 
