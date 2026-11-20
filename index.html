@@ -2131,14 +2131,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     b.restore();
     // bold ink edges: heaviest on the front edge you stand on and the wall's front corner, lighter on the edges going back
     b.fillStyle = INK;
-    b.fill(brushPath([[LX, FY + 1], [LX + 260, FY - 1], [(LX + FX) / 2, FY + 1], [FX - 200, FY - 1], [FX + 5, FY]], 9, 0.03, 0.01, 0.8, 7));   // front edge of the floor
+    b.fill(brushPath([[LX, FY], [LX + 260, FY - 1], [(LX + FX) / 2, FY + 1], [FX - 200, FY - 1], [FX + 5, FY]], 9, 0, 0.01, 0.8, 7));   // front edge of the floor (full weight right from the corner)
     b.fill(brushPath([[FX, FY + 4], [FX - 1, FY - 200], [FX + 1, FY - 420], [FX, -30]], 9, 0.01, 0.02, 0.8, 8));                                   // the wall's front corner
-    b.fill(brushPath([[bLX, bFY], [(bLX + bFX) / 2, bFY + 0.5], [bFX, bFY]], 3.2, 0.06, 0.04, 0.4, 10));                                            // back edge of the floor
+    b.fill(brushPath([[bLX, bFY], [(bLX + bFX) / 2, bFY + 0.5], [bFX, bFY]], 3.6, 0, 0.04, 0.4, 10));                                            // back edge of the floor
     b.fill(brushPath([[bFX, bFY], [bFXt, bTop]], 3.6, 0.02, 0.05, 0.4, 11));                                                                       // back corner of the wall
     b.fill(brushPath([[FX, FY], [bFX, bFY]], 4, 0.05, 0.05, 0.3, 12));                                                                             // where the floor meets the wall
-    b.fill(brushPath([[LX, FY], [bLX, bFY]], 5, 0.05, 0.3, 0.3, 13));                                                                              // the floor's open end, going back
-    b.fill(brushPath([[LX, FY - 4], [LX + 0.6, FY + 50], [LX - 0.6, FY + 110], [LX, GH + 8]], 9, 0.01, 0.75, 0.5, 9));                              // the corner runs on down the cliff and fades out
-    b.fillRect(LX - 4.5, FY - 4.5, 9, 9);                                                                                                           // crisp corner at the open end
+    b.fill(brushPath([[LX, FY], [(LX + bLX) / 2, (FY + bFY) / 2], [bLX, bFY]], 4.6, 0, 0, 0, 13));                                                     // the floor's open end, going back: an even line corner to corner
+    b.fill(brushPath([[LX, FY], [LX, FY + 60], [LX + 0.4, FY + 120], [LX, GH + 8]], 9, 0, 0.7, 0.3, 9));                                          // the corner runs on down the cliff, thinning out as it goes
+    b.beginPath(); b.arc(LX, FY, 4.5, 0, TAU); b.fill(); b.beginPath(); b.arc(bLX, bFY, 2.2, 0, TAU); b.fill();                                    // clean joins where the edges meet
     b.fillRect(FX - 4.5, FY - 4.5, 9, 9);                                                                                                           // crisp front corner
     // stage name, stencilled in the corner of the sheet
     b.textAlign = 'left'; b.textBaseline = 'alphabetic';
@@ -2147,6 +2147,15 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const tw = b.measureText('Practice').width;
     b.fill(brushPath([[38, 76], [40 + tw * 0.5, 77], [44 + tw, 75]], 4, 0.05, 0.55, 0.4, 31));
     backdrop = cv;
+  }
+
+  // A fighter past the open edge is mid-depth, beside the slab, so the slab's nearer part is in front of them: the cliff face and the
+  // front half of the top. Redraw that piece of the backdrop over them. Only while they're off the edge: on top they're in front of it.
+  function drawEdgeOccluder() {
+    const FY = PLAT.y + STAGE3D.fy, LX = PLAT.x0 - STAGE3D.fx, x0 = PLAT.x0, kk = view.s * view.dpr;
+    ctx.save(); setM(ID); ctx.beginPath();
+    ctx.moveTo(LX - 6, FY - 4); ctx.lineTo(x0 - 1, PLAT.y - 2); ctx.lineTo(x0 + 80, PLAT.y - 2); ctx.lineTo(x0 + 80, GH + 40); ctx.lineTo(LX - 6, GH + 40); ctx.closePath();
+    ctx.clip(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(backdrop, SHX * kk, SHY * kk); ctx.restore();
   }
 
   // ---------------------------------------------------------------- bot + hit drawing
@@ -2437,14 +2446,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     drawWpnFx();
     drawRagTrail();
     drawBot();
+    if (bot.R && !bot.dead && bot.x < PLAT.x0) drawEdgeOccluder();
     drawDrops();
     if (!inDrill() && !pl.out) { drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); }
+    if (!pl.out && pl.x < PLAT.x0) drawEdgeOccluder();
     drawDrill();
-    // the cliff's front face is nearer than anyone hanging on the open end below the floor (they're mid-depth): redraw that strip
-    // of the backdrop over them, so sliding down it you go behind the corner
-    { const FY = PLAT.y + STAGE3D.fy, LX = PLAT.x0 - STAGE3D.fx;
-      ctx.save(); setM(ID); ctx.beginPath(); ctx.rect(LX, FY + 4, PLAT.x0 + 60 - LX, GH + 40 - FY); ctx.clip();
-      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(backdrop, SHX * kk, SHY * kk); ctx.restore(); }
     drawSparks();
     if (!pl.out) drawCooldown(r);
     if ((pl.staggerT > 0 || pl.stunT > 0) && r && !inDrill()) {   // stunned (a parry, or a hit): the same circling ink dots as the bot
