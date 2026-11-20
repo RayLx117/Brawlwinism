@@ -78,7 +78,7 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 | Backhand | you're behind him, within 300 | band behind, out to 280 px | 0.32 / 0.10 / 0.45 | 11 | 560 / 260 |
 | Heaven strike | you're above him (170+ px) | tall column above | 0.38 / 0.14 / 0.60 | 13 | 120 / 980 |
 | Quake | you're on the ground nearby | floor band, 440 px each way | 0.45 / 0.16 / 0.70 | 9 | popped up 720 (60 away) and hit-stunned 0.42 s, a jab's stun. **Not** a ragdoll |
-| Haymaker | **only straight after a Quake that lands** | none: read off his wind-up | starts 0.1 after the stomp lands / 0.46 / 0.12 / 0.55 | 11 | 640 / 200, ragdoll sideways. **Parryable** |
+| Sweep | **only straight after a Quake that lands** | none: read off his wind-up | starts 0.1 after the stomp lands / 0.46 / 0.16 / 0.55 | 12 | 680 / 220, ragdoll sideways. **Parryable** |
 | Leap slam | you're 420+ px away (2.6 s cooldown) | ellipse where he'll land | 0.40 + 0.55 in the air / 0.12 / 0.70 | 15 | 420 / 520 |
 | Pierce | the skewer point can reach your middle after his lunge: any direction, near or far | **none**: a red crescent halo of thorns round your head instead | 0.30 wind-up / 0.25 stab with follow-through / on a miss he holds the stab 0.3, then 0.45 (on a hit: lift 0.26, hold 0.7, slam 0.12 to a dead stop, snap 0.16, then 0.45) | 10 + 6 on hitting the ground | flung off 680 forward / 820 down; rebounds 460 up, keeping 55% of the throw |
 
@@ -86,12 +86,12 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 
 The player has hitstun now too (`pl.stunT`). While it lasts, inputs are ignored, physics carry on, the short-hop cut and fast fall are off, and the pose and stun dots match the bot's.
 
-**Haymaker** (Quake follow-up, `dgHaymakerStep`): if the stomp lands, he cuts its recovery short and goes straight into this.
-1. He takes a heavy shuffle step toward whoever he popped up so his fist can reach.
-2. He turns his body away and hauls his free (non-blade) fist back by his ear while tracking them, with ink gathering on the fist. The sword arm is tucked down and back out of the way.
-3. Then he swings the fist through hard, turning into it. It lands about 0.18 s after the stomp's stun wears off, so the player can parry it. A parry turns it aside ("parried, unshaken") with no damage. A hit ragdolls them sideways, and the launch grows with damage.
+**Sweep** (Quake follow-up, `dgSweepStep`; it replaced an off-hand haymaker punch Ray didn't keep): if the stomp lands, he cuts its recovery short and goes straight into this.
+1. He takes a heavy shuffle step to where the blade's far end will reach whoever he popped up, planting about 300 px from them. So it covers almost the stomp's whole range.
+2. He hauls the sword back up over his head while tracking them, body coiled away and his free hand out front, with ink gathering on the blade.
+3. Then he sweeps the sword round with the arm straight out, through them and on down past them, his body turning hard into it, leaving a big dry-brush arc. It lands about 0.25 s after the stomp's stun wears off, so the player can parry it. A parry turns it aside ("parried, unshaken") with no damage. A hit ragdolls them sideways, and the launch grows with damage.
 
-The Haymaker is never picked on its own; `dgOptions` doesn't list it.
+The Sweep is never picked on its own; `dgOptions` doesn't list it.
 
 **Pierce** (`DG_ATK.pierce`, `dgPierceStep`):
 1. A red crescent of thorns circles the target's head like a halo. It's thick over the top and tapers to two open ends at the neck, with small raked-back thorns along its outer edge. It follows the head and sits behind the fighter, never across them.

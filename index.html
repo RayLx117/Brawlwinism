@@ -2300,10 +2300,12 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     quake:    { tele: 0.45, act: 0.16, rec: 0.70, dmg: 9, kb: 60, pop: 720, stun: 0.42, wave: true, stomp: true },   // the knee lifts higher and higher, then a stomp: ink erupts off the floor; anyone caught is popped straight up and hit-stunned (stun = a jab's), not ragdolled
     leap:     { tele: 0.40, air: 0.55, act: 0.12, rec: 0.70, dmg: 15, kb: 420, pop: 520, wave: true },     // far: leaps onto you and slams
     drop:     { tele: 0.60, air: 0.22, act: 0.10, rec: 0.90, dmg: 0, kb: 0, pop: 0, wave: true },           // round start: lands on his owner
-    // only straight after a quake that lands: he steps in and swings his free (non-blade) fist at whoever he popped up. It's timed to
-    // land just after their stun runs out, so they can parry it. A hit ragdolls them sideways (the launch grows with damage).
-    // delay = the beat after the stomp lands before he starts; step = how fast he closes in (px/s); reach = how close the fist gets (px)
-    haymaker: { delay: 0.1, tele: 0.46, act: 0.12, rec: 0.55, dmg: 11, kb: 640, pop: 200, step: 760, reach: 175, follow: true },
+    // only straight after a quake that lands: he hauls the sword back over his head and sweeps it round, arm straight out, through
+    // whoever he popped up, reaching almost as far as the stomp did. Timed to land just after their stun runs out, so they can parry
+    // it. A hit ragdolls them sideways (the launch grows with damage).
+    // delay = the beat after the stomp lands before he starts; step = how fast he closes in (px/s); stand = how far from them he
+    // plants (px, from his middle) so the blade's tip end catches them; arc = how far round the sword sweeps (radians)
+    sweep:    { delay: 0.1, tele: 0.46, act: 0.16, rec: 0.55, dmg: 12, kb: 680, pop: 220, step: 700, stand: 300, arc: 2.6, follow: true, tip: 'blade' },
     // any direction, near or far: a red halo of thorns marks you (no zone) while he draws the blade arm back, aimed at you; then he
     // lunges it at your torso. On a hit you're skewered and lifted over his head, held there, then he slams the sword down in front
     // of him and you're thrown off it into the ground: impact damage when you hit, then the usual ragdoll for your damage.
@@ -2465,7 +2467,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   const dgCanBeHit = () => dg && dg.R && ['idle', 'walk', 'atk', 'roar'].includes(dg.state) && !(dg.state === 'atk' && dg.atk.A.key === 'drop');
   const rectZ = (xa, xb, y0, y1, from) => ({ kind: 'rect', x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0, y1, from, ox: xa, dir: Math.sign(xb - xa) || 1 });
   function dgZone(g, k, E) {
-    if (k === 'pierce' || k === 'haymaker') return null;   // the pierce has its halo; the haymaker is read off his wind-up
+    if (k === 'pierce' || k === 'sweep') return null;   // the pierce has its halo; the sweep is read off his wind-up
     const f = g.facing, x = g.x, y = g.y;
     if (k === 'cleave') return rectZ(x - f * 40, x + f * 340, y - 260, y + 4, 'x');
     if (k === 'backhand') return rectZ(x + f * 30, x - f * 280, y - 270, y + 4, 'x');
@@ -2627,8 +2629,9 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (a.t >= T2 + A.miss + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
     return { pose: {}, rate: 5 };
   }
-  // the haymaker: steps in, hauls the free fist back by his ear while tracking them, then swings it through
-  function dgHaymakerStep(g, E, dt) {
+  // the sweep: steps in to where the blade's far end will catch them, hauls the sword back over his head while tracking them, then
+  // sweeps it round with the arm straight out, the blade passing through them, and follows through low
+  function dgSweepStep(g, E, dt) {
     const a = g.atk, A = a.A, T1 = A.tele, T2 = T1 + A.act;
     a.t += dt;
     if (!a.f && E) a.f = E.f;
@@ -2636,31 +2639,30 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (!R || (a.f === pl && pl.out) || (a.f === bot && bot.dead > 0)) { g.state = 'idle'; g.gapT = 0.4; return { pose: {}, rate: 8 }; }
     if (a.t < T1 || !a.T) a.T = R.centre.slice();   // tracks them through the wind-up, then commits
     const f = (g.facing = a.t < T1 ? Math.sign(a.T[0] - g.x) || g.facing : g.facing);
-    const [sx, sy] = g.R ? apply(g.R.ba.up, 0, 0) : [g.x, g.y - 250], lx = f * (a.T[0] - sx), ly = a.T[1] - sy;
-    const w = Math.atan2(-lx, ly), phi = Math.atan2(-ly, Math.max(1, Math.abs(lx)));
-    if (a.t < T2) {   // closing in: a heavy shuffle step toward them so the fist can reach
-      const goal = a.T[0] - f * (A.reach * 0.75 + 30), d = goal - g.x;
+    const m = dgAim(g, a.T);
+    if (a.t < T1 + A.act * 0.5) {   // closing in: a heavy shuffle step to where the blade's far end will reach them
+      const goal = a.T[0] - f * A.stand, d = goal - g.x;
       g.x = dgClampX(g.x + Math.sign(d) * Math.min(Math.abs(d), A.step * dt));
     }
-    if (a.t < T1) {   // the wind-up: body turned away, free fist hauled back by his ear, sword arm tucked down and back out of the way; ink gathers on the fist
+    if (a.t < T1) {   // the wind-up: sword hauled back up over his head, body coiled away, free hand out front; ink gathers on the blade
       const c = ease(Math.min(1, a.t / T1));
-      if (g.R && Math.random() < dt * 40) {
-        const [tx, ty] = apply(g.R.ba.lo, 0, 44), an = Math.random() * TAU, d = 36 + Math.random() * 26;
+      if (g.R && Math.random() < dt * 45) {
+        const [tx, ty] = dgTip(g, 'blade'), an = Math.random() * TAU, d = 40 + Math.random() * 30;
         addMote(tx + Math.cos(an) * d, ty + Math.sin(an) * d, -Math.cos(an) * d * 6, -Math.sin(an) * d * 6, 0.16, 1 + Math.random() * 0.8, 0);
       }
-      return { pose: { tl: -0.1 - 0.5 * c - 0.2 * Math.max(0, Math.sin(phi)), hd: -0.3 * phi + 0.15 * c, ba1: (w + 2.4 * c) - g.pose.tl, ba2: -2.4 * c, fa1: 0.5 * c, fa2: -0.35 * c,
-        hip: 56 - 4 * c, ffx: 30 + 6 * c, bfx: -30 - 6 * c, flare: 0.5 }, rate: 18 };
+      return { pose: { tl: m.tl - 0.6 * c, hd: m.hd + 0.1 * c, fa1: (m.w - A.arc * 0.7 * c) - g.pose.tl, fa2: -0.6 * c, ba1: (m.w - g.pose.tl) * c, ba2: -0.3 * c,
+        hip: m.hip - 5 * c, ffx: 26 + 12 * c, bfx: -26 - 12 * c, flare: 0.6 }, rate: 18 };
     }
-    // the swing: the fist whipped round and through along the aim, the body turning hard into it
-    const e = Math.min(1, (a.t - T1) / A.act);
-    if (!a.hit && E && E.open && g.R && e > 0.2) {
+    // the sweep: the straight arm swung round from over his head, through them, and on down past them; the body turning hard into it
+    const e = Math.min(1, (a.t - T1) / A.act), s = e * e * (3 - 2 * e), w = m.w - A.arc * 0.7 + A.arc * s;
+    if (!a.hit && E && E.open && g.R && e > 0.1) {
       const sh = E.shapes();
-      for (let y = 30; y <= 50 && !a.hit; y += 10) {
-        const pt = apply(g.R.ba.lo, 0, y);
-        if (hurtHit(sh, pt[0], pt[1], 16)) { a.hit = true; dgHitFighter(E, A, pt); }
+      for (let y = 48; y <= 120 && !a.hit; y += 8) {
+        const pt = apply(g.R.fa.lo, 7.6, y);
+        if (hurtHit(sh, pt[0], pt[1], 10)) { a.hit = true; dgHitFighter(E, A, pt); }
       }
     }
-    if (a.t < T2 + 0.1) return { pose: { tl: 0.45, hd: -0.3 * phi, ba1: w - g.pose.tl - 0.15, ba2: -0.1, fa1: 0.9, fa2: -0.5, hip: 50, ffx: 40, bfx: -36, flare: 0.8 }, rate: 46 };
+    if (a.t < T2 + 0.1) return { pose: { tl: m.tl - 0.6 + 1.0 * s, hd: m.hd, fa1: w - g.pose.tl, fa2: -0.6 * (1 - s), ba1: 1.2 * s, ba2: -0.5, hip: m.hip - 5 - 4 * s, ffx: 40, bfx: -40, flare: 0.8 }, rate: 50 };
     if (a.t >= T2 + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
     return { pose: {}, rate: 5 };
   }
@@ -2805,7 +2807,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     }
     if (g.pin && !(g.state === 'atk' && g.atk.A.key === 'pierce')) dgUnpin(g, false);   // knocked out of it: they drop off the blade
     if (g.state === 'atk' && g.atk.A.key === 'pierce') { const r = dgPierceStep(g, E, dt); target = { ...target, ...r.pose }; rate = r.rate; }
-    else if (g.state === 'atk' && g.atk.A.key === 'haymaker') { const r = dgHaymakerStep(g, E, dt); target = { ...target, ...r.pose }; rate = r.rate; }
+    else if (g.state === 'atk' && g.atk.A.key === 'sweep') { const r = dgSweepStep(g, E, dt); target = { ...target, ...r.pose }; rate = r.rate; }
     else if (g.state === 'atk') {
       const a = g.atk, A = a.A; a.t += dt;
       const T1 = A.tele + (A.air || 0), T2 = T1 + A.act, T3 = T2 + A.rec;
@@ -2852,7 +2854,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       }
       if (A.lunge && a.t >= T1 && a.t < T1 + 0.1) g.x = dgClampX(g.x + g.facing * A.lunge / 0.1 * dt);
       if (a.t >= T1 && a.t < T2 && !a.hit && E && E.open && A.key !== 'drop') { const pt = zoneHits(a.zone, E.shapes()); if (pt) { a.hit = true; a.landed = dgHitFighter(E, A, pt); } }
-      if (A.key === 'quake' && a.landed && a.t >= T1 + DG_ATK.haymaker.delay && E) dgStart(g, 'haymaker', E);   // it landed: straight into the haymaker (cuts the stomp's recovery short)
+      if (A.key === 'quake' && a.landed && a.t >= T1 + DG_ATK.sweep.delay && E) dgStart(g, 'sweep', E);   // it landed: straight into the sweep (cuts the stomp's recovery short)
       if (a.t >= T3) {
         if (A.key === 'drop') { g.state = 'roar'; g.t = 0; }
         else { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
