@@ -3241,7 +3241,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   window.__menu = menu;
   function openMenu() { menu.sig = loadoutSig(); menu.open = true; menu.screen = 'pause'; menu.sel = 0; menu.controls = false; menu.t = 0; menu.selT = 0; menu.k = MENU_ITEMS.map(it => it.get && it.get() ? 1 : 0); }
   function closeMenu() {
-    menu.open = false; menu.screen = 'pause'; menu.controls = false; pressed.clear();
+    menu.open = false; menu.screen = 'pause'; menu.controls = false; pressed.clear(); canvas.style.cursor = '';
     if (menu.sig && loadoutSig() !== menu.sig) { menu.sig = null; resetRound(); }   // a changed loadout starts a fresh round
   }
   function menuSelect(i) { if (i !== menu.sel) { menu.sel = i; menu.selT = 0; } }
@@ -3285,6 +3285,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (menu.screen === 'cards') { cardsHover(...gamePt(e)); return; }
     const i = menuRowAt(...gamePt(e)); if (i >= 0) menuSelect(i);
   });
+  canvas.addEventListener('pointerleave', () => { cards.hoverTab = -1; canvas.style.cursor = ''; });
   canvas.addEventListener('pointerdown', (e) => {
     if (game.mode === 'home') { homeClick(...gamePt(e)); return; }
     if (!menu.open) return;
@@ -3403,7 +3404,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   window.__cards = { CARDS, LOADOUT };
   // focus rows: 0 = gear slots, 1 = passive slots (+ at the end), 2 = tabs, 3 = gallery
   const R_GEAR = 0, R_PASS = 1, R_TABS = 2, R_GAL = 3;
-  const cards = { row: 0, col: 0, tab: 0, scroll: 0, passScroll: 0, t: 0, selT: 0, hits: [], passSlot: -1 };
+  const cards = { row: 0, col: 0, tab: 0, scroll: 0, passScroll: 0, t: 0, selT: 0, hits: [], passSlot: -1, hoverTab: -1, hk: [] };   // hoverTab: the category tab under the mouse; hk: each tab's hover glow-up, eased
   window.__cardsState = () => cards;   // test hook: the card screen's state (tab, focus, hit boxes)
   const CSHEET = { x0: 90, x1: 1190, y0: 20, y1: 708 };
   const SLOT = { x: 140, y: 124, w: 96, h: 110, gap: 22, y2: 272 };   // y2: the passives row
@@ -3413,7 +3414,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   const cardById = (id) => CARDS.find(c => c.id === id);
   const tabOf = (type) => CARD_TABS.findIndex(t => t.key === type);
   const isEquipped = (c) => c.type === 'passive' ? equipped.passives.includes(c.id) : equipped[c.type] === c.id;
-  function openCards(owner = 'pl') { menu.screen = 'cards'; cards.owner = owner; equipped = LOADOUT[owner]; Object.assign(cards, { row: 0, col: 0, scroll: 0, passScroll: 0, t: 0, selT: 0, passPick: false }); }
+  function openCards(owner = 'pl') { cards.hoverTab = -1; menu.screen = 'cards'; cards.owner = owner; equipped = LOADOUT[owner]; Object.assign(cards, { row: 0, col: 0, scroll: 0, passScroll: 0, t: 0, selT: 0, passPick: false }); }
   function cardsFocus(row, col) { if (row !== cards.row || col !== cards.col) { cards.row = row; cards.col = col; cards.selT = 0; } }
   function setTab(i) { cards.tab = i; cards.scroll = 0; if (cards.row === R_GAL) cardsFocus(R_GAL, Math.min(cards.col, Math.max(0, galleryCards().length - 1))); }
   function equipToggle(c) {
@@ -3442,8 +3443,9 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   }
   function cardsStep(dt, P) {
     cards.t += dt; cards.selT += dt;
+    CARD_TABS.forEach((_, i) => { const k = cards.hk[i] || 0; cards.hk[i] = k + ((i === cards.hoverTab ? 1 : 0) - k) * Math.min(1, dt * 16); });
     if (P('pause')) { closeMenu(); return; }
-    if (P('back')) { menu.screen = 'pause'; return; }
+    if (P('back')) { menu.screen = 'pause'; canvas.style.cursor = ''; return; }
     const n = CARD_TABS.length;   // bumpers flip through the categories from anywhere on the screen
     if (P('tabL') || P('tabR')) { setTab((cards.tab + (P('tabR') ? 1 : n - 1)) % n); if (cards.row === R_TABS) cardsFocus(R_TABS, cards.tab); }
     const g = galleryCards(), passN = equipped.passives.length + 1, rowLen = [CARD_SLOTS.length, passN, n, g.length];
@@ -3474,11 +3476,16 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (P('ok')) cardsActivate(cards.row, cards.col);
   }
   const cardsHit = (x, y) => cards.hits.find(h => x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
-  function cardsHover(x, y) { const h = cardsHit(x, y); if (h && h.row >= 0 && h.row !== R_TABS) cardsFocus(h.row, h.col); }   // hovering never touches the category tabs: they switch on a click, select on the tab, or the bumpers
+  function cardsHover(x, y) {
+    const h = cardsHit(x, y);
+    cards.hoverTab = h && h.row === R_TABS ? h.col : -1;   // a tab under the mouse only lifts to show it can be clicked
+    canvas.style.cursor = cards.hoverTab >= 0 ? 'pointer' : '';
+    if (h && h.row >= 0 && h.row !== R_TABS) cardsFocus(h.row, h.col);
+  }   // hovering never touches the category tabs: they switch on a click, select on the tab, or the bumpers
   function cardsClick(x, y) {
     const h = cardsHit(x, y);
     if (!h) return;
-    if (h.row === -1) { menu.screen = 'pause'; return; }   // the back link
+    if (h.row === -1) { menu.screen = 'pause'; canvas.style.cursor = ''; return; }   // the back link
     cardsFocus(h.row, h.col); cardsActivate(h.row, h.col);
   }
 
@@ -3608,10 +3615,13 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     ctx.fillText('LB', SLOT.x - 22, TAB_Y - 2);
     let tx = SLOT.x;
     CARD_TABS.forEach((tb, i) => {
-      const act = i === cards.tab, f = cards.row === R_TABS && cards.col === i;
-      ctx.font = `italic ${act ? 700 : 600} 22px Georgia, serif`; ctx.textAlign = 'left'; ctx.fillStyle = act ? INK : 'rgba(21,18,15,0.55)';
-      ctx.fillText(tb.label, tx, TAB_Y);
-      const w = ctx.measureText(tb.label).width;
+      const act = i === cards.tab, f = cards.row === R_TABS && cards.col === i, hk = cards.hk[i] || 0;
+      ctx.font = `italic ${act ? 700 : 600} 22px Georgia, serif`; ctx.textAlign = 'left';
+      const w = ctx.measureText(tb.label).width, sc = 1 + 0.12 * hk;   // hovered: grows a little about its middle and darkens toward full ink
+      ctx.save(); ctx.translate(tx + w / 2, TAB_Y - 7); ctx.scale(sc, sc);
+      ctx.fillStyle = act ? INK : `rgba(21,18,15,${0.55 + 0.4 * hk})`;
+      ctx.fillText(tb.label, -w / 2, 7);
+      ctx.restore();
       if (act) { const k = f ? Math.min(1, cards.selT / 0.12) : 1; ctx.fillStyle = INK; ctx.fill(brushPath([[tx - 3, TAB_Y + 8], [tx + w * 0.5 * k, TAB_Y + 9], [tx + (w + 5) * k, TAB_Y + 7]], 3.5, 0.05, 0.55, 0.3, 600 + i)); }
       if (f) focusTick(tx - 14, TAB_Y - 7, 610 + i);
       hits.push({ row: R_TABS, col: i, x0: tx - 6, y0: TAB_Y - 24, x1: tx + w + 6, y1: TAB_Y + 14 });
