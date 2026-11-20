@@ -983,7 +983,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     b.time += dt;
     b.koT = Math.max(0, (b.koT || 0) - dt);
     if (b.dead > 0) { b.dead -= dt; if (b.dead <= 0) botRespawn(b); else return; }
-    if (b.R && offScreen(b.R.centre[0], b.R.centre[1])) { koBurst(b); if (roundTakesOut(b)) { b.dead = Infinity; b.out = true; } return; }
+    if (b.R && offScreen(b.R.centre[0], b.R.centre[1]) && !anchorSave(b)) { koBurst(b); if (roundTakesOut(b)) { b.dead = Infinity; b.out = true; } return; }
     b.moveT = Math.max(0, (b.moveT || 0) - dt);
     b.invK = Math.max(0, Math.min(1, (b.invK || 0) + (canBeHit(b) ? -14 : 12) * dt));   // can't-be-hit shimmer: quick in, quicker out
     b.stunT = Math.max(0, b.stunT - dt); b.hurtT = Math.max(0, b.hurtT - dt); b.parryT = Math.max(0, b.parryT - dt); b.lockT = Math.max(0, (b.lockT || 0) - dt);
@@ -1155,7 +1155,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     P_.ci = !pl.onGround ? 0 : chain ? P_.next : (pl.time - P_.lastEnd > COMBO_GAP ? 0 : P_.next);   // place in the string (for the combo labels)
     const A = pickMove(chain);
     P_.A = A; P_.arm = A.limb[1] === 'a' ? A.limb[0] : '';
-    P_.on = true; P_.t = 0; P_.queued = false; P_.flecked = false; P_.hit = false; P_.lunged = false; P_.hopped = false; P_.floated = false; P_.trail = [];
+    P_.on = true; P_.t = 0; P_.queued = false; P_.flecked = false; P_.hit = false; P_.ghosted = false; P_.lunged = false; P_.hopped = false; P_.floated = false; P_.trail = [];
     if (A.slide) pl.slideT = Math.max(pl.slideT, 0.38);
     if (A.key === 'dashPunch') pl.dashT = 0;   // the dash turns into the punch, keeping its speed
     if (A.key === 'dair') { pl.fastFall = false; pl.vy = Math.min(pl.vy, 80); }   // the stomp hangs a beat before it drops
@@ -1165,7 +1165,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const b = bot, P_ = pl.punch;
     window.__hitPt = [fx, fy];   // test hook: where the last hit connected
     P_.hit = true;
+    if (b.parryT > 0 && pl.wpn && pl.wpn.has.guardbreak && pl.time >= (pl.gbT || 0)) {   // Guard Breaker: straight through the parry
+      b.parryT = 0; pl.gbT = pl.time + 5; procLabel('Guard Breaker', [fx, fy]);
+    }
     if (b.parryT > 0) {   // parried: the attacker is knocked off balance
+      if (b.wpn && b.wpn.has.mirror) { const back = pl.wpn ? pl.wpn.dmg : A.damage; pl.damage = Math.min(MAX_DAMAGE, (pl.damage || 0) + back); procLabel('Mirror', [fx, fy]); }
+      b.parryOkT = b.time;
       // a successful parry: the attacker is stunned for 1.5 s, and the parry recharges at once
       pl.staggerT = PARRY_STUN; pl.vx = -pl.facing * 220; pl.lungeT = 0;
       b.parryOk = true; b.parryCd = 0; b.readyT = 0.3;
@@ -1182,22 +1187,133 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     b.move = A.name; b.moveT = 1.4;
     const ls = 1 + (launchScale(b.damage) - 1) * (A.lsK ?? 1);   // knockback uses the damage they had going in (lsK: how much damage grows it)
     const kd = A.limbs ? (Math.sign(b.x - pl.x) || pl.facing) : pl.facing;   // two-sided moves knock them away from you
-    b.damage = Math.min(MAX_DAMAGE, b.damage + A.damage);
+    const wh = pl.wpn ? wpnHit(pl, 'bot', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 }, dmg = wh.dmg;   // holding a weapon: its damage, through its modifiers
+    b.damage = Math.min(MAX_DAMAGE, b.damage + dmg);
     if (showDmg) {   // older numbers still showing step up out of the way, so a string reads as a little stack
-      const step = (A.ragdoll ? 34 : 24 + A.damage * 1.2) * 1.15 + 6;   // roughly the new number's height
+      const step = (A.ragdoll ? 34 : 24 + Math.min(12, dmg) * 1.2) * 1.15 + 6;   // roughly the new number's height
       for (const n of dmgNums) n.y -= step;
-      dmgNums.push({ x: fx + kd * 34, y: fy + 6, v: A.damage, kill: !!A.ragdoll, dir: kd, t: 0 });
+      dmgNums.push({ x: fx + kd * 34, y: fy + 6, v: dmg, kill: !!A.ragdoll, dir: kd, t: 0 });
     }
-    if (A.ragdoll) { startRagdoll(b, kd * A.kb * ls, -A.pop * ls, (A.spin ?? -7.5) * (A.spin > 0 ? 1 : 1)); if (A.ragT) b.rag.left = A.ragT(b.damage); if (A.down) b.rag.down = true; shakeT = 0.22; }
+    if (A.ragdoll) { startRagdoll(b, kd * A.kb * ls * wh.kb, -A.pop * ls * wh.kb, (A.spin ?? -7.5) * (A.spin > 0 ? 1 : 1)); if (A.ragT) b.rag.left = A.ragT(b.damage); if (A.down) b.rag.down = true; shakeT = 0.22; }
     else {
-      b.stunT = A.stun; b.stunMax = A.stun; b.hurtT = 0.24; b.hurtKind = A.pop > 200 ? 1 : 0;
-      b.vx = kd * A.kb * (1 + 0.4 * (ls - 1));
+      b.stunT = A.stun + wh.stun; b.stunMax = b.stunT; b.hurtT = 0.24; b.hurtKind = A.pop > 200 ? 1 : 0;
+      b.vx = kd * A.kb * wh.kb * (1 + 0.4 * (ls - 1));
       if (A.pop) { b.vy = -A.pop * (1 + 0.3 * (ls - 1)); b.onGround = false; }   // popped up: juggle them
     }
     // ink splash, scaled with how hard it hit
     const dirx = kd, diry = A.up ? -1.6 : A.pop < 0 ? 1.2 : A.pop > 300 ? -0.8 : -0.15, k = A.dmg, red = Math.min(1, b.damage / 100);   // more of it comes out red the more damaged they are
     for (let i = 0; i < Math.round(5 * k); i++) addDrop(fx, fy, dirx * (160 + Math.random() * 260) * (A.up ? 0.5 : 1), (diry + (Math.random() - 0.5) * 1.4) * (150 + Math.random() * 150), 0.8 + Math.random() * 0.7 * k, Math.random() < red ? RED : undefined);
     for (let i = 0; i < Math.round(6 * k); i++) { const a = Math.atan2(diry, dirx) + (Math.random() - 0.5) * 2.4; addMote(fx, fy, Math.cos(a) * (220 + Math.random() * 260), Math.sin(a) * (220 + Math.random() * 260), 0.25 + Math.random() * 0.2, 0.8 + Math.random() * k, 300); }
+  }
+
+  // ---- weapon hits. A fighter holding a weapon has its stats in f.wpn (weaponStats). Every hit they land does the weapon's
+  // per-hit damage, worked through its modifiers here; the side effects (life steal, bleed, echo, splash, puddles, shockwaves,
+  // Wheel of Fate) happen here too. kind: 'bot' or 'dg' (who was hit).
+  const echoes = [], phantoms = [], inkPools = [], wpnWaves = [], procs = [];
+  const FATE = ['keen', 'heavy', 'lifesteal', 'executioner', 'momentum', 'skyborne', 'bleed', 'dazing', 'echo', 'rending', 'splash', 'inkpool', 'thunderclap'];
+  const tgtOf = (kind) => kind === 'bot' ? bot : dg;
+  function addToTarget(kind, d, pt, num = true) {   // damage straight onto a target (no launch), with ink and a number
+    if (kind === 'bot') { if (bot.dead > 0) return; bot.damage = Math.min(MAX_DAMAGE, bot.damage + d); }
+    else { if (!dg) return; d = Math.round(d * DG.take * 10) / 10; dg.damage = Math.min(MAX_DAMAGE, dg.damage + d); dg.shudder = 0.1; }
+    for (let i = 0; i < 5; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 260, -120 - Math.random() * 200, 0.7 + Math.random() * 0.6, Math.random() < 0.4 ? RED : undefined);
+    if (num && showDmg) { for (const n of dmgNums) n.y -= 26; dmgNums.push({ x: pt[0] + 30, y: pt[1] + 6, v: d, kill: false, dir: 1, t: 0 }); }
+  }
+  function procLabel(text, pt) { procs.push({ text, x: pt[0], y: pt[1] - 40, t: 0 }); }
+  function wpnHit(att, kind, A, pt) {
+    const W = att.wpn, has = { ...W.has }, tgt = tgtOf(kind);
+    let keen = W.keen, heavy = W.heavy, steal = W.lifesteal;
+    if (has.fate && Math.random() < 0.1) {   // Wheel of Fate: this hit borrows a random other modifier
+      const k = FATE[Math.floor(Math.random() * FATE.length)];
+      if (k === 'keen') keen += MOD.keen.base; else if (k === 'heavy') heavy += MOD.heavy.base; else if (k === 'lifesteal') steal = Math.min(25, steal + 15); else has[k] = true;
+      procLabel('Wheel of Fate: ' + MOD[k].name, pt);
+      for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; addMote(pt[0], pt[1], Math.cos(a) * 200, Math.sin(a) * 200, 0.4, 1 + Math.random(), 100, RARITIES.ancient.rgb.join(',')); }
+    }
+    let m = 1 + keen / 100;
+    if (has.executioner && (tgt.damage || 0) > 100) m *= 1.25;
+    if (has.opener && att.time - (att.lastHitT ?? -99) >= 3) m *= 2;
+    if (has.riposte && att.time - (att.parryOkT ?? -99) <= 1) m *= 1.5;
+    if (has.momentum) m *= 1 + 0.5 * Math.min(1, Math.abs(att.vx || 0) / 760);
+    if (has.skyborne && !att.onGround) m *= 1.2;
+    const dmg = Math.round(W.dmg * m * 10) / 10;
+    att.lastHitT = att.time;
+    if (steal > 0) att.damage = Math.max(0, (att.damage || 0) - dmg * steal / 100);   // life steal: heals your own damage %
+    if (has.bleed) tgt.bleedT = 3;
+    att.hits = (att.hits || 0) + 1;
+    if (has.echo && att.hits % 3 === 0) echoes.push({ t: 0.13, kind, dmg, pt: pt.slice() });
+    if (has.splash) splashOthers(kind, pt);
+    if (A.ragdoll && has.inkpool) { const x = Math.max(PLAT.x0 + 40, Math.min(WALL - 40, tgt.x)); inkPools.push({ x, t: 4, r: 80 }); }
+    if (A.ragdoll && has.thunderclap) { shakeT = Math.max(shakeT, 0.2); for (const d of [-1, 1]) wpnWaves.push({ x: att.x + d * 30, dir: d, t: 0, life: 0.5, hit: {} }); }
+    return { dmg, kb: (1 + heavy / 100) * (A.ragdoll && has.rending ? 1.25 : 1), stun: has.dazing ? 0.15 : 0 };
+  }
+  function splashOthers(kind, pt) {   // ink sprayed off the hit: 3% to anyone else close by
+    for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; addDrop(pt[0], pt[1], Math.cos(a) * 380, Math.sin(a) * 300 - 80, 0.7 + Math.random() * 0.8); }
+    if (kind !== 'dg' && dg && dgCanBeHit() && Math.hypot(dg.R.centre[0] - pt[0], dg.R.centre[1] - pt[1]) < 230) addToTarget('dg', 3, dg.R.centre);
+    if (kind !== 'bot' && bot.R && canBeHit(bot) && Math.hypot(bot.R.centre[0] - pt[0], bot.R.centre[1] - pt[1]) < 170) addToTarget('bot', 3, bot.R.centre);
+  }
+  // Anchor: the first time a launch would carry them off the screen this round, they stop dead in the air instead
+  function anchorSave(f) {
+    if (!f.wpn || !f.wpn.has.anchor || f.anchorUsed) return false;
+    f.anchorUsed = true;
+    f.x = Math.max(70, Math.min(GW - 70, f.x)); f.y = Math.max(140, Math.min(GH - 30, f.y)); f.vx = f.vy = 0; f.rot = 0;
+    if (f.rag) f.rag = null;
+    if (f === pl) { pl.launched = false; pl.onGround = false; R0 = rig(); pl.R = R0; } else { bot.R = rig(bot); }
+    const c = (f === pl ? R0 : bot.R).centre; procLabel('Anchor', c);
+    for (let i = 0; i < 20; i++) { const a = Math.random() * TAU; addDrop(c[0], c[1], Math.cos(a) * 320, Math.sin(a) * 320, 0.8 + Math.random()); }
+    shakeT = Math.max(shakeT, 0.15);
+    return true;
+  }
+  // everything weapon modifiers leave running: echoes, phantom swings, bleeding, puddles, shockwaves, labels
+  function wpnWorldStep(dt) {
+    for (let i = echoes.length - 1; i >= 0; i--) { const e = echoes[i]; e.t -= dt; if (e.t <= 0) { addToTarget(e.kind, e.dmg, e.pt); procLabel('Echo', e.pt); echoes.splice(i, 1); } }
+    for (let i = phantoms.length - 1; i >= 0; i--) {
+      const p = phantoms[i]; p.t -= dt;
+      if (p.t <= 0 && !p.done) {   // the ghost swing: half damage to anyone in it now
+        p.done = true;
+        const test = (hs) => { for (const c of p.chains) for (let j = 0; j < c.length - 1; j++) { const [ax, ay] = c[j], [bx, by] = c[j + 1]; for (let q = 0; q <= 6; q++) { const x = ax + (bx - ax) * q / 6, y = ay + (by - ay) * q / 6; if (hurtHit(hs, x, y, p.r)) return [x, y]; } } return null; };
+        let pt;
+        if (bot.R && canBeHit(bot) && (pt = test(hurtShapes(bot.R)))) addToTarget('bot', p.dmg / 2, pt);
+        if (dg && dgCanBeHit() && (pt = test(dgHurtShapes(dg.R)))) addToTarget('dg', p.dmg / 2, pt);
+      }
+      if (p.t < -0.22) phantoms.splice(i, 1);
+    }
+    for (const f of [bot, dg]) if (f && f.bleedT > 0) {   // Bleeding Ink: +1% a second
+      f.bleedT -= dt; f.damage = Math.min(MAX_DAMAGE, f.damage + dt * (f === dg ? DG.take : 1));
+      const c = f === dg ? f.R && f.R.centre : f.R && f.R.centre;
+      if (c && Math.random() < dt * 8) addDrop(c[0] + (Math.random() - 0.5) * 30, c[1], (Math.random() - 0.5) * 40, 30, 0.6 + Math.random() * 0.5, RED);
+    }
+    for (let i = inkPools.length - 1; i >= 0; i--) { inkPools[i].t -= dt; if (inkPools[i].t <= 0) inkPools.splice(i, 1); }
+    for (let i = wpnWaves.length - 1; i >= 0; i--) {   // Thunderclap: crests racing along the floor; 4% and a pop to anyone on the ground they pass
+      const w = wpnWaves[i]; w.t += dt; w.x += w.dir * 1050 * dt;
+      if (Math.random() < dt * 40) addMote(w.x, PLAT.y - 4, w.dir * 120 + (Math.random() - 0.5) * 80, -160 - Math.random() * 200, 0.35, 0.9 + Math.random(), 700);
+      if (!w.hit.bot && bot.R && canBeHit(bot) && bot.onGround && Math.abs(bot.x - w.x) < 30) { w.hit.bot = 1; addToTarget('bot', 4, [bot.x, PLAT.y - 30]); Object.assign(bot, { stunT: 0.35, stunMax: 0.35, hurtT: 0.24, hurtKind: 1, vy: -320, onGround: false }); }
+      if (!w.hit.dg && dg && dgCanBeHit() && dg.y >= PLAT.y - 2 && Math.abs(dg.x - w.x) < 60) { w.hit.dg = 1; addToTarget('dg', 4, [dg.x, PLAT.y - 40]); }
+      if (w.t > w.life || w.x < PLAT.x0 || w.x > WALL) wpnWaves.splice(i, 1);
+    }
+    for (let i = procs.length - 1; i >= 0; i--) { procs[i].t += dt; if (procs[i].t > 1.1) procs.splice(i, 1); }
+  }
+  const inPool = (x, y) => y >= PLAT.y - 4 && inkPools.some(p => Math.abs(x - p.x) < p.r);   // standing in an Ink Pool puddle: 40% slower
+  function drawWpnFx() {
+    setM(ID);
+    for (const p of inkPools) {   // the puddle: a flat ink stain on the floor, fading as it dries
+      const a = Math.min(1, p.t / 0.6);
+      ctx.fillStyle = `rgba(21,18,15,${0.55 * a})`; ctx.beginPath(); ctx.ellipse(p.x, PLAT.y + 2, p.r, 7, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = `rgba(21,18,15,${0.3 * a})`; ctx.beginPath(); ctx.ellipse(p.x + 10, PLAT.y + 1, p.r * 0.6, 4, 0, 0, TAU); ctx.fill();
+    }
+    for (const w of wpnWaves) {
+      const k = 1 - w.t / w.life, h = 40 * k + 8, x = w.x, d = w.dir, y = PLAT.y;
+      ctx.fillStyle = `rgba(21,18,15,${0.9 * Math.min(1, k * 2)})`;
+      ctx.fill(brushPath([[x - d * 70, y], [x - d * 24, y - h * 0.55], [x, y - h], [x + d * 12, y - h * 0.6]], 10 * k + 3, 0.7, 0.1, 1.2, 1400 + (d > 0 ? 1 : 0)));
+    }
+    for (const p of phantoms) if (p.t <= 0) {   // the ghost swing: a faint ink copy of the strike, fading
+      const a = Math.max(0, 1 + p.t / 0.22) * 0.45;
+      ctx.fillStyle = `rgba(21,18,15,${a})`;
+      for (const c of p.chains) if (c.length > 1) ctx.fill(brushPath(c.slice(0, 3), 7, 0.1, 0.6, 0.5, 1410));
+    }
+    ctx.textAlign = 'center'; ctx.font = 'italic 700 15px Georgia, serif';
+    for (const p of procs) {   // which modifier just went off
+      const a = Math.min(1, (1.1 - p.t) / 0.3); ctx.lineJoin = 'round'; ctx.strokeStyle = `rgba(243,236,221,${a})`; ctx.lineWidth = 4;
+      ctx.strokeText(p.text, p.x, p.y - 30 * p.t); ctx.fillStyle = `rgba(120,86,24,${a})`; ctx.fillText(p.text, p.x, p.y - 30 * p.t);
+    }
   }
 
   // Both walls face left: the big wall on the right (x WALL, any height) and the cliff face under the open edge
@@ -1300,8 +1416,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     pl.landT = Math.max(0, pl.landT - dt);
     if (pl.punch.on) {
-      const P_ = pl.punch, A = P_.A;
-      P_.t += dt;
+      const P_ = pl.punch, A = P_.A, W = pl.wpn;
+      P_.t += dt * (W && P_.t < A.wind ? 1 / Math.max(0.4, 1 - W.quick / 100) : 1);   // Quick: the wind-up runs faster (a curse slows it)
       if (A.float && !P_.floated && P_.t >= A.wind - 0.01) { P_.floated = true; A.float(pl); pl.fastFall = false; }   // aerials drift a little toward their direction
       if (!P_.lunged && P_.t >= A.wind * 0.55) {   // step into it
         P_.lunged = true; pl.lungeT = A.lungeT; pl.lungeV = A.lunge * (pl.onGround ? 1 : 0.5);
@@ -1311,7 +1427,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         if (pl.onGround) { pl.vy = -A.hop; pl.onGround = false; pl.coyote = 0; splash(pl.x, PLAT.y, 3); }
       }
       if (P_.queued && !A.air && P_.t >= A.link) startPunch(true);   // chain straight into the next hit
-      else if (P_.t >= A.end) {
+      else if (P_.t >= (W && !P_.hit ? A.wind + A.act + (A.end - A.wind - A.act) * Math.max(0.2, 1 - W.steady / 100) : A.end)) {   // Steady: less recovery after a miss
         P_.on = false; P_.lastEnd = pl.time;
         if (P_.queued) startPunch();
       }
@@ -1324,7 +1440,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     pl.moveT = dir && pl.onGround ? pl.moveT + dt : dir ? pl.moveT : Math.max(0, pl.moveT - 3 * dt);
     const sprint = Math.min(1, Math.max(0, (pl.moveT - 0.16) / 0.42));
     pl.sprint = sprint;
-    const top = RUN * (pl.punch.on && pl.onGround ? 0.45 : pl.onGround ? 0.5 + 0.5 * sprint : 1);
+    const top = RUN * (pl.punch.on && pl.onGround ? 0.45 : pl.onGround ? 0.5 + 0.5 * sprint : 1) * (pl.wpn ? 1 + pl.wpn.light / 100 : 1) * (pl.onGround && inPool(pl.x, pl.y) ? 0.6 : 1);
     const toward = (v, target, rate) => v > target ? Math.max(target, v - rate) : Math.min(target, v + rate);
     if (pl.dashT > 0) {
       const sp = pl.dashCarry + (pl.dashBurst - pl.dashCarry) * (pl.dashT / pl.dashDur);   // burst easing into the carried speed
@@ -1434,7 +1550,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (pl.onGround) { pl.airJumps = 1; if (pl.dashT <= 0 || !pl.dashAir) pl.airDashes = 1; pl.wallT = 0; pl.wallSlide = false; }   // the ground resets the slide speed
     if (pl.onGround && !over) pl.onGround = false;
     if (pl.onGround) pl.launched = false;
-    if (offScreen(pl.x, pl.y - 50)) { plKO(); if (pl.out) { worldStep(dt); return; } }
+    if (offScreen(pl.x, pl.y - 50) && !anchorSave(pl)) { plKO(); if (pl.out) { worldStep(dt); return; } }
 
     // animation target
     pl.run += Math.abs(pl.vx) * dt * (0.055 + 0.022 * pl.sprint);   // the legs turn over faster than the body travels
@@ -1511,7 +1627,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       pl.wallTouch = glue || over > -3; pl.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
     }
     if (pl.punch.on) {
-      const P_ = pl.punch, A = P_.A, ch = limbChain(R0, A.limb), [fx, fy] = ch[0], rr = A.r || HIT_R;
+      const P_ = pl.punch, A = P_.A, ch = A.limb === 'fa' && pl.wpn ? [swordTip(R0, pl.wpn), ...limbChain(R0, 'fa')] : limbChain(R0, A.limb), [fx, fy] = ch[0], rr = A.r || HIT_R;
       const chains = (A.limbs || [A.limb]).map(L => L === A.limb ? ch : limbChain(R0, L)).map(c => A.tip ? c.slice(0, A.tip) : c);   // tip: only the foot and shin hit
       pl.fist = [fx, fy];
       // telegraph: kill blows draw ink in toward the striking fist or foot while they wind up
@@ -1534,6 +1650,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       // hit frames: a capsule (radius r) along the whole limb, tip first, live only during the hit frames
       const active = P_.t >= A.wind && P_.t < A.wind + A.act;
       pl.hitShape = active ? chains.map(c => ({ pts: c, r: rr, kill: !!A.ragdoll })) : null;
+      if (active && pl.wpn && pl.wpn.has.phantom && !P_.ghosted) { P_.ghosted = true; phantoms.push({ t: 0.3 + A.act / 2, chains: chains.map(c => c.map(p => p.slice())), r: rr, dmg: pl.wpn.dmg }); }   // Phantom: the same swing again in 0.3 s
       if (!P_.hit && active && bot.R && canBeHit(bot)) {   // no hitting a ragdoll
         const hs = hurtShapes(bot.R);
         hit: for (const c of chains) for (let s_ = 0; s_ < c.length - 1; s_++) {
@@ -1562,6 +1679,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function worldStep(dt) {
     botUpdate(dt);
     dgUpdate(dt);
+    wpnWorldStep(dt);
     roundUpdate(dt);
     for (const [f, R] of [[pl, R0], [bot, bot.R]]) { const e = PARRY_WIN - f.parryT; parrySparks(f, R, dt, e >= 0.05 && e - dt < 0.05); }   // big burst once the arms are crossed
     stepSparks(dt);
@@ -1858,6 +1976,31 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     drawPart(PARTS.upperArm, r.fa.up, false, st, ink);
     drawPart(PARTS.lowerArm, r.fa.lo, false, st, ink);
+    if (f.wpn) drawSword(r.fa.lo, f.wpn);   // the weapon in the lead hand
+  }
+
+  // ---- the sword, held in the lead hand: the blade runs on out of the fist along the forearm (lower-arm space, rig units;
+  // the fist is at 0,19). Long makes it longer, and the hits reach out to its tip.
+  const swordLen = (W) => W.blade * Math.max(0.5, 1 + W.long / 100);
+  const swordTip = (R, W) => apply(R.fa.lo, 0, 25 + swordLen(W));
+  function swordPaths(L) {
+    const y0 = 24, y1 = y0 + L, blade = new Path2D();
+    blade.moveTo(-2.7, y0); blade.lineTo(2.7, y0); blade.lineTo(2.7, y1 - 7); blade.lineTo(0, y1 + 1); blade.lineTo(-2.7, y1 - 7); blade.closePath();
+    const guard = new Path2D(); guard.moveTo(-7.5, 21.6); guard.lineTo(7.5, 21.6); guard.lineTo(6.5, 24.6); guard.lineTo(-6.5, 24.6); guard.closePath();
+    const pommel = new Path2D(); pommel.arc(0, 12.5, 2.4, 0, TAU);
+    return { blade, guard, pommel, y0, y1 };
+  }
+  function drawSword(m, W, ink = INK) {
+    const L = W ? swordLen(W) : 40, p = swordPaths(L);
+    setM(m); ctx.lineJoin = 'miter';
+    ctx.fillStyle = ink; ctx.fill(p.pommel);
+    ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.stroke(p.blade);   // the ink outline
+    ctx.fillStyle = 'rgb(222,221,213)'; ctx.fill(p.blade);
+    ctx.save(); ctx.clip(p.blade);   // shading down one side, a fuller line down the middle
+    ctx.fillStyle = 'rgba(40,40,46,0.32)'; ctx.fill(brushPath([[1.6, p.y0], [1.4, (p.y0 + p.y1) / 2], [0.6, p.y1]], 2.4, 0.02, 0.4, 0, 1420));
+    ctx.fillStyle = 'rgba(21,18,15,0.55)'; ctx.fill(brushPath([[0, p.y0 + 2], [0, p.y0 + L * 0.5], [0, p.y1 - 9]], 0.7, 0.05, 0.6, 0, 1421));
+    ctx.restore();
+    ctx.fillStyle = ink; ctx.fill(p.guard);
   }
 
   // tapered brush polygon through points (game px)
@@ -2237,6 +2380,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
     drawDGCrown();   // the pierce's halo of thorns sits behind the fighters
     drawDGBooms(pl.paused ? 1 / 60 : lastDt);
+    drawWpnFx();
     drawRagTrail();
     drawBot();
     drawDrops();
@@ -2524,7 +2668,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgHitFighter(E, A, pt) {
     const g = dg, f = E.f, cx = A.key === 'leap' ? g.leapTo : g.x;
     const dir = A.wave ? (Math.sign(E.x - cx) || g.facing) : A.key === 'backhand' ? -g.facing : g.facing;
-    if (dgParried(f, pt)) return false;
+    if (dgParried(f, pt, A)) return false;
     const ls = launchScale(f.damage || 0);
     f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
     if (A.stun) {   // popped straight up and hit-stunned, like a regular hit (not a ragdoll)
@@ -2548,9 +2692,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return true;
   }
   // a fighter parrying as his hit lands: turned aside, but nothing stuns him
-  function dgParried(f, pt) {
+  function dgParried(f, pt, A) {
     if (!(f.parryT > 0)) return false;
-    f.parryOk = true; f.parryCd = 0; f.readyT = 0.3;
+    f.parryOk = true; f.parryCd = 0; f.readyT = 0.3; f.parryOkT = f.time;
+    if (A && f.wpn && f.wpn.has.mirror) { dg.damage = Math.min(MAX_DAMAGE, dg.damage + Math.round(A.dmg * DG.take * 10) / 10); dg.shudder = 0.14; procLabel('Mirror', pt); }
     for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; addSpark(pt[0], pt[1], Math.cos(a) * 320, Math.sin(a) * 320 - 120, 0.2 + Math.random() * 0.15); }
     dg.label = 'parried, unshaken'; dg.labelT = 1.1;
     return true;
@@ -2742,7 +2887,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   function dgPierceHit(g, a, E, pt, w) {
     const f = E.f, A = a.A;
-    if (dgParried(f, pt)) return;
+    if (dgParried(f, pt, A)) return;
     g.pose.fa1 = w - g.pose.tl; g.pose.fa2 = 0;   // the jab arrives straight: the arm is out along the aim, with no wind-round left in it
     f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
     if (f === pl) plRagdoll(0, 0, 0); else { startRagdoll(bot, 0, 0, 0); bot.combo = 0; }
@@ -2803,7 +2948,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgTakeHit(A, fx, fy) {
     const g = dg, P_ = pl.punch, kd = A.limbs ? (Math.sign(g.x - pl.x) || pl.facing) : pl.facing;
     P_.hit = true; pl.lungeT = 0; pl.vx *= 0.3;
-    const before = g.damage, take = Math.round(A.damage * DG.take * 10) / 10;
+    const wh = pl.wpn ? wpnHit(pl, 'dg', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 };
+    const before = g.damage, take = Math.round(wh.dmg * DG.take * 10) / 10;
     g.damage = Math.min(MAX_DAMAGE, g.damage + take);
     g.shudder = 0.14;
     if (showDmg) { for (const n of dmgNums) n.y -= 34; dmgNums.push({ x: fx + kd * 34, y: fy + 6, v: take, kill: !!A.ragdoll, dir: kd, t: 0 }); }
@@ -2811,7 +2957,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (A.ragdoll && before >= DG.weak) {   // worn down: kill blows finally send him flying
       const k = DG.launchLo + (DG.launchHi - DG.launchLo) * Math.min(1, (before - DG.weak) / (MAX_DAMAGE - DG.weak)), ls = launchScale(before) * k;
       g.state = 'rag'; g.rag = { t: 0, left: ragTime(g.damage) * 1.1, av: -kd * g.facing * 3.5, ground: false };
-      g.vx = kd * A.kb * ls * 1.6; g.vy = -Math.max(260, A.pop) * ls; shakeT = 0.25;
+      g.vx = kd * A.kb * wh.kb * ls * 1.6; g.vy = -Math.max(260, A.pop) * ls * wh.kb; shakeT = 0.25;
       g.label = ''; g.labelT = 0;
     } else {
       g.x += kd * A.kb * DG.push * 0.1;   // barely shoved
@@ -2863,7 +3009,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
           if (Math.abs(dx) > 240 && Math.abs(goal - g.x) > 8) {   // heavy steps toward them
             if (dir !== g.facing) g.facing = dir;
             g.state = 'walk';
-            g.x = dgClampX(g.x + dir * DG.walk * dt);
+            g.x = dgClampX(g.x + dir * DG.walk * (inPool(g.x, g.y) ? 0.6 : 1) * dt);
             const ph0 = g.stepPh; g.stepPh += dt * 6.5;
             if (Math.floor(ph0 / Math.PI) !== Math.floor(g.stepPh / Math.PI)) {   // footfall
               shakeT = Math.max(shakeT, 0.07);
@@ -3253,6 +3399,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function resetRound() {
     round.endT = 0; round.started = true;
     dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
+    for (const l of [echoes, phantoms, inkPools, wpnWaves, procs]) l.length = 0;
+    pl.wpn = weaponStats(LOADOUT.pl.weapon && LOADOUT.pl.weaponSpec); bot.wpn = weaponStats(LOADOUT.bot.weapon && LOADOUT.bot.weaponSpec);   // the weapons each side holds this round
+    for (const f of [pl, bot]) Object.assign(f, { anchorUsed: false, lastHitT: -99, parryOkT: -99, hits: 0, gbT: 0, bleedT: 0 });
     Object.assign(pl, { x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, rag: null, out: false, launched: false, damage: 0, rot: 0, roll: 1,
       staggerT: 0, stunT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
       wallT: 0, wallSlide: false, wallTouch: false, fastFall: false, landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null });
@@ -3290,7 +3439,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ragdollStep(pl, dt);
     R0 = rig(); pl.R = R0; pl.box = rigBox(R0);
     if (pl.rag && ragdollGround(pl)) { R0 = rig(); pl.R = R0; pl.box = rigBox(R0); }
-    if (offScreen(R0.centre[0], R0.centre[1])) plKO();
+    if (offScreen(R0.centre[0], R0.centre[1]) && !anchorSave(pl)) plKO();
   }
   function plKO() {
     const [cx, cy] = R0 ? R0.centre : [pl.x, pl.y - 50];
@@ -3346,6 +3495,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     MENU_ITEMS.forEach((it, i) => { if (it.get) menu.k[i] += ((it.get() ? 1 : 0) - menu.k[i]) * Math.min(1, dt * 18); });
     const P = (a) => pressed.has(a);
     if (menu.screen === 'cards') cardsStep(dt, P);
+    else if (menu.screen === 'forge') forgeStep(dt, P);
     else if (menu.controls) { if (P('back') || P('pause') || P('ok') || P('punch')) menu.controls = false; }
     else if (P('pause') || P('back')) closeMenu();
     else {
@@ -3375,6 +3525,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (game.mode === 'home') { homeHover(...gamePt(e)); return; }
     if (!menu.open || menu.controls) return;
     if (menu.screen === 'cards') { cardsHover(...gamePt(e)); return; }
+    if (menu.screen === 'forge') { forgeHover(...gamePt(e)); return; }
     const i = menuRowAt(...gamePt(e)); if (i >= 0) menuSelect(i);
   });
   canvas.addEventListener('pointerleave', () => { cards.hoverTab = -1; aim.on = false; });
@@ -3399,6 +3550,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!menu.open) return;
     const [x, y] = gamePt(e);
     if (menu.screen === 'cards') { cardsClick(x, y); return; }
+    if (menu.screen === 'forge') { forgeClick(x, y); return; }
     if (menu.controls) { menu.controls = false; return; }
     const i = menuRowAt(x, y);
     if (i >= 0) { menuSelect(i); menuActivate(i); }
@@ -3486,6 +3638,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     setM(ID);
     ctx.fillStyle = 'rgba(236,228,211,0.62)'; ctx.fillRect(-20, -20, GW + 40, GH + 40);   // a wash of paper over the frozen fight
     if (menu.screen === 'cards') { drawCards(); return; }
+    if (menu.screen === 'forge') { drawCards(); drawForge(); return; }
     inkCard(MCARD, 401);
     inkTitle('Paused', (MCARD.x0 + MCARD.x1) / 2, MCARD.y0 + 56, 38, 411);
     MENU_ITEMS.forEach((it, i) => {
@@ -3561,27 +3714,88 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     mythic:    { dmg: [40, 50], mods: 5 },
     ancient:   { dmg: [65, 65], mods: 6 },   // hard set, and very rare
   };
-  const WEAPONS = {};          // the weapon types, added as Ray designs them: { name, mult, ... }
-  const WEAPON_MODS = [];      // the modifier pool, added once Ray picks them: { key, name, text, weight (how often it rolls) }
-  // rolls one weapon card: its rarity's damage at random (to the nearest 0.5%), and its modifier count. The modifiers themselves are
-  // picked from WEAPON_MODS by weight (no repeats) once that pool exists.
-  function rollWeapon(type, rarity, rnd = Math.random) {
-    const R = WEAPON_RARITY[rarity], [lo, hi] = R.dmg, base = Math.round((lo + (hi - lo) * rnd()) * 2) / 2;
-    const pool = WEAPON_MODS.slice(), mods = [];
-    while (mods.length < R.mods && pool.length) {
-      let x = rnd() * pool.reduce((t, m) => t + m.weight, 0), i = 0;
-      while (i < pool.length - 1 && (x -= pool[i].weight) > 0) i++;
-      mods.push(pool.splice(i, 1)[0].key);
+  // the weapon types. mult scales the rolled damage (the sword does exactly the rolled damage); blade = its length past the fist (rig units)
+  const WEAPONS = {
+    sword: { name: 'Sword', mult: 1.0, blade: 40 },
+  };
+  // ---- modifiers. tier sets how often one rolls (MOD_CHANCE). Common ones are stat boosts: they can roll more than once (each extra
+  // copy adds 40% of its base), can come cursed (double the boost, plus the negative of another common modifier at its base), and
+  // on an Ancient can come blessed (triple). base = the boost in %; Life Steal is capped at 25% (a second copy takes it there).
+  // text(v) describes it at strength v.
+  const MODS = [
+    { key: 'keen', name: 'Keen', tier: 'common', base: 10, text: (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v)}% damage` },
+    { key: 'heavy', name: 'Heavy-handed', tier: 'common', base: 15, text: (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v)}% knockback` },
+    { key: 'quick', name: 'Quick', tier: 'common', base: 10, text: (v) => `attacks wind up ${Math.abs(v)}% ${v >= 0 ? 'faster' : 'slower'}` },
+    { key: 'long', name: 'Long', tier: 'common', base: 15, text: (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v)}% reach` },
+    { key: 'light', name: 'Light', tier: 'common', base: 10, text: (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v)}% run speed` },
+    { key: 'steady', name: 'Steady', tier: 'common', base: 30, text: (v) => `${Math.abs(v)}% ${v >= 0 ? 'shorter' : 'longer'} recovery when you miss` },
+    { key: 'lifesteal', name: 'Life Steal', tier: 'common', base: 15, cap: 25, step: 10, noPenalty: true, text: (v) => `heals ${v}% of the damage you deal` },
+    { key: 'executioner', name: 'Executioner', tier: 'uncommon', text: () => '+25% damage to anyone over 100%' },
+    { key: 'opener', name: 'Opener', tier: 'uncommon', text: () => 'the first hit after 3 s without landing one does double damage' },
+    { key: 'riposte', name: 'Riposte', tier: 'uncommon', text: () => 'hits within 1 s of a successful parry do +50%' },
+    { key: 'momentum', name: 'Momentum', tier: 'uncommon', text: () => 'damage grows with your speed, up to +50% at full dash speed' },
+    { key: 'skyborne', name: 'Skyborne', tier: 'uncommon', text: () => '+20% damage in the air' },
+    { key: 'bleed', name: 'Bleeding Ink', tier: 'uncommon', text: () => 'hits keep adding +1% a second for 3 s' },
+    { key: 'dazing', name: 'Dazing', tier: 'uncommon', text: () => 'hits stun 0.15 s longer' },
+    { key: 'echo', name: 'Echo', tier: 'rare', text: () => 'every 3rd hit strikes twice' },
+    { key: 'rending', name: 'Rending', tier: 'rare', text: () => 'kill blows send them 25% further' },
+    { key: 'splash', name: 'Splash', tier: 'rare', text: () => 'hits spray ink that does 3% to anyone else nearby' },
+    { key: 'inkpool', name: 'Ink Pool', tier: 'rare', text: () => 'kill blows leave a puddle that slows anyone in it for 4 s' },
+    { key: 'phantom', name: 'Phantom', tier: 'rare', text: () => 'a ghost of each swing follows 0.3 s later for half damage' },
+    { key: 'guardbreak', name: 'Guard Breaker', tier: 'rare', text: () => 'beats a parry, once every 5 s' },
+    { key: 'anchor', name: 'Anchor', tier: 'veryrare', text: () => 'the first time each round a launch would take you off the screen, you stop dead in the air' },
+    { key: 'mirror', name: 'Mirror', tier: 'veryrare', text: () => 'a successful parry sends the blocked hit’s damage back' },
+    { key: 'thunderclap', name: 'Thunderclap', tier: 'veryrare', text: () => 'kill blows send a shockwave along the floor (4% and a pop)' },
+    { key: 'fate', name: 'Wheel of Fate', tier: 'veryrare', text: () => 'each hit has a 10% chance to trigger a random other modifier' },
+  ];
+  const MOD = Object.fromEntries(MODS.map(m => [m.key, m]));
+  const MOD_TIERS = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', veryrare: 'Very rare' };
+  // placeholder chances until Ray sets them: tier weights for picking a modifier, the chance a common one comes cursed, and the
+  // chance a common one on an Ancient comes blessed
+  const MOD_CHANCE = { common: 10, uncommon: 5, rare: 2, veryrare: 0.5, curse: 0.08, blessed: 0.3 };
+  const commonMods = () => MODS.filter(m => m.tier === 'common');
+  // rolls one weapon: its rarity's damage at random (to the nearest 0.5%) and its modifiers by weight. Common modifiers can repeat;
+  // the others can't. A weapon is { id, rarity, base, mods: [{ key, curse?: penalty key, blessed? }] }
+  function rollWeapon(id, rarity, rnd = Math.random) {
+    const R = WEAPON_RARITY[rarity], [lo, hi] = R.dmg, base = Math.round((lo + (hi - lo) * rnd()) * 2) / 2, mods = [];
+    while (mods.length < R.mods) {
+      const pool = MODS.filter(m => m.tier === 'common' || !mods.some(x => x.key === m.key));
+      let x = rnd() * pool.reduce((t, m) => t + MOD_CHANCE[m.tier], 0), i = 0;
+      while (i < pool.length - 1 && (x -= MOD_CHANCE[pool[i].tier]) > 0) i++;
+      const m = pool[i], inst = { key: m.key };
+      if (m.tier === 'common') {
+        if (rarity === 'ancient' && rnd() < MOD_CHANCE.blessed) inst.blessed = true;
+        else if (rnd() < MOD_CHANCE.curse) { const pen = commonMods().filter(p => p.key !== m.key && !p.noPenalty); inst.curse = pen[Math.floor(rnd() * pen.length)].key; }
+      }
+      mods.push(inst);
     }
-    const mult = WEAPONS[type] ? WEAPONS[type].mult : 1;
-    return { type, rarity, base, dmg: Math.round(base * mult * 10) / 10, modSlots: R.mods, mods };
+    return { id, rarity, base, mods };
   }
-  window.__weapons = { WEAPON_RARITY, WEAPONS, WEAPON_MODS, rollWeapon };   // test hook
+  // one modifier copy's strength: its base, doubled if cursed, tripled if blessed
+  const modValue = (inst) => MOD[inst.key].base * (inst.blessed ? 3 : inst.curse ? 2 : 1);
+  // what a weapon adds up to: damage per hit, the common stat totals (in %), and which special modifiers it has
+  function weaponStats(w) {
+    if (!w) return null;
+    const st = { dmg: w.base * (WEAPONS[w.id] ? WEAPONS[w.id].mult : 1), blade: WEAPONS[w.id] ? WEAPONS[w.id].blade : 40, has: {} };
+    for (const m of commonMods()) {
+      const vals = w.mods.filter(x => x.key === m.key).map(modValue).sort((a, b) => b - a);
+      let v = 0;
+      if (vals.length) v = m.step ? vals[0] + m.step * (vals.length - 1) : vals[0] + 0.4 * vals.slice(1).reduce((a, b) => a + b, 0);
+      if (m.cap) v = Math.min(m.cap, v);
+      v -= w.mods.filter(x => x.curse === m.key).length * m.base;   // curses on other modifiers pull this one negative
+      st[m.key] = Math.round(v * 10) / 10;
+    }
+    for (const x of w.mods) if (MOD[x.key].tier !== 'common') st.has[x.key] = true;
+    return st;
+  }
+  window.__weapons = { WEAPON_RARITY, WEAPONS, MODS, MOD_CHANCE, rollWeapon, weaponStats };   // test hook
   const CARDS = [
+    { id: 'sword', name: 'Sword', type: 'weapon', rarity: 'common', art: 'sword', weapon: 'sword',
+      text: 'A straight blade held in the lead hand: it carries that arm’s hits further. Its rarity, damage and modifiers are rolled per copy.' },
     { id: 'divineGeneral', name: 'Divine General', type: 'companion', rarity: 'ancient', art: 'divineGeneral',
       text: 'At the start of the round he drops in and knocks you off the map. You aren’t out: your opponent has to beat him 1v1. Huge, very tanky, can’t be stunned; only a kill blow once he’s worn down sends him flying.' },
   ];
-  const newLoadout = () => ({ weapon: null, companion: null, airDash: null, parry: null, ability: null, passives: [] });   // card ids
+  const newLoadout = () => ({ weapon: null, weaponSpec: null, companion: null, airDash: null, parry: null, ability: null, passives: [] });   // card ids (weaponSpec: the rolled weapon)
   const LOADOUT = { pl: newLoadout(), bot: newLoadout() };   // yours (Select Cards) and the bot's (Bot's Cards)
   let equipped = LOADOUT.pl;
   const loadoutSig = () => JSON.stringify(LOADOUT);
@@ -3623,7 +3837,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       setTab(tabOf(row === R_GEAR ? CARD_SLOTS[col].key : 'passive'));
       if (galleryCards().length) cardsFocus(R_GAL, 0); else cardsFocus(R_TABS, cards.tab);
     } else if (row === R_TABS) { setTab(col); cardsFocus(R_TABS, col); }
-    else { const c = galleryCards()[col]; if (c) equipToggle(c); }
+    else { const c = galleryCards()[col]; if (c) { if (c.type === 'weapon') openForge(c); else equipToggle(c); } }
   }
   function cardsStep(dt, P) {
     cards.t += dt; cards.selT += dt;
@@ -3715,6 +3929,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - 4); ctx.clip();
     ctx.globalAlpha = ra.gold ? 0.32 : 0.42; ctx.fillStyle = ra.stain; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
     if (c.art === 'divineGeneral') dgBust(x + w / 2, y + top + (h - top - 26) * 0.66, Math.min(w, h) / 255, t, 1);
+    if (c.art === 'sword') { const k = Math.min(w, h) / 66, cx = x + w / 2, cy = y + top + (h - top - 26) * 0.5; drawSword(chain(T(cx, cy), R(-2.3), Sc(k, k), T(0, -44)), null); }
     ctx.restore();
     if (ra.gold) {   // gold brush strokes laid over the ink border
       ctx.fillStyle = dgGold;
@@ -3734,6 +3949,164 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (line) out.push(line);
     return out;
   }
+  // ---- the forge (practice tool): set a weapon copy's rarity, damage and modifiers by hand, to test them. Opens on a weapon card.
+  const shownCard = (c) => c && c.type === 'weapon' && equipped.weapon === c.id && equipped.weaponSpec ? { ...c, rarity: equipped.weaponSpec.rarity } : c;
+  const modLabel = (x) => MOD[x.key].name + (x.blessed ? ' (blessed)' : x.curse ? ' (cursed)' : '');
+  const RAR_KEYS = Object.keys(WEAPON_RARITY);
+  const FORGE = { x0: 170, x1: 1110, y0: 40, y1: 694 };
+  const forge = { focus: 'done', pick: -1, pfocus: null, hits: [], t: 0 };
+  window.__forge = forge;   // test hook
+  function openForge(c) {
+    if (equipped.weapon !== c.id || !equipped.weaponSpec) { equipped.weapon = c.id; equipped.weaponSpec = rollWeapon(c.weapon, 'common'); }
+    menu.screen = 'forge'; forge.focus = 'r:' + equipped.weaponSpec.rarity; forge.pick = -1; forge.t = 0;
+  }
+  const forgeSpec = () => equipped.weaponSpec;
+  // the focusable items, row by row, for the keys and the controller
+  function forgeRows() {
+    const w = forgeSpec(), n = WEAPON_RARITY[w.rarity].mods, rows = [RAR_KEYS.map(k => 'r:' + k), ['dmg-', 'dmg+', 'reroll'], ['rollall', 'clear']];
+    for (let i = 0; i < n; i++) {
+      const x = w.mods[i], r = ['m:' + i];
+      if (x && MOD[x.key].tier === 'common') { r.push('t:' + i); if (x.curse) r.push('p:' + i); }
+      if (x) r.push('x:' + i);
+      rows.push(r);
+    }
+    rows.push(['done', 'unequip']);
+    return rows;
+  }
+  function pickerCols() { return Object.keys(MOD_TIERS).map(t => MODS.filter(m => m.tier === t).map(m => m.key)); }
+  const modTaken = (key, slot) => MOD[key].tier !== 'common' && forgeSpec().mods.some((x, i) => i !== slot && x.key === key);
+  function forgeAct(id) {
+    const w = forgeSpec(), [kind, arg] = id.split(':'), i = +arg, R = WEAPON_RARITY[w.rarity];
+    if (kind === 'r') {   // a new rarity: damage rolled again in its range, modifier slots resized (the ones that fit stay)
+      w.rarity = arg; const [lo, hi] = WEAPON_RARITY[arg].dmg; w.base = Math.round((lo + (hi - lo) * Math.random()) * 2) / 2;
+      w.mods = w.mods.slice(0, WEAPON_RARITY[arg].mods); if (arg !== 'ancient') w.mods.forEach(x => delete x.blessed);
+    } else if (id === 'dmg-' || id === 'dmg+') w.base = Math.max(R.dmg[0], Math.min(R.dmg[1], w.base + (id === 'dmg+' ? 0.5 : -0.5)));
+    else if (id === 'reroll') { const [lo, hi] = R.dmg; w.base = Math.round((lo + (hi - lo) * Math.random()) * 2) / 2; }
+    else if (id === 'rollall') { const nw = rollWeapon(w.id, w.rarity); w.base = nw.base; w.mods = nw.mods; }
+    else if (id === 'clear') w.mods = [];
+    else if (kind === 'm') { forge.pick = i; forge.pfocus = w.mods[i] ? w.mods[i].key : 'keen'; }
+    else if (kind === 't') {   // normal > cursed > blessed (Ancient only) > normal
+      const x = w.mods[i];
+      if (x.blessed) delete x.blessed;
+      else if (x.curse) { delete x.curse; if (w.rarity === 'ancient') x.blessed = true; }
+      else x.curse = commonMods().find(p => p.key !== x.key && !p.noPenalty).key;
+    } else if (kind === 'p') {   // which common modifier the curse takes away
+      const x = w.mods[i], opts = commonMods().filter(p => p.key !== x.key && !p.noPenalty).map(p => p.key);
+      x.curse = opts[(opts.indexOf(x.curse) + 1) % opts.length];
+    } else if (kind === 'x') { w.mods.splice(i, 1); forge.focus = 'm:' + Math.min(i, Math.max(0, w.mods.length)); }
+    else if (id === 'done') menu.screen = 'cards';
+    else if (id === 'unequip') { equipped.weapon = null; equipped.weaponSpec = null; menu.screen = 'cards'; }
+  }
+  function forgePickAct(key) {
+    const w = forgeSpec(), i = forge.pick;
+    if (!key || modTaken(key, i)) return;
+    const x = { key };
+    if (i < w.mods.length) w.mods[i] = x; else w.mods.push(x);
+    forge.pick = -1; forge.focus = 'm:' + Math.min(i, w.mods.length - 1);
+  }
+  function forgeStep(dt, P) {
+    forge.t += dt;
+    if (P('pause')) { closeMenu(); return; }
+    if (forge.pick >= 0) {   // choosing a modifier: a grid, one column per tier
+      if (P('back')) { forge.pick = -1; return; }
+      const cols = pickerCols(); let ci = cols.findIndex(c => c.includes(forge.pfocus)), ri = cols[ci].indexOf(forge.pfocus);
+      if (P('left')) ci = Math.max(0, ci - 1); if (P('right')) ci = Math.min(cols.length - 1, ci + 1);
+      if (P('up')) ri--; if (P('down')) ri++;
+      ri = Math.max(0, Math.min(cols[ci].length - 1, ri)); forge.pfocus = cols[ci][ri];
+      if (P('ok')) forgePickAct(forge.pfocus);
+      return;
+    }
+    if (P('back')) { menu.screen = 'cards'; return; }
+    const rows = forgeRows(); let ri = rows.findIndex(r => r.includes(forge.focus)); if (ri < 0) ri = 0;
+    let ci = Math.max(0, rows[ri].indexOf(forge.focus));
+    if (P('up')) ri = Math.max(0, ri - 1); if (P('down')) ri = Math.min(rows.length - 1, ri + 1);
+    if (P('left')) ci--; if (P('right')) ci++;
+    ci = Math.max(0, Math.min(rows[ri].length - 1, ci)); forge.focus = rows[ri][ci];
+    if (P('ok')) forgeAct(forge.focus);
+  }
+  const forgeHit = (x, y) => forge.hits.find(h => x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
+  function forgeHover(x, y) { const h = forgeHit(x, y); if (!h) return; if (h.pick) forge.pfocus = h.id; else forge.focus = h.id; }
+  function forgeClick(x, y) {
+    const h = forgeHit(x, y);
+    if (!h) { if (forge.pick >= 0) forge.pick = -1; return; }
+    if (h.pick) { forge.pfocus = h.id; forgePickAct(h.id); return; }
+    forge.focus = h.id; forgeAct(h.id);
+  }
+  // one clickable label: bold and underlined with a brush stroke when it has the focus, with the margin tick
+  function forgeButton(id, text, x, y, opt = {}) {
+    const f = forge.pick < 0 ? forge.focus === id : opt.pick && forge.pfocus === id;
+    ctx.textAlign = 'left'; ctx.font = `italic ${f || opt.on ? 700 : 600} ${opt.size || 19}px Georgia, serif`;
+    ctx.fillStyle = opt.off ? 'rgba(21,18,15,0.25)' : opt.col || (f || opt.on ? INK : 'rgba(21,18,15,0.62)');
+    ctx.fillText(text, x, y);
+    const w = ctx.measureText(text).width;
+    if (opt.on || f) { ctx.fillStyle = opt.col || INK; ctx.fill(brushPath([[x - 2, y + 7], [x + w / 2, y + 8], [x + w + 3, y + 6]], f ? 3.2 : 2.2, 0.05, 0.55, 0.3, 1500 + (id.length * 7) % 50)); }
+    if (f) focusTick(x - 14, y - 6, 1560);
+    forge.hits.push({ id, pick: !!opt.pick, x0: x - 8, y0: y - 22, x1: x + w + 8, y1: y + 10 });
+    return w;
+  }
+  function drawForge() {
+    const w = forgeSpec(); if (!w) { menu.screen = 'cards'; return; }
+    const R = WEAPON_RARITY[w.rarity], st = weaponStats(w), F = FORGE, x0 = F.x0 + 56;
+    forge.hits = [];
+    ctx.fillStyle = 'rgba(236,228,211,0.55)'; ctx.fillRect(0, 0, GW, GH);
+    inkCard(F, 1450);
+    inkTitle(WEAPONS[w.id].name, x0, F.y0 + 60, 32, 1451, 'left');
+    ctx.font = 'italic 500 16px Georgia, serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(21,18,15,0.55)';
+    ctx.fillText('Forge (practice tool): set this copy by hand', F.x1 - 44, F.y0 + 56);
+    // rarity
+    sectionLabel('Rarity', x0, F.y0 + 112);
+    let x = x0 + 96;
+    for (const k of RAR_KEYS) x += forgeButton('r:' + k, RARITIES[k].label, x, F.y0 + 112, { on: w.rarity === k, col: RARITIES[k].css }) + 26;
+    // damage
+    sectionLabel('Damage', x0, F.y0 + 168);
+    ctx.font = 'italic 700 30px Georgia, serif'; ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText(st.dmg + '%', x0 + 96, F.y0 + 170);
+    const dw = ctx.measureText(st.dmg + '%').width;
+    ctx.font = 'italic 500 16px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.55)';
+    ctx.fillText('per hit  ·  ' + R.dmg[0] + (R.dmg[1] !== R.dmg[0] ? '–' + R.dmg[1] : '') + '% for ' + RARITIES[w.rarity].label, x0 + 96 + dw + 12, F.y0 + 168);
+    x = x0 + 520; x += forgeButton('dmg-', '− 0.5', x, F.y0 + 168) + 24; x += forgeButton('dmg+', '+ 0.5', x, F.y0 + 168) + 24; forgeButton('reroll', 'Reroll', x, F.y0 + 168);
+    // roll a whole copy, or clear
+    x = x0 + 96; x += forgeButton('rollall', 'Roll a random ' + RARITIES[w.rarity].label.toLowerCase() + ' copy', x, F.y0 + 214) + 34; forgeButton('clear', 'Clear modifiers', x, F.y0 + 214);
+    // modifier slots
+    sectionLabel('Modifiers (' + w.mods.length + ' of ' + R.mods + ')', x0, F.y0 + 270);
+    if (!R.mods) { ctx.font = 'italic 500 16px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.5)'; ctx.fillText('Common weapons have no modifiers. Uncommon gets 1, and one more each rarity up.', x0 + 96, F.y0 + 306); }
+    for (let i = 0; i < R.mods; i++) {
+      const y = F.y0 + 310 + i * 46, m = w.mods[i];
+      ctx.font = 'italic 600 15px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.45)'; ctx.textAlign = 'right'; ctx.fillText(String(i + 1), x0 + 70, y);
+      if (!m) { forgeButton('m:' + i, '— choose a modifier —', x0 + 96, y); continue; }
+      const M = MOD[m.key];
+      let bx = x0 + 96 + forgeButton('m:' + i, modLabel(m), x0 + 96, y, { col: m.curse ? 'rgb(124,32,26)' : m.blessed ? 'rgb(140,104,30)' : undefined }) + 18;
+      ctx.font = 'italic 500 15px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.6)'; ctx.textAlign = 'left';
+      const desc = M.base !== undefined ? M.text(modValue(m)) + (m.curse ? ', and ' + MOD[m.curse].text(-MOD[m.curse].base) : '') : M.text();
+      const lines = wrapText(desc, 420); lines.slice(0, 2).forEach((l, j) => ctx.fillText(l, bx, y + j * 17 - (lines.length > 1 ? 7 : 0)));
+      bx = F.x1 - 330;
+      if (M.tier === 'common') bx += forgeButton('t:' + i, m.blessed ? 'Blessed' : m.curse ? 'Cursed' : 'Normal', bx, y, { size: 16 }) + 34;
+      if (m.curse) bx += forgeButton('p:' + i, '− ' + MOD[m.curse].name, bx, y, { size: 16 }) + 34;
+      forgeButton('x:' + i, '✕', F.x1 - 70, y, { size: 16 });
+    }
+    // what it all adds up to
+    const tot = commonMods().filter(m => st[m.key]).map(m => m.text(st[m.key]));
+    const sp = Object.keys(st.has).map(k => MOD[k].name);
+    ctx.font = 'italic 500 15px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.6)'; ctx.textAlign = 'left';
+    wrapText('Totals: ' + ([...tot, ...sp].join('  ·  ') || 'no modifiers'), F.x1 - F.x0 - 120).slice(0, 2).forEach((l, j) => ctx.fillText(l, x0, F.y1 - 82 + j * 18));
+    x = x0; x += forgeButton('done', 'Done', x, F.y1 - 34, { size: 21 }) + 40; forgeButton('unequip', 'Unequip', x, F.y1 - 34, { size: 21 });
+    ctx.font = 'italic 500 15px Georgia, serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(21,18,15,0.45)';
+    ctx.fillText('A select  ·  B back  ·  common modifiers: Normal / Cursed / Blessed (Ancient)', F.x1 - 40, F.y1 - 34);
+    if (forge.pick >= 0) drawForgePicker();
+  }
+  function drawForgePicker() {   // the modifier list: four columns by tier; ones already on this weapon (other than common) are greyed out
+    const P = { x0: 210, x1: 1070, y0: 150, y1: 640 };
+    ctx.fillStyle = 'rgba(236,228,211,0.5)'; ctx.fillRect(0, 0, GW, GH);
+    inkCard(P, 1470);
+    inkTitle('Modifier for slot ' + (forge.pick + 1), P.x0 + 40, P.y0 + 50, 26, 1471, 'left');
+    const cols = pickerCols(), cw = (P.x1 - P.x0 - 80) / cols.length;
+    Object.values(MOD_TIERS).forEach((label, ci) => {
+      const cx = P.x0 + 40 + ci * cw;
+      ctx.font = 'italic 700 16px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.5)'; ctx.textAlign = 'left'; ctx.fillText(label, cx, P.y0 + 92);
+      cols[ci].forEach((key, ri) => forgeButton(key, MOD[key].name, cx + 6, P.y0 + 128 + ri * 34, { pick: true, size: 17, off: modTaken(key, forge.pick) }));
+    });
+    const M = MOD[forge.pfocus];
+    if (M) { ctx.font = 'italic 500 16px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.65)'; ctx.textAlign = 'left'; ctx.fillText(M.name + ': ' + (M.base !== undefined ? M.text(M.base) : M.text()), P.x0 + 40, P.y1 - 30); }
+  }
   function drawCards() {
     const hits = cards.hits = [], g = galleryCards();
     inkCard(CSHEET, 501);
@@ -3745,7 +4118,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     sectionLabel('Equipped', SLOT.x, 112);
     CARD_SLOTS.forEach((s, i) => {
       const x = SLOT.x + i * (SLOT.w + SLOT.gap), f = cards.row === R_GEAR && cards.col === i, y = SLOT.y + (f ? -4 : 0);
-      drawSlot(x, y, s.label, equipped[s.key] && cardById(equipped[s.key]), f, 520 + i * 9);
+      drawSlot(x, y, s.label, equipped[s.key] && shownCard(cardById(equipped[s.key])), f, 520 + i * 9);
       hits.push({ row: R_GEAR, col: i, x0: x, y0: SLOT.y, x1: x + SLOT.w, y1: SLOT.y + SLOT.h });
     });
     // passives: one slot per equipped passive, then a "+" slot; scrolls sideways past PASS_VIS slots
@@ -3780,6 +4153,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.textAlign = 'left'; ctx.font = 'italic 700 22px Georgia, serif'; ctx.fillStyle = INK; ctx.fillText(head, dx, dy);
     let ly = dy + 28;
     if (card) {   // type and rarity, then the card's text
+      card = shownCard(card);
       const ra = RARITIES[card.rarity] || RARITIES.common;
       ctx.font = 'italic 700 16px Georgia, serif'; ctx.fillStyle = ra.css;
       ctx.fillText(ra.label, dx, ly);
@@ -3788,6 +4162,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       ctx.fillText('  ·  ' + (CARD_TYPES.find(s => s.key === card.type) || { label: card.type }).label, dx + rw, ly);
       ly += 24;
       ctx.font = 'italic 500 15px Georgia, serif'; body = wrapText(card.text || '', CSHEET.x1 - 40 - dx);
+      const ws = card.type === 'weapon' && equipped.weapon === card.id && equipped.weaponSpec;
+      if (ws) body = [weaponStats(ws).dmg + '% per hit' + (ws.mods.length ? ' · ' + ws.mods.map(modLabel).join(', ') : ''), ...wrapText('Select it in the gallery to open the forge.', CSHEET.x1 - 40 - dx)];
     } else ctx.font = 'italic 500 17px Georgia, serif';
     ctx.fillStyle = 'rgba(21,18,15,0.65)';
     body.slice(0, 7).forEach((l, i) => ctx.fillText(l, dx, ly + 2 + i * 20));
@@ -3827,7 +4203,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (cards.scroll + GAL.rows < rowsAll) ctx.fillText('more ▼', mx, GAL.y + 2 * GAL.h + GAL.gap - 4);
     g.slice(first, first + GAL.cols * GAL.rows).forEach((c, j) => {
       const i = first + j, x = GAL.x + (j % GAL.cols) * (GAL.w + GAL.gap), f = cards.row === R_GAL && cards.col === i, y = GAL.y + Math.floor(j / GAL.cols) * (GAL.h + GAL.gap) + (f ? -4 : 0);
-      cardFace(c, x, y, GAL.w, GAL.h, f, 700 + i * 5);
+      cardFace(shownCard(c), x, y, GAL.w, GAL.h, f, 700 + i * 5);
       if (isEquipped(c)) { ctx.textAlign = 'center'; ctx.font = 'italic 700 12px Georgia, serif'; ctx.lineJoin = 'round'; ctx.strokeStyle = PAPER; ctx.lineWidth = 3; ctx.strokeText('equipped', x + GAL.w / 2, y + 17); ctx.fillStyle = INK; ctx.fillText('equipped', x + GAL.w / 2, y + 17); }
       if (f) focusTick(x - 10, y + GAL.h / 2, 800 + i);
       hits.push({ row: R_GAL, col: i, x0: x, y0: y, x1: x + GAL.w, y1: y + GAL.h });

@@ -18,12 +18,12 @@ Each rarity is a watercolour wash over the card face. Drop chances come later, w
 
 The details panel shows the rarity name in its colour, then the card type and the card's text.
 
-## Weapons and rarity (`WEAPON_RARITY`, `rollWeapon`)
+## Weapons and rarity (`WEAPON_RARITY`, `rollWeapon`, `weaponStats`)
 
-Weapons use rarity differently from other cards. Every weapon is equal; a weapon's rarity says how good a copy you rolled, not which weapon it is.
+Weapons use rarity differently from other cards. Every weapon is equal; a weapon's rarity says how good a copy you rolled, not which weapon it is. A copy is `{ id, rarity, base, mods: [{ key, curse?, blessed? }] }`, stored as `LOADOUT.pl.weaponSpec` (and `.bot`).
 - **Damage:** each rarity rolls its per-hit damage at random from its range, to the nearest 0.5%. The ranges overlap a little on purpose.
-- **Modifiers:** each rarity gets one modifier per step above Common. They're drawn from `WEAPON_MODS` by weight, with no repeats. That pool is still being designed with Ray.
-- **Weapon scaling:** the weapon type then scales the rolled damage by its own multiplier (`WEAPONS[type].mult`). The sword is 1.0; heavy weapons are around 1.5 and light weapons around 0.7. No weapon types exist yet.
+- **Weapon scaling:** the weapon type then scales that by its own multiplier (`WEAPONS[type].mult`). The sword is 1.0; heavy weapons are around 1.5 and light weapons around 0.7.
+- **Modifiers:** one per rarity step above Common. They're picked by weight (`MOD_CHANCE`, placeholders until Ray sets them). Common modifiers can repeat; the others can't.
 
 | Rarity | Damage per hit (before the weapon's multiplier) | Modifiers |
 |---|---|---|
@@ -35,7 +35,62 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 | Mythic | 40–50% | 5 |
 | Ancient | 65%, fixed (very rare) | 6 |
 
-`node tests/weapon-rolls.js` rolls 2000 of each and checks every roll stays in range.
+**Holding a weapon:** the fighter holds it in the lead hand (`drawSword`). Hits from that arm reach out to the blade's tip. **Every** hit they land does the weapon's damage, worked through its modifiers (`wpnHit`), on the bot and on the Divine General (who takes his usual 60%). Ray will design proper weapon movesets later; this is the test setup.
+
+### Modifiers (`MODS`)
+
+**Common: stat boosts.** These can stack, can come cursed, and on an Ancient can come blessed.
+- **Keen:** +10% damage.
+- **Heavy-handed:** +15% knockback.
+- **Quick:** the wind-up runs 10% faster.
+- **Long:** +15% reach (a longer blade).
+- **Light:** +10% run speed.
+- **Steady:** 30% less recovery after a miss.
+- **Life Steal:** heals 15% of the damage you deal (lowers your own %). Capped at 25%; a second copy takes it there. Ray allowed healing for this.
+
+How copies combine:
+- **Stacking:** each extra copy of the same common modifier adds 40% of the base (Keen ×2 = 14%). Life Steal goes up 10 per copy instead.
+- **Cursed** (a rare roll on a common modifier): double the boost, plus the negative of another common modifier at its base. For example, cursed Keen is +20% damage and −10% run speed.
+- **Blessed** (Ancient only): triple the boost.
+
+**Uncommon**
+- **Executioner:** +25% damage to anyone over 100%.
+- **Opener:** the first hit after 3 s without landing one does double damage.
+- **Riposte:** +50% within 1 s of a successful parry.
+- **Momentum:** damage grows with your speed, up to +50% at full dash speed.
+- **Skyborne:** +20% in the air.
+- **Bleeding Ink:** +1% a second for 3 s.
+- **Dazing:** +0.15 s hitstun.
+
+**Rare**
+- **Echo:** every 3rd hit strikes again 0.13 s later.
+- **Rending:** kill blows launch 25% further.
+- **Splash:** 3% to anyone else near the hit.
+- **Ink Pool:** kill blows leave a floor puddle for 4 s; anyone in it moves 40% slower.
+- **Phantom:** a ghost of each swing 0.3 s later for half damage.
+- **Guard Breaker:** beats a parry, once every 5 s.
+
+**Very rare**
+- **Anchor:** the first time each round a launch would carry you off the screen, you stop dead in the air instead.
+- **Mirror:** a successful parry sends the blocked hit's damage back.
+- **Thunderclap:** kill blows send floor shockwaves both ways that do 4% and pop anyone on the ground.
+- **Wheel of Fate:** each hit has a 10% chance to borrow a random other modifier.
+
+When one goes off (Echo, Mirror, Anchor, Guard Breaker, Wheel of Fate), its name floats up from the hit.
+
+### The forge (practice tool)
+
+Selecting a weapon card in Select Cards or Bot's Cards equips it and opens the forge. There you can:
+- set the **rarity** (this rerolls the damage in its range and resizes the modifier slots, keeping the ones that fit);
+- nudge the **damage** by ±0.5 within the range, or **Reroll** it;
+- **Roll a random copy** of that rarity, or **Clear** the modifiers;
+- fill each **modifier slot** from a picker with one column per tier. Uncommon and rarer ones already on the weapon are greyed out;
+- switch each common modifier between **Normal, Cursed** (and pick which modifier the curse takes from) and **Blessed** (Ancient only);
+- remove a modifier (**✕**).
+
+The bottom line shows what it all adds up to. **Done** goes back; **Unequip** takes it off. Keys, controller and mouse all work. The equipped slot and gallery card show the copy's rarity.
+
+Tests: `node tests/weapon-rolls.js` (the ranges), `node tests/weapon-mods.js` (every modifier in a fight, plus the stacking maths), and `node tests/forge-shot.js` (the forge, start to finish).
 
 ## Card data (`CARDS`)
 
