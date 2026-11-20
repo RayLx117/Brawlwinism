@@ -49,8 +49,9 @@ Redrawn in v52 from Ray's second reference sketch (a horned, faceless god with a
 - a muscled V torso with dry-brush pec, ab and oblique marks, and a necklace of five rings with tassels;
 - a pale sash with a dark top band, a big knot at the front and a long notched tail, over a pale wrap skirt in two swinging halves with deep fold strokes;
 - wrist and ankle bands, bare feet with toes, a bandaged blade arm, and a long thin ink sword held point-down with a small guard.
+- arm layering (Ray): the blade arm, the one on his facing side, is behind the torso, with the sword drawn alongside it; the other arm is in front. Mirrored when he turns.
 
-Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[points], width]`. Joins that should read as one body, not separate pieces, use an open `ink` path (no outline across the join), `root` (no shading across a part's root) and `coreSkip` (no dark edge stroke in a box). The arms use these: no line over the shoulder caps or armpits, and the torso is open where the back arm joins.
+Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[points], width]`. Joins that should read as one body, not separate pieces, use an open `ink` path (no outline across the join), `root` (no shading across a part's root) and `coreSkip` (no dark edge stroke in a box). The arms use these: no line over the shoulder caps or armpits, and the torso is open where the far (blade) arm joins.
 
 **Flow:**
 1. At round start a red column follows his owner for 0.6 s. Then he drops out of the sky onto them, with shockwaves and a "Divine General" banner, and launches them off the map.
