@@ -28,6 +28,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node dg-card-shot.js [prefix]` | His HUD portrait and his card in Select Cards. |
 | `node dg-pierce.js` | His pierce from five angles (near, far, high, overhead, mid-air): prints when it skewered and where you landed; a frame sheet per case (`out/pierce-<case>.png`). |
 | `node dg-soak.js` | Lets him fight on his own for 90 s; prints the attacks he picked, repeats, skewers, and page errors. |
+| `node dg-crown-shot.js` | Close-ups of the pierce's warning halo on the player, standing and in the air (`out/crown-*.png`). |
 
 ## Patterns for new tests
 

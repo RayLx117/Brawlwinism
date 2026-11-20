@@ -2227,13 +2227,13 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       }
     }
 
+    drawDGCrown();   // the pierce's halo of thorns sits behind the fighters
     drawRagTrail();
     drawBot();
     drawDrops();
     if (!inDrill() && !pl.out) { drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); }
     drawDrill();
     drawSparks();
-    drawDGCrown();
     if (!pl.out) drawCooldown(r);
     if (pl.staggerT > 0 && r && !inDrill()) {   // stunned by a parry: the same circling ink dots as the bot
       const [hx, hy] = apply(r.head, 3, -40), k = Math.min(1, pl.staggerT / 0.1);
@@ -2916,29 +2916,29 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       setM(ID); ctx.textAlign = 'center'; ctx.font = 'italic 600 18px Georgia, serif'; ctx.fillStyle = `rgba(21,18,15,${Math.min(1, g.labelT / 0.3)})`; ctx.fillText(g.label, hx, hy);
     }
   }
-  // the pierce's mark: a red crown of thorns over the target's head, a ring open at the bottom with spikes and two crossed stakes.
-  // It pops in, hangs there while he cocks the blade, and is gone as the lunge goes in
+  // the pierce's mark: a red crescent of thorns circling the target's head like a halo, thick over the top, tapering to two open
+  // ends at the neck, with small thorns along its outer edge. It follows the head, sits behind the fighter (never across them),
+  // pops in, hangs there while he cocks the blade, and is gone as the lunge goes in
   function drawDGCrown() {
     const g = dg; if (!g || g.state !== 'atk' || !g.atk.A.crown) return;
     const a = g.atk, A = a.A; if (!a.f || a.t > A.tele + 0.07) return;
     const R = dgRigOf(a.f); if (!R) return;
-    const [x0, y0, x1] = rigBox(R), k = Math.min(1, a.t / 0.07), sc = 1.45 - 0.45 * (1 - (1 - k) * (1 - k));
+    const m = R.head, u = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));   // head units -> px
+    const k = Math.min(1, a.t / 0.07), sc = 1.35 - 0.35 * (1 - (1 - k) * (1 - k));
     const alpha = a.t < A.tele ? Math.min(1, a.t / 0.04) : 1 - (a.t - A.tele) / 0.07;
-    const cx = (x0 + x1) / 2 + (Math.random() - 0.5) * 1.6, cy = y0 - 46 + (Math.random() - 0.5) * 1.6, r = 23 * sc;
-    const P = (an, d) => [cx + Math.cos(an) * d, cy + Math.sin(an) * d];
+    const cx = 1, cy = -22, rx = 31 * sc, ry = 31 * sc, gap = 0.7, a0 = Math.PI / 2 + gap, a1 = Math.PI / 2 - gap + TAU;
+    const P = (an, d = 0) => apply(m, cx + (rx + d) * Math.cos(an), cy + (ry + d) * Math.sin(an));
+    const arc = []; for (let i = 0; i <= 28; i++) arc.push(P(a0 + (a1 - a0) * i / 28));
+    const thick = (an) => Math.sin(Math.PI * (an - a0) / (a1 - a0));   // 0 at the open ends, 1 over the top
     setM(ID); ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
-    const ring = []; for (let i = 0; i <= 20; i++) ring.push(P(Math.PI / 2 + 0.6 + i / 20 * (TAU - 1.2), r));
-    const spikes = [[-Math.PI / 2, 15, true], [-3 * Math.PI / 4, 9], [-Math.PI / 4, 9], [Math.PI, 11, true], [0, 11, true], [-Math.PI / 2 - 0.4, 5], [-Math.PI / 2 + 0.4, 5]];
-    for (const [col, wk] of [[`rgb(${RED})`, 1], ['rgb(72,12,9)', 0.42]]) {   // a red stroke with a dark core down the middle
+    for (const [col, wk] of [[`rgb(${RED})`, 1], ['rgb(72,12,9)', 0.4]]) {   // a red stroke with a dark core down the middle
       ctx.fillStyle = col;
-      ctx.fill(brushPath(ring, 7.5 * sc * wk, 0.08, 0.08, 0.9 * wk, 811));
-      spikes.forEach(([an, len, cross], i) => {
-        ctx.fill(brushPath([P(an, r - 1), P(an, r + len * 1.4 * sc)], 6 * sc * wk, 0.02, 0.75, 0, 820 + i));
-        if (cross) {   // a crossbar near the end of the long stakes
-          const [mx, my] = P(an, r + len * 1.4 * sc * 0.62), ux = -Math.sin(an) * 6.5 * sc, uy = Math.cos(an) * 6.5 * sc;
-          ctx.fill(brushPath([[mx - ux, my - uy], [mx, my], [mx + ux, my + uy]], 4.2 * sc * wk, 0.25, 0.25, 0, 840 + i));
-        }
-      });
+      ctx.fill(brushPath(arc, 7 * u * sc * wk, 0.42, 0.42, 0.5 * u * wk, 811));
+      for (let i = 1; i < 10; i++) {   // thorns along the outer edge, raked back a little, longer where the crescent is thick
+        const an = a0 + (a1 - a0) * i / 10, t = thick(an); if (t < 0.2) continue;
+        const [bx, by] = P(an, 1.5), [tx, ty] = P(an + 0.12, (5 + 9 * t) * sc);
+        ctx.fill(brushPath([[bx, by], [(bx + tx) / 2, (by + ty) / 2], [tx, ty]], (2.4 + 2.6 * t) * u * sc * wk, 0.02, 0.95, 0, 820 + i));
+      }
     }
     ctx.restore();
   }
