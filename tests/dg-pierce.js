@@ -7,7 +7,7 @@ const GAME = 'file://' + path.resolve(__dirname, '../index.html'); const OUT = p
 const CASES = [   // [name, player x offset in front of him, player height above the floor]
   ['near', 150, 0], ['far', 400, 0], ['high', 220, 300], ['overhead', 70, 380], ['low-air', 330, 120],
 ];
-const SHOTS = [0.15, 0.3, 0.37, 0.45, 0.6, 1.1, 1.45, 1.55, 1.62, 1.75, 2.1, 2.6];
+const SHOTS = [0.15, 0.3, 0.36, 0.42, 0.5, 0.6, 1.2, 1.5, 1.6, 1.66, 1.72, 1.85, 2.0, 2.2, 2.6, 3.0];
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 820 }, deviceScaleFactor: 1 });
   const errs = []; p.on('pageerror', e => errs.push(e.stack)); await p.goto(GAME); await p.waitForTimeout(600);

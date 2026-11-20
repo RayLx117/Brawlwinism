@@ -2303,8 +2303,9 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     // of him and you're thrown off it into the ground: impact damage when you hit, then the usual ragdoll for your damage.
     // tele = the halo / draw-back (s); act = the thrust (s); reach = how far past his shoulder the skewer point gets (px);
     // lunge = the most he steps in (px); lift / hold / slam = raising you overhead, holding you there, the slam down (s);
-    // slamAt = how far into the slam he lets go; kb / down = the throw forward and down; impact = damage % for hitting the ground
-    pierce:   { tele: 0.30, act: 0.12, rec: 0.55, dmg: 10, impact: 6, kb: 110, down: 950, reach: 250, lunge: 190, lift: 0.26, hold: 0.7, slam: 0.22, slamAt: 0.6, crown: true, tip: 'blade' },
+    // slamAt = how far into the slam he lets go; kb / down = the throw forward and down; impact = damage % for hitting the ground;
+    // bounce / recoil = how high they bounce off the floor and how far back they're knocked (both grow with damage)
+    pierce:   { tele: 0.30, act: 0.25, rec: 0.5, dmg: 10, impact: 6, kb: 150, down: 1300, bounce: 420, recoil: 170, reach: 250, lunge: 190, lift: 0.26, hold: 0.7, slam: 0.22, slamAt: 0.6, crown: true, tip: 'blade' },
   };
   for (const [k, A] of Object.entries(DG_ATK)) A.key = k;
   let dg = null;   // the Divine General while he's in play
@@ -2545,8 +2546,11 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
         const [tx, ty] = dgTip(g, 'blade'), an = Math.random() * TAU, d = 40 + Math.random() * 30;
         addMote(tx + Math.cos(an) * d, ty + Math.sin(an) * d, -Math.cos(an) * d * 6, -Math.sin(an) * d * 6, 0.16, 1 + Math.random() * 0.8, 0);
       }
-      const m = dgAim(g, a.T), c = ease(Math.min(1, a.t / T1));   // c: how far drawn back (upper arm back, forearm folded so the blade stays on the aim line)
-      return { pose: { tl: m.tl - 0.34 * c, hd: m.hd + 0.1 * c, fa1: m.w + 1.6 * c - g.pose.tl, fa2: -1.6 * c, ba1: -0.7 * c, ba2: -0.4 * c, hip: m.hip + 3 * c, ffx: 22 + 4 * c, bfx: -24 - 8 * c }, rate: 22 };
+      // a deep punch wind-up: the blade arm hauled far back behind his torso, elbow folded so the blade still points at them,
+      // body twisted and leaning away, weight loaded onto the back leg, the other hand reaching out at them like a sight
+      const m = dgAim(g, a.T), c = ease(Math.min(1, a.t / T1));
+      return { pose: { tl: m.tl - 0.7 * c, hd: m.hd + 0.12 * c, fa1: m.w + 2.75 * c - g.pose.tl, fa2: -2.55 * c, ba1: m.w * c - g.pose.tl * c + 0.15, ba2: -0.15 * c,
+        hip: m.hip - 8 * c, ffx: 22 + 14 * c, bfx: -24 - 16 * c }, rate: 20 };
     }
     if (!a.locked) {   // committed: the aim locks where they are now, and he works out how far to step in
       a.locked = true;
@@ -2554,13 +2558,15 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       a.move = f * Math.max(0, Math.min(A.lunge, Math.abs(a.T[0] - sx) - hx));
       g.wheelTo += Math.PI / 8;
     }
-    const m = dgAim(g, a.T);
-    if (a.t < T2 && a.move) g.x = dgClampX(g.x + a.move / A.act * dt);
-    // the thrust: the drawn-back arm driven out straight along the aim, accelerating into the end
-    const e = Math.min(1, (a.t - T1) / A.act), c = 1 - e * e;
-    const thrust = { tl: m.tl - 0.34 * c, hd: m.hd, fa1: m.w + 1.6 * c - g.pose.tl, fa2: -1.6 * c, ba1: 1.1 - 1.8 * c, ba2: -0.5, hip: m.hip, ffx: 26 + 20 * e, bfx: -32 - 4 * e };
+    const m = dgAim(g, a.T);   // aimed at where they were when the lunge started: it no longer tracks them
+    if (a.t < T1 + A.act * 0.6 && a.move) g.x = dgClampX(g.x + a.move / (A.act * 0.6) * dt);
+    // the lunge: the hauled-back arm driven out along the aim, accelerating into full extension by the middle, then the follow-through:
+    // the body keeps turning into it and dropping its weight forward, the off arm whipped back
+    const e = Math.min(1, (a.t - T1) / A.act), x = Math.min(1, e / 0.5), c = 1 - x * x, fo = e > 0.5 ? ease((e - 0.5) / 0.5) : 0;
+    const thrust = { tl: m.tl - 0.7 * c + 0.22 * fo, hd: m.hd + 0.12 * c + 0.1 * fo, fa1: m.w + 2.75 * c - 0.1 * fo - g.pose.tl, fa2: -2.55 * c, ba1: (m.w - g.pose.tl + 0.15) * c + 1.4 * (1 - c), ba2: -0.15 - 0.5 * (1 - c),
+      hip: m.hip - 8 * c - 6 * fo, ffx: 36 + 12 * x, bfx: -40 - 2 * x };
     // the strike: any point along the blade inside them
-    if (e >= 0.4 && a.t < T2 + 0.05 && !a.hit && E && E.open && g.R) {   // only once the thrust is moving
+    if (e >= 0.25 && e <= 0.85 && !a.hit && E && E.open && g.R) {   // only while the thrust is moving
       const sh = E.shapes();
       for (let y = 48; y <= 120 && !a.hit; y += 8) {
         const pt = apply(g.R.fa.lo, 7.6, y);
@@ -2586,7 +2592,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       if (t >= t3 + 0.5) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
       return { pose: {}, rate: 4 };
     }
-    if (a.t < T2 + 0.12) return { pose: thrust, rate: 40 };
+    if (a.t < T2 + 0.1) return { pose: thrust, rate: 34 };
     if (a.t >= T2 + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
     return { pose: {}, rate: 5 };
   }
@@ -2623,21 +2629,30 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (f === pl) plRagdoll(vx, vy, av); else { startRagdoll(bot, vx, vy, av); bot.combo = 0; }
     if (slam) g.slamWatch = { f, t: 0 };
   }
-  // the thrown fighter hitting the floor: impact damage, a heavy splash and a jolt
+  // the thrown fighter hitting the floor: impact damage, a crown of ink thrown up off the platform, crests running out both ways,
+  // a heavy jolt, and they bounce back up off it, knocked back the way they came and spinning
   function dgSlamWatch(g, dt) {
     const w = g.slamWatch, f = w.f; w.t += dt;
     if (!f.rag || w.t > 1.2 || (f === pl && pl.out)) { g.slamWatch = null; return; }
     const over = f.x > PLAT.x0 && f.x < PLAT.x1;
     if (!over || !f.box || f.box[3] < PLAT.y - 4) return;
     g.slamWatch = null;
-    const A = DG_ATK.pierce;
+    const A = DG_ATK.pierce, ls = launchScale(f.damage || 0), x = f.x, y = PLAT.y;
     f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.impact);
-    if (f.vy < 0) f.vy *= 0.3; f.vx *= 0.6;   // a dead thud, not a bounce
-    shakeT = Math.max(shakeT, 0.26);
-    splash(f.x, PLAT.y, 12);
-    for (let i = 0; i < 14; i++) { const an = -Math.PI * Math.random(); addDrop(f.x + (Math.random() - 0.5) * 50, PLAT.y - 4, Math.cos(an) * (150 + Math.random() * 350), Math.sin(an) * (150 + Math.random() * 300), 0.9 + Math.random() * 1.2, Math.random() < 0.5 ? RED : undefined); }
-    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: f.x, y: PLAT.y - 40, v: A.impact, kill: false, dir: g.facing, t: 0 }); }
+    f.vy = -A.bounce * (0.75 + 0.25 * ls); f.vx = -g.facing * A.recoil * ls;
+    Object.assign(f.rag, { phase: 'air', av: g.facing * 11 });
+    shakeT = Math.max(shakeT, 0.36);
+    splash(x, y, 16);
+    const red = Math.min(1, f.damage / 100);
+    for (let i = 0; i < 46; i++) {   // the crown of ink: most thrown up and out in a fan, a few fine flecks high
+      const an = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, v = 250 + Math.random() * 650;
+      addDrop(x + (Math.random() - 0.5) * 60, y - 4, Math.cos(an) * v, Math.sin(an) * v, 0.8 + Math.random() * 1.8, Math.random() < 0.3 + 0.5 * red ? RED : undefined);
+    }
+    for (let i = 0; i < 24; i++) { const an = -Math.PI * Math.random(); addMote(x + (Math.random() - 0.5) * 40, y - 6, Math.cos(an) * (200 + Math.random() * 360), Math.sin(an) * (160 + Math.random() * 300), 0.4, 1 + Math.random() * 1.6, 700); }
+    for (const d of [-1, 1]) dgWaves.push({ x: x + d * 20, dir: d, t: 0, life: 0.26 });   // two short ink crests running out from the impact
+    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x, y: y - 40, v: A.impact, kill: false, dir: g.facing, t: 0 }); }
   }
+
 
   // the fighter's punch lands on him
   function dgTakeHit(A, fx, fy) {
@@ -2801,7 +2816,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (g.slamWatch) dgSlamWatch(g, dt);
     // strike trail: the blade tip or fist through the swing
     const a = g.atk;
-    if (g.state === 'atk' && a.A.tip && a.t > a.A.tele - 0.03 && a.t < a.A.tele + (a.A.air || 0) + a.A.act + 0.06) { g.trail.push(dgTip(g, a.A.tip)); if (g.trail.length > 16) g.trail.shift(); }
+    if (g.state === 'atk' && a.A.tip && a.pin0 === undefined && a.t > a.A.tele - 0.03 && a.t < a.A.tele + (a.A.air || 0) + a.A.act + 0.06) { g.trail.push(dgTip(g, a.A.tip)); if (g.trail.length > 16) g.trail.shift(); }
     // worn down: red goo drips off him
     if (g.damage >= DG.weak && Math.random() < dt * 9) { const [cx, cy] = g.R.centre; addDrop(cx + (Math.random() - 0.5) * 120, cy + (Math.random() - 0.5) * 160, (Math.random() - 0.5) * 60, 40, 1 + Math.random(), RED); }
     for (let i = dgWaves.length - 1; i >= 0; i--) {   // shockwaves racing along the floor
