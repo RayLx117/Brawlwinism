@@ -2129,7 +2129,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const f = h.f(), d = f.damage || 0, out = f.dead > 0 || !!f.out, t = f.time || 0, d01 = Math.min(1, d / KO_DAMAGE);
     if (d > h.last + 0.01) h.popT = t;   // took a hit: the portrait jolts and the number swells
     h.last = d;
-    const pop = Math.max(0, 1 - (t - h.popT) / 0.35), sh = 6 * pop * pop;
+    const pop = Math.max(0, Math.min(1, 1 - (t - h.popT) / 0.35)), sh = 6 * pop * pop;
     const cx = h.x, cy = HUD_Y;
     let M0 = [1, 0, 0, 1, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh];
     // the Divine General's portrait knocks this one out of its slot: sent spinning up and inward, then falling off the screen
@@ -2508,6 +2508,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function spawnDG(owner) {
     dg = { owner, x: owner.x, y: -520, vx: 0, vy: 0, facing: owner === pl ? 1 : -1, pose: { ...dgIdle(0), ...DG_AIR }, time: 0, t: 0, rot: 0,
       state: 'atk', atk: null, damage: 0, gapT: 0.4, behindT: 0, leapCd: 0, stepPh: 0, shudder: 0, wheelRot: 0, wheelTo: 0, label: '', labelT: 0, trail: [], tailA: 0 };
+    for (const h of Object.values(DG_HUD)) { h.popT = -9; h.last = 0; }   // a fresh portrait: his clock starts again at 0
     dgStart(dg, 'drop');
   }
   function dgStart(g, k, E) {
@@ -3208,7 +3209,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     h.last = d;
     // flying in from the outside edge, accelerating into the slot; a little recoil after the hit
     const e = Math.min(1, ht / DGH.fly), fx = h.side * DGH.from * (1 - e * e) - h.side * 10 * Math.sin(Math.PI * Math.min(1, Math.max(0, (ht - DGH.fly) / 0.18))) ;
-    const pop = Math.max(0, 1 - (g.time - (h.popT ?? -9)) / 0.35), sh = 6 * pop * pop, M0 = [1, 0, 0, 1, fx, 0];   // his portrait stays put (only the number swells when he's hit)
+    const pop = Math.max(0, Math.min(1, 1 - (g.time - (h.popT ?? -9)) / 0.35)), M0 = [1, 0, 0, 1, fx, 0];   // his portrait stays put (only the number swells when he's hit)
     ctx.save(); setM(M0);
     const disc = new Path2D(); disc.arc(cx, cy, HUD_R, 0, TAU);
     ctx.fillStyle = PAPER; ctx.fill(disc);
@@ -3248,7 +3249,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   function resetRound() {
     round.endT = 0; round.started = true;
-    dg = null; dgWaves.length = 0; dmgNums.length = 0;
+    dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
     Object.assign(pl, { x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, rag: null, out: false, launched: false, damage: 0, rot: 0, roll: 1,
       staggerT: 0, stunT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
       wallT: 0, wallSlide: false, wallTouch: false, fastFall: false, landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null });
