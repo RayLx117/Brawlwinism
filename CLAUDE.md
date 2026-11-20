@@ -28,7 +28,7 @@ Full notes: `docs/art-direction.md`. Reference images: `reference/`.
 - **Stage "Practice":**
   - The background is graph paper.
   - The floor runs from an open edge at x 150 to a wall at x 1180 that runs up off-screen.
-  - The ground and wall are brutalist board-formed concrete in ink and wash, drawn with depth (Ray's request): a gentle one-point perspective (`STAGE3D`) gives the floor a visible top surface going back and the wall an inner side face. The feet land mid-slab; collision is unchanged. Front faces carry plank marks, panel joints, tie holes, soft rain streaks, hairline cracks and ink hatching under the lip; bold ink lines run on the front edges.
+  - The ground and wall are brutalist board-formed concrete in ink and wash, drawn with depth (Ray's request). **The depth rule for every map:** the terrain's drawn silhouette sits exactly on the collision lines; depth is only shown on surfaces that recede behind the fighters (a top band around the walk line, a wall's inner face just past its collision line); fighters are always drawn in front, with no masking. See `STAGE3D` and `docs/art-direction.md`.
 - **Typography:** italic Georgia/serif in ink, underlined with a short brush stroke.
 - **Rejected looks (don't bring back):** big detailed creatures; extra limbs; long limbs; round blank heads; floppy arms in the air; a faded haze; hit-pause (Ray found it choppy); bubble shields; feint; the 2D "paper flip" spin.
 

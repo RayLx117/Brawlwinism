@@ -60,17 +60,27 @@ Ray wants an inky brush-stroke look. Everything should read as ink and watercolo
 
 ## Practice stage: brutalist concrete with depth
 
-Ray asked for the platform and wall to look brutalist and concrete-like in the game's style, and for the big change to be the illusion of standing on a 3D surface.
-- **Perspective:** a gentle one-point perspective (`STAGE3D`: vanishing point 640,150; the back edge at 0.9 of the way). The floor shows its top surface going back (about 40 px deep), and the wall shows its inner side face.
-- **Play line:** the front plane sits 20 px in front of the play line and 28 px in front of the wall and the open end, so feet land in the middle of the slab. Collision still uses `PLAT` and `WALL`.
-- **Concrete:** flat grey washes, lighter on the top, mid on the wall's inner face and darker on the front faces. Small soft mottling, aggregate speckle and air pockets.
+Ray asked for the platform and wall to look brutalist and concrete-like in the game's style, and for the illusion of standing on a 3D surface.
+
+### The depth rule, for every map (`STAGE3D`)
+
+A first try used true perspective: the slab's end slanted back and the wall's inner face reached into the play space. Fighters then overlapped surfaces that should have been in front of them, and masking them off still clipped. Ray asked for the way 2D platform fighters like Brawlhalla do it:
+1. **The drawn silhouette of the terrain sits exactly on the collision lines.** The ledge's corner and the cliff line are at `PLAT.x0`; the wall's back corner is at `WALL`.
+2. **Depth is only shown on surfaces that recede behind the fighters:**
+   - **Floors** get a top band `d` px above and below the walk line, so feet land mid-band. Its ends stop square at the ledge, so standing right on the lip always has surface under you.
+   - **Walls** get an inner face just past their collision line, from `WALL` out to `WALL + wd`, so a fighter against the wall touches its back edge and never overlaps it.
+3. **Fighters are always drawn in front of the terrain.** There's no masking or occlusion, so nothing can clip.
+4. **Lines going back** (joints, board marks) run toward a vanishing point (`vp`), which gives the perspective.
+
+### The concrete
+
+- **Washes:** flat grey, lighter on the top, mid on the wall's inner face and darker on the front faces, with soft mottling, aggregate speckle and air pockets.
 - **Front faces:**
-  - board-form plank marks with panel joints every 205 px;
+  - board-form plank marks and panel joints every 205 px;
   - form-tie holes;
-  - thin blurred rain streaks running down from the edges;
+  - thin blurred rain streaks;
   - a few hairline cracks;
-  - ink hatching and shade tucked under the lip.
+  - ink hatching and shade under the lip.
 - **Top:** expansion joints running back toward the vanishing point, and a shadow where it meets the wall.
-- **Ink lines:** bold ink on the floor's front edge and the wall's front corner. At the open end, three clean full-weight strokes meet in one round join: the front edge, the edge going back, and the cliff line running down and thinning out. Ray had the old splintering bristle strokes off the lip removed.
-- **Edge occlusion (`drawEdgeOccluder`):** a fighter past the open edge (x < `PLAT.x0`) is mid-depth beside the slab, so the slab's nearer part (the cliff face and the front half of the top) is drawn back over them. Sliding down the cliff or dropping off, they go behind the corner. On top of the slab they stay in front.
+- **Ink:** heaviest on the silhouette the fighters meet: the floor's front edge, the ledge line running from the top's back edge down the cliff (thinning out, with one clean join at the corner), and the wall's front corner. Lighter on the lines going back. Ray had the old splintering bristle strokes off the lip removed.
 - **Background:** the graph paper stays for Practice only. Other maps will have their own dull colours.
