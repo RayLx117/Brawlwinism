@@ -3451,7 +3451,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (row === R_GAL && !g.length) { row = R_TABS; col = cards.tab; }
     if (P('left')) col = Math.max(0, col - 1);
     if (P('right')) col = Math.min(rowLen[row] - 1, col + 1);
-    if (row === R_TABS && col !== cards.tab) setTab(col);   // moving along the tabs switches them straight away
+    // moving along the tabs only moves the focus: a category switches on a click, select (A / Enter) on its tab, or the bumpers
     if (P('down')) {
       if (row === R_GAL) { if (col + GAL.cols < g.length) col += GAL.cols; }
       else if (row === R_GEAR) { row = R_PASS; col = Math.min(cards.passScroll + col, passN - 1); }
@@ -3474,7 +3474,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (P('ok')) cardsActivate(cards.row, cards.col);
   }
   const cardsHit = (x, y) => cards.hits.find(h => x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
-  function cardsHover(x, y) { const h = cardsHit(x, y); if (h && h.row >= 0 && h.row !== R_TABS) cardsFocus(h.row, h.col); }   // the category tabs only switch on a click (or keys / bumpers), not on hover
+  function cardsHover(x, y) { const h = cardsHit(x, y); if (h && h.row >= 0 && h.row !== R_TABS) cardsFocus(h.row, h.col); }   // hovering never touches the category tabs: they switch on a click, select on the tab, or the bumpers
   function cardsClick(x, y) {
     const h = cardsHit(x, y);
     if (!h) return;

@@ -57,7 +57,7 @@ Cards are Ray's planned weapons and augments: weapons, companions, passives, sta
   - A or Enter on a slot jumps to that slot's tab.
   - On a gallery card it equips the card, and doing it again unequips it. A passive picked after choosing a filled passive slot swaps into that slot. Otherwise, including after choosing "+", it's added at the end. Unequipping a passive closes its slot up.
   - B, Esc or Backspace goes back to the pause list; Start closes the whole menu.
-  - The mouse works too: hover focuses a card or slot, and a click acts. The category tabs only switch on a click (or keys and bumpers), never on hover.
+  - The mouse works too: hover focuses a card or slot, and a click acts. The category tabs switch only on a click, select (A or Enter) on a focused tab, or the bumpers. Hovering never touches them, and arrowing along the tab row only moves the focus.
 
 Under the game, the controls text is now a single hint: "Esc or Start pause". The full list lives in the Controls pop-up (`CONTROLS` in `index.html`).
 
