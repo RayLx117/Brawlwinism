@@ -1,41 +1,18 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><title>Brawlwinism</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-/* Layout: one 16:9 stage centred on a paper desk, controls line underneath. Single deliberate paper theme. */
-:root {
-  --desk: #d8cdb8;
-  --paper: #ece4d3;
-  --ink: #15120f;
-  --muted: #5b5247;
-  --key: #f4eee2;
-  --font: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-  color-scheme: light;
-}
-html, body { height: 100%; }
-body { background: var(--desk); color: var(--ink); font-family: var(--font); }
-.wrap {
-  height: 100%; box-sizing: border-box;
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding-block: 12px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-}
-.stage { position: relative; flex: 1 1 auto; width: 100%; min-height: 0; display: grid; place-items: center; }
-.screen { position: relative; box-shadow: 0 1px 0 rgba(21,18,15,.25), 0 10px 30px rgba(21,18,15,.18); }
+/* Layout: the 16:9 game fills the window edge to edge. If the window isn't 16:9, the leftover space is plain black, like a letterbox. */
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body { background: #000; color-scheme: light; }
+.stage { position: fixed; inset: 0; display: grid; place-items: center; }
+.screen { position: relative; }
 canvas { display: block; width: 100%; height: 100%; outline: none; }
-.keys { margin: 0; color: var(--muted); font-size: .95rem; text-align: center; display: flex; flex-wrap: wrap; gap: .35em 1.2em; justify-content: center; }
-kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); border: 1px solid var(--ink); border-bottom-width: 2px; padding: .2em .45em; border-radius: 3px; }
 </style>
 
-<div class="wrap">
-  <div class="stage" id="stage">
-    <div class="screen" id="screen">
-      <canvas id="game" tabindex="0" aria-label="Fighter prototype, Practice stage: floor with an open edge on the left and a wall on the right"></canvas>
-    </div>
+<div class="stage" id="stage">
+  <div class="screen" id="screen">
+    <canvas id="game" tabindex="0" aria-label="Brawlwinism"></canvas>
   </div>
-  <p class="keys">
-    <span><kbd>Esc</kbd> or <kbd>Start</kbd> pause: practice settings and controls · left click attack · right click ability</span>
-  </p>
 </div>
 
 <script>
@@ -58,7 +35,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     const r = stage.getBoundingClientRect();
     let w = r.width, h = w * 9 / 16;
     if (h > r.height) { h = r.height; w = h * 16 / 9; }
-    w = Math.max(160, Math.floor(w)); h = Math.round(w * 9 / 16);
+    w = Math.max(160, Math.round(w)); h = Math.round(w * 9 / 16);   // as big as fits the window
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     screenEl.style.width = w + 'px'; screenEl.style.height = h + 'px';
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);

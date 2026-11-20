@@ -37,3 +37,8 @@ It fades in fast and out faster (`invK`), so it's gone the moment they can be hi
 - **Stunned:** three ink dots circle the head.
 - **Parried (stunned for 1.5 s):** standing tall, head back, teetering backwards, with the same dots.
 - **Damage:** the red tide over the goo and line work.
+
+
+## Page layout
+
+The game fills the browser window edge to edge, with no desk border and no controls line under it; Ray asked for full screen. It keeps 16:9, so a window of another shape gets plain black bars, like a letterbox. The controls are listed in the pause menu's Controls pop-up.
