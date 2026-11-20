@@ -7,7 +7,7 @@ const GAME = 'file://' + path.resolve(__dirname, '../index.html'); const OUT = p
 const CASES = [   // [name, player x offset in front of him, player height above the floor]
   ['near', 150, 0], ['far', 400, 0], ['high', 220, 300], ['overhead', 70, 380], ['low-air', 330, 120],
 ];
-const SHOTS = [0.1, 0.2, 0.27, 0.36, 0.5, 0.62, 0.75, 1.1];
+const SHOTS = [0.15, 0.3, 0.37, 0.45, 0.6, 1.1, 1.45, 1.55, 1.62, 1.75, 2.1, 2.6];
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 820 }, deviceScaleFactor: 1 });
   const errs = []; p.on('pageerror', e => errs.push(e.stack)); await p.goto(GAME); await p.waitForTimeout(600);
@@ -28,14 +28,14 @@ const SHOTS = [0.1, 0.2, 0.27, 0.36, 0.5, 0.62, 0.75, 1.1];
           __step(1 / 60, 1); P.t += 1 / 60;
           if (P.hitT === null && g && g.pin) P.hitT = +P.t.toFixed(3);
         }
-        return { hitT: P.hitT, x: __fighter.x | 0, y: __fighter.y | 0, rag: !!__fighter.rag, pinned: !!(g && g.pin), dg: g && g.state, gx: g && g.x | 0 };
+        return { hitT: P.hitT, dmg: __fighter.damage, ragLeft: __fighter.rag && +__fighter.rag.left.toFixed(2), x: __fighter.x | 0, y: __fighter.y | 0, rag: !!__fighter.rag, pinned: !!(g && g.pin), dg: g && g.state, gx: g && g.x | 0 };
       }, ts);
       const fn = OUT + `pierce-${name}-${String(ts).replace('.', '_')}.png`;
       await p.screenshot({ path: fn, clip: { x: box.x + 200 * k, y: box.y, width: 900 * k, height: 600 * k } });
       frames.push(fn);
       if (ts === SHOTS[SHOTS.length - 1]) console.log(name.padEnd(9), JSON.stringify(r));
     }
-    execSync(`python3 ${__dirname}/grid.py ${OUT}pierce-${name}.png 4 0.5 ${frames.join(' ')}`);
+    execSync(`python3 ${__dirname}/grid.py ${OUT}pierce-${name}.png 6 0.42 ${frames.join(' ')}`);
   }
   console.log('errors', errs); await b.close();
 })();
