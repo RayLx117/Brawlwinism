@@ -275,13 +275,13 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   //  - in the air (jumps, the somersault): one hand, arm as it is, the sword sitting naturally across the fist.
   //  - attacking: the blade lines up with the forearm, so the moves strike along it as before.
   const SWORD_HOLD = { scale: 1.7, guard: { fa1: -0.55, fa2: -1.05, ba1: -0.42, ba2: -1.0, abs: -2.22 }, trail: { fa1: 0.95, fa2: -0.05, abs: 1.12 }, air: -1.8,
-    parry: { up: -2.25, fore: -2.85, back: 0.12, abs: -0.5, turnX: 0.86, turnY: 0.95 } };   // parry, a hanging guard: both fists raised above the head on the hilt (up / fore = the upper arm's and forearm's angles in the body frame; back = how far behind the lead fist the other one is), the blade hanging diagonally down across the face and body; turnX / turnY foreshorten it a little (its flat turned toward us)
+    parry: { up: -2.55, fore: 1.15, back: 0.1, abs: -1.45, turnX: 1, turnY: 1 } };   // parry, a loaded guard: the arms wound back, elbows raised and pointing forward (up = the upper arm's angle in the body frame), forearms folded right back so the hands sit behind the head (fore = the forearm's angle), and the blade laid almost flat across the top of the torso, pointing forward about 7° down (abs). turnX / turnY: no foreshortening
   function swordHold(f, tg) {
     const S_ = SWORD_HOLD, P_ = f.punch, nt = { ...tg };
     f.swordTurnTo = 0;
     if (f.parryT > 0 || f.lockT > 0) {   // the sword parry: hilt to the cheek in both hands, blade turned down across the body
       const Pp = S_.parry, jit = f.parryT > 0 ? tg.fa1 - (XGUARD.fa1 - (tg.tl - XGUARD.tl) - 0.5 * Math.min(1, (PARRY_WIN - f.parryT) / 0.05)) : 0;   // keep the parry's shake
-      const u = Pp.up - tg.tl + jit * 0.4, fo = Pp.fore - Pp.up;   // angles relative to the torso / upper arm
+      const u = Pp.up - tg.tl + jit * 0.4; let fo = wrapA(Pp.fore - Pp.up); if (fo > 0) fo -= TAU;   // relative to the torso / the upper arm; the elbow folds the natural way (forward over the top)
       Object.assign(nt, { fa1: u, fa2: fo, ba1: u + Pp.back, ba2: fo - Pp.back * 0.5 });
       f.swordAim = { abs: Pp.abs, rate: 40 }; f.swordTurnTo = 1; return nt;
     }
