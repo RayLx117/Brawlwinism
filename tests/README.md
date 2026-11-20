@@ -24,6 +24,10 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node hud-shot.js [prefix] [botDamage] [seconds]` | A full-frame screenshot plus a HUD close-up. |
 | `node menu-shot.js` | Opens the pause menu, flips both switches, opens Controls; screenshots `menu.png` and `menu-controls.png`. |
 | `node shimmer-shot.js` | The bot ragdolled after a sucker punch, showing the can't-be-hit shimmer. |
+| `node dg-shot.js [prefix]` | Divine General close-ups: standing, cleave, heaven strike, quake (`out/<prefix>-*.png`). |
+| `node dg-card-shot.js [prefix]` | His HUD portrait and his card in Select Cards. |
+| `node dg-pierce.js` | His pierce from five angles (near, far, high, overhead, mid-air): prints when it skewered and where you landed; a frame sheet per case (`out/pierce-<case>.png`). |
+| `node dg-soak.js` | Lets him fight on his own for 90 s; prints the attacks he picked, repeats, skewers, and page errors. |
 
 ## Patterns for new tests
 

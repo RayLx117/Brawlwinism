@@ -59,7 +59,7 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 3. If the other fighter dies, it's "Divine General wins" and the round restarts.
 4. If he's knocked off the screen, it's "Divine General falls" and his owner drops back in. The round carries on without him.
 
-**AI:** He plays himself. He walks toward you in heavy steps that shake the screen a little, and turns round if you stay behind him for 0.35 s. Between attacks he pauses 0.35 to 0.75 s.
+**AI:** He plays himself. He walks toward you in heavy steps that shake the screen a little, and turns round if you stay behind him for 0.35 s. Between attacks he pauses 0.35 to 0.75 s. He picks his next attack at random from the ones that work from where you are (`dgOptions`), never the one he just did. While his list is short, he repeats rather than stalls if the last one is the only option. Ray plans more attacks so the no-repeat rule matters more.
 
 **Tankiness (`DG`):**
 - He takes 60% of a hit's damage. A jab, cross, uppercut string does 7.2% to him.
@@ -79,5 +79,12 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 | Heaven strike | you're above him (170+ px) | tall column above | 0.38 / 0.14 / 0.60 | 13 | 120 / 980 |
 | Quake | you're on the ground nearby (sometimes) | floor band, 440 px each way | 0.45 / 0.16 / 0.70 | 9 | 300 / 620, knocked away |
 | Leap slam | you're 420+ px away (2.6 s cooldown) | ellipse where he'll land | 0.40 + 0.55 in the air / 0.12 / 0.70 | 15 | 420 / 520 |
+| Pierce | the skewer point can reach your middle after his lunge: any direction, near or far | **none**: a red crown of thorns over your head instead | 0.20 / 0.14 / 0.55 (on a hit: held 0.22, fling 0.32, then 0.45) | 12 | thrown back 520 / down 520 |
 
-**Test hooks:** `__dg()` returns his state. `__dgStart('cleave')` forces an attack. `__resetRound()` restarts the round. `__cards.LOADOUT` holds both loadouts.
+**Pierce** (`DG_ATK.pierce`, `dgPierceStep`):
+1. A red crown of thorns pops up over the target's head: a ring open at the bottom with spikes and crossed stakes. He tracks you and cocks the blade arm back.
+2. After 0.2 s the aim locks where you are. He steps in up to 190 px to close the distance, then punches the wrist blade straight at your middle. The arm, lean, crouch and head all adapt to the angle, whether you're high, low, close or far.
+3. Any point along the blade inside you skewers you. You're held up on the blade, then swung over his head and flung off it behind him, back and down into the ground. You ragdoll for the usual time for your damage, and the throw grows with damage.
+4. A miss leaves him extended, then he recovers. Parrying it works like his other hits. If he's knocked out of it, you drop off the blade.
+
+**Test hooks:** `__dg()` returns his state. `__dgStart('cleave')` forces an attack (also `'pierce'`). `__resetRound()` restarts the round. `__cards.LOADOUT` holds both loadouts.

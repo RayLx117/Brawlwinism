@@ -2233,6 +2233,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (!inDrill() && !pl.out) { drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); }
     drawDrill();
     drawSparks();
+    drawDGCrown();
     if (!pl.out) drawCooldown(r);
     if (pl.staggerT > 0 && r && !inDrill()) {   // stunned by a parry: the same circling ink dots as the bot
       const [hx, hy] = apply(r.head, 3, -40), k = Math.min(1, pl.staggerT / 0.1);
@@ -2297,6 +2298,11 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     quake:    { tele: 0.45, act: 0.16, rec: 0.70, dmg: 9, kb: 300, pop: 620, wave: true },                 // down: both fists into the floor, shockwaves both ways
     leap:     { tele: 0.40, air: 0.55, act: 0.12, rec: 0.70, dmg: 15, kb: 420, pop: 520, wave: true },     // far: leaps onto you and slams
     drop:     { tele: 0.60, air: 0.22, act: 0.10, rec: 0.90, dmg: 0, kb: 0, pop: 0, wave: true },           // round start: lands on his owner
+    // any direction, near or far: a red crown marks you (no zone), then he lunges the wrist blade at your torso. On a hit you're
+    // skewered, held up on the blade, swung over his head and flung off it into the ground behind him (ragdoll as usual for your damage).
+    // reach = how far past his shoulder the skewer point gets (px); lunge = the most he steps in to close the gap (px).
+    // pin = held on the blade (s); fling = the swing over his head (s), letting go at flingAt of the way; kb / down = the throw back and down
+    pierce:   { tele: 0.20, act: 0.14, rec: 0.55, dmg: 12, kb: 520, down: 520, reach: 250, lunge: 190, pin: 0.22, fling: 0.32, flingAt: 0.8, crown: true, tip: 'blade' },
   };
   for (const [k, A] of Object.entries(DG_ATK)) A.key = k;
   let dg = null;   // the Divine General while he's in play
@@ -2444,6 +2450,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   const dgCanBeHit = () => dg && dg.R && ['idle', 'walk', 'atk', 'roar'].includes(dg.state) && !(dg.state === 'atk' && dg.atk.A.key === 'drop');
   const rectZ = (xa, xb, y0, y1, from) => ({ kind: 'rect', x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0, y1, from, ox: xa, dir: Math.sign(xb - xa) || 1 });
   function dgZone(g, k, E) {
+    if (k === 'pierce') return null;   // telegraphed by the crown over the target instead
     const f = g.facing, x = g.x, y = g.y;
     if (k === 'cleave') return rectZ(x - f * 40, x + f * 340, y - 260, y + 4, 'x');
     if (k === 'backhand') return rectZ(x + f * 30, x - f * 280, y - 270, y + 4, 'x');
@@ -2478,6 +2485,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (E && k !== 'backhand') g.facing = Math.sign(E.x - g.x) || g.facing;
     if (k === 'leap') { g.leapTo = Math.max(PLAT.x0 + 110, Math.min(WALL - 110, E.x)); g.leapFrom = g.x; g.leapCd = DG.leapCd; g.facing = Math.sign(g.leapTo - g.x) || g.facing; }
     g.state = 'atk'; g.atk = { A, t: 0, hit: false, struck: false, zone: dgZone(g, k, E) };
+    if (k !== 'drop') g.lastAtk = k;
     g.trail = [];
     if (k !== 'drop') g.wheelTo += Math.PI / 4;   // the wheel above his head turns a notch before every attack
   }
@@ -2485,12 +2493,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   function dgHitFighter(E, A, pt) {
     const g = dg, f = E.f, cx = A.key === 'leap' ? g.leapTo : g.x;
     const dir = A.wave ? (Math.sign(E.x - cx) || g.facing) : A.key === 'backhand' ? -g.facing : g.facing;
-    if (f.parryT > 0) {   // parried: the hit is turned aside, but nothing stuns him
-      f.parryOk = true; f.parryCd = 0; f.readyT = 0.3;
-      for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; addSpark(pt[0], pt[1], Math.cos(a) * 320, Math.sin(a) * 320 - 120, 0.2 + Math.random() * 0.15); }
-      g.label = 'parried, unshaken'; g.labelT = 1.1;
-      return;
-    }
+    if (dgParried(f, pt)) return;
     const ls = launchScale(f.damage || 0);
     f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
     if (f === pl) plRagdoll(dir * A.kb * ls, -A.pop * ls, -8 * dir);
@@ -2501,6 +2504,112 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     for (let i = 0; i < 10; i++) addDrop(pt[0], pt[1], dir * (200 + Math.random() * 320), -150 - Math.random() * 260, 0.9 + Math.random() * 1.1, Math.random() < red ? RED : undefined);
     for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; addMote(pt[0], pt[1], Math.cos(a) * 340 + dir * 200, Math.sin(a) * 340, 0.3, 1 + Math.random() * 1.6, 300); }
   }
+  // a fighter parrying as his hit lands: turned aside, but nothing stuns him
+  function dgParried(f, pt) {
+    if (!(f.parryT > 0)) return false;
+    f.parryOk = true; f.parryCd = 0; f.readyT = 0.3;
+    for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; addSpark(pt[0], pt[1], Math.cos(a) * 320, Math.sin(a) * 320 - 120, 0.2 + Math.random() * 0.15); }
+    dg.label = 'parried, unshaken'; dg.labelT = 1.1;
+    return true;
+  }
+
+  // ---- the pierce: crown, lunge, skewer, fling
+  const dgRigOf = (f) => f === pl ? R0 : f.R;
+  const dgShoulder = (g) => g.R ? apply(g.R.fa.up, 0, 0) : [g.x + g.facing * 60, g.y - 250];
+  // can the skewer point reach the target's middle from here, after the lunge? (measured from his body line, so it holds whichever way he faces)
+  function dgPierceReach(g, E) {
+    const R = dgRigOf(E.f); if (!R) return false;
+    const A = DG_ATK.pierce, [tx, ty] = R.centre, sy = dgShoulder(g)[1];
+    return Math.hypot(Math.max(0, Math.abs(tx - g.x) - 60 - A.lunge), ty - sy) <= A.reach;
+  }
+  // the blade arm aimed at world point T: the arm's angle in his body frame, how high the target is, and a lean/stance to match
+  function dgAim(g, T) {
+    const f = g.facing, [sx, sy] = dgShoulder(g), lx = f * (T[0] - sx), ly = T[1] - sy;
+    const phi = Math.atan2(-ly, Math.max(1, Math.abs(lx))), up = Math.max(0, Math.sin(phi)), dn = Math.max(0, -Math.sin(phi));
+    return { w: Math.atan2(-lx, ly), phi, tl: Math.max(-0.45, Math.min(0.75, 0.5 - 0.5 * phi)), hip: 54 - 9 * dn + 8 * up, hd: -0.5 * phi };
+  }
+  function dgPierceStep(g, E, dt) {
+    const a = g.atk, A = a.A, f = g.facing, T1 = A.tele, T2 = T1 + A.act;
+    a.t += dt;
+    if (!a.f && E) a.f = E.f;
+    const R = a.f && dgRigOf(a.f);
+    if (a.t < T1 || !a.T) {   // the crown is up: he tracks the target and cocks the blade back
+      if (R && !(a.f === pl && pl.out)) a.T = R.centre.slice();
+      if (!a.T) { g.state = 'idle'; g.gapT = 0.3; return { pose: {}, rate: 10 }; }
+      g.facing = Math.sign(a.T[0] - g.x) || g.facing;
+      if (!a.popped) { a.popped = true; for (let i = 0; i < 6; i++) addDrop(a.T[0] + (Math.random() - 0.5) * 30, a.T[1] - 90, (Math.random() - 0.5) * 160, -60 - Math.random() * 120, 0.8 + Math.random() * 0.6, RED); }
+      if (g.R && Math.random() < dt * 40) {   // ink gathers on the blade
+        const [tx, ty] = dgTip(g, 'blade'), an = Math.random() * TAU, d = 40 + Math.random() * 30;
+        addMote(tx + Math.cos(an) * d, ty + Math.sin(an) * d, -Math.cos(an) * d * 6, -Math.sin(an) * d * 6, 0.16, 1 + Math.random() * 0.8, 0);
+      }
+      const m = dgAim(g, a.T);
+      return { pose: { tl: m.tl - 0.32, hd: m.hd + 0.1, fa1: m.w + 1.25 - g.pose.tl, fa2: -1.9, ba1: -0.7, ba2: -0.4, hip: m.hip + 2, ffx: 24, bfx: -30 }, rate: 16 };
+    }
+    if (!a.locked) {   // committed: the aim locks where they are now, and he works out how far to step in
+      a.locked = true;
+      const [sx, sy] = dgShoulder(g), dy = a.T[1] - sy, hx = Math.sqrt(Math.max(0, (A.reach * 0.92) ** 2 - dy * dy));
+      a.move = f * Math.max(0, Math.min(A.lunge, Math.abs(a.T[0] - sx) - hx));
+      g.wheelTo += Math.PI / 8;
+    }
+    if (a.t < T1 + 0.1 && a.move) g.x = dgClampX(g.x + a.move / 0.1 * dt);
+    const m = dgAim(g, a.T), thrust = { tl: m.tl, hd: m.hd, fa1: m.w - g.pose.tl, fa2: 0, ba1: 1.1, ba2: -0.5, hip: m.hip, ffx: 46, bfx: -36 };
+    // the strike: any point along the blade inside them
+    if (a.t < T2 && !a.hit && E && E.open && g.R) {
+      const sh = E.shapes();
+      for (let y = 48; y <= 120 && !a.hit; y += 8) {
+        const pt = apply(g.R.fa.lo, 7.6, y);
+        if (hurtHit(sh, pt[0], pt[1], 6)) { a.hit = true; dgPierceHit(g, a, E, pt, m.w); }
+      }
+    }
+    if (a.pin0 !== undefined) {   // skewered: held up on the blade, then swung over his head and flung off behind him
+      const pe = a.pin0 + A.pin, fe = pe + A.fling;
+      if (a.t < pe) return { pose: { ...thrust, fa1: a.w0 - g.pose.tl }, rate: 20 };
+      if (a.t < fe) {
+        const e = (a.t - pe) / A.fling, s = e * e * (3 - 2 * e), w = a.w0 + (-3.85 - a.w0) * s;
+        if (g.pin && e >= A.flingAt) dgUnpin(g, true);
+        return { pose: { tl: a.tl0 * (1 - s) - 0.35 * s, hd: -0.45 * s, fa1: w - g.pose.tl, fa2: -0.15, ba1: 1.3, ba2: -0.7, hip: 54 + 8 * s, ffx: 40, bfx: -36 }, rate: 34 };
+      }
+      if (g.pin) dgUnpin(g, true);
+      if (a.t >= fe + 0.45) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
+      return { pose: {}, rate: 5 };
+    }
+    if (a.t < T2 + 0.1) return { pose: thrust, rate: 40 };
+    if (a.t >= T2 + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
+    return { pose: {}, rate: 5 };
+  }
+  function dgPierceHit(g, a, E, pt, w) {
+    const f = E.f, A = a.A;
+    if (dgParried(f, pt)) return;
+    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
+    if (f === pl) plRagdoll(0, 0, 0); else { startRagdoll(bot, 0, 0, 0); bot.combo = 0; }
+    g.pin = { f }; a.pin0 = a.t; a.w0 = w; a.tl0 = g.pose.tl;
+    shakeT = 0.24;
+    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + g.facing * 34, y: pt[1] + 6, v: A.dmg, kill: true, dir: g.facing, t: 0 }); }
+    const red = Math.min(1, f.damage / 100), dx = -Math.sin(w), dy = Math.cos(w);   // ink bursts out both sides of the wound
+    for (let i = 0; i < 14; i++) { const s = (i % 2 ? 1 : -0.6) * (220 + Math.random() * 300); addDrop(pt[0], pt[1], g.facing * dx * s + (Math.random() - 0.5) * 120, dy * s - 120 - Math.random() * 160, 0.9 + Math.random() * 1.2, Math.random() < 0.4 + 0.6 * red ? RED : undefined); }
+    for (let i = 0; i < 10; i++) { const an = Math.random() * TAU; addMote(pt[0], pt[1], Math.cos(an) * 300, Math.sin(an) * 300, 0.3, 1 + Math.random() * 1.4, 300); }
+  }
+  // hold the skewered fighter's middle on the blade (runs after everything has moved this frame)
+  function dgHoldPin(g) {
+    const f = g.pin.f;
+    if (!f.rag || (f === pl && pl.out) || (f === bot && bot.dead > 0)) { g.pin = null; return; }
+    const [bx, by] = apply(g.R.fa.lo, 7.6, 92), [cx, cy] = dgRigOf(f).centre;
+    f.x += bx - cx; f.y += by - cy; f.vx = f.vy = 0; f.onGround = false;
+    if (f.x > PLAT.x0 && f.x < PLAT.x1) f.y = Math.min(f.y, PLAT.y - 2);   // a low stab can't drag them through the floor
+    Object.assign(f.rag, { av: 0, phase: 'air', left: Math.max(f.rag.left, 0.3) });
+    if (f === pl) { R0 = rig(); pl.R = R0; pl.box = rigBox(R0); } else { bot.R = rig(bot); botInk(bot.R); }
+    if (Math.random() < 0.3) addDrop(bx, by, (Math.random() - 0.5) * 60, 20, 0.7 + Math.random() * 0.6, RED);
+  }
+  // let go: flung back and down into the ground behind him (or just dropped, if he's interrupted)
+  function dgUnpin(g, fling) {
+    const f = g.pin.f; g.pin = null;
+    if (!f.rag) return;
+    const ls = launchScale(f.damage || 0), A = DG_ATK.pierce;
+    const vx = fling ? -g.facing * A.kb * ls : 0, vy = fling ? A.down * ls : 0, av = fling ? g.facing * 9 : 0;
+    if (f === pl) plRagdoll(vx, vy, av); else { startRagdoll(bot, vx, vy, av); bot.combo = 0; }
+    if (fling) shakeT = Math.max(shakeT, 0.15);
+  }
+
   // the fighter's punch lands on him
   function dgTakeHit(A, fx, fy) {
     const g = dg, P_ = pl.punch, kd = A.limbs ? (Math.sign(g.x - pl.x) || pl.facing) : pl.facing;
@@ -2525,17 +2634,24 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     blastSplash(cx, cy, 0.7);
     shakeT = 0.3;
     const owner = dg.owner;
+    if (dg.pin) dgUnpin(dg, false);
     dg = null; dgWaves.length = 0;
     round.msg = 'Divine General falls'; round.msgT = 2.2;
     if (owner === pl) plReturn(); else { botRespawn(bot); bot.out = false; }   // his owner drops back into the round
   }
-  function dgDecide(g, E) {
-    const dx = E.x - g.x, adx = Math.abs(dx), front = (Math.sign(dx) || g.facing) === g.facing, above = g.y - E.y;
-    if (above > 170 && adx < 240) return 'heaven';
-    if (adx < 300 && above < 190) return front ? (E.onGround && Math.random() < 0.3 ? 'quake' : 'cleave') : 'backhand';
-    if (adx < 440 && E.onGround && above < 60 && Math.random() < 0.3) return 'quake';
-    if (adx > 420 && g.leapCd <= 0 && E.x > PLAT.x0 + 40) return 'leap';
-    return null;
+  // which attacks work from where the target is; he picks one of them at random, never the one he just did
+  function dgOptions(g, E) {
+    const dx = E.x - g.x, adx = Math.abs(dx), front = (Math.sign(dx) || g.facing) === g.facing, above = g.y - E.y, o = [];
+    if (above > 170 && adx < 240) o.push('heaven');
+    if (adx < 300 && above < 190) o.push(front ? 'cleave' : 'backhand');
+    if (adx < 440 && E.onGround && above < 60) o.push('quake');
+    if (adx > 420 && g.leapCd <= 0 && E.x > PLAT.x0 + 40) o.push('leap');
+    if (dgPierceReach(g, E)) o.push('pierce');
+    return o;
+  }
+  function dgDecide(g, E) {   // (while his list is short, he repeats rather than stalls when only the last one works)
+    const all = dgOptions(g, E), o = all.length > 1 ? all.filter(k => k !== g.lastAtk) : all;
+    return o.length ? o[Math.floor(Math.random() * o.length)] : null;
   }
   const dgClampX = (x) => Math.max(PLAT.x0 + 70, Math.min(WALL - 80, x));
   function dgUpdate(dt) {
@@ -2575,7 +2691,9 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       g.t += dt; target = { ...target, ...DG_ROAR, hd: DG_ROAR.hd + 0.08 * Math.sin(g.t * 30) * Math.max(0, 1 - g.t) }; rate = 9;
       if (g.t > 1.0) { g.state = 'idle'; g.gapT = 0.3; }
     }
-    if (g.state === 'atk') {
+    if (g.pin && !(g.state === 'atk' && g.atk.A.key === 'pierce')) dgUnpin(g, false);   // knocked out of it: they drop off the blade
+    if (g.state === 'atk' && g.atk.A.key === 'pierce') { const r = dgPierceStep(g, E, dt); target = { ...target, ...r.pose }; rate = r.rate; }
+    else if (g.state === 'atk') {
       const a = g.atk, A = a.A; a.t += dt;
       const T1 = A.tele + (A.air || 0), T2 = T1 + A.act, T3 = T2 + A.rec;
       const P = DG_POSE[A.key];
@@ -2650,6 +2768,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     for (const q of DGK) g.pose[q] += ((target[q] ?? g.pose[q]) - g.pose[q]) * k;
     g.tailA += ((-0.4 * (g.pose.tl - 0.1) - (g.state === 'walk' ? 0.15 * Math.sin(g.stepPh) : 0)) - g.tailA) * (1 - Math.exp(-6 * dt));
     g.R = dgRig(g);
+    if (g.pin) dgHoldPin(g);
     // strike trail: the blade tip or fist through the swing
     const a = g.atk;
     if (g.state === 'atk' && a.A.tip && a.t > a.A.tele - 0.03 && a.t < a.A.tele + (a.A.air || 0) + a.A.act + 0.06) { g.trail.push(dgTip(g, a.A.tip)); if (g.trail.length > 16) g.trail.shift(); }
@@ -2797,11 +2916,37 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       setM(ID); ctx.textAlign = 'center'; ctx.font = 'italic 600 18px Georgia, serif'; ctx.fillStyle = `rgba(21,18,15,${Math.min(1, g.labelT / 0.3)})`; ctx.fillText(g.label, hx, hy);
     }
   }
+  // the pierce's mark: a red crown of thorns over the target's head, a ring open at the bottom with spikes and two crossed stakes.
+  // It pops in, hangs there while he cocks the blade, and is gone as the lunge goes in
+  function drawDGCrown() {
+    const g = dg; if (!g || g.state !== 'atk' || !g.atk.A.crown) return;
+    const a = g.atk, A = a.A; if (!a.f || a.t > A.tele + 0.07) return;
+    const R = dgRigOf(a.f); if (!R) return;
+    const [x0, y0, x1] = rigBox(R), k = Math.min(1, a.t / 0.07), sc = 1.45 - 0.45 * (1 - (1 - k) * (1 - k));
+    const alpha = a.t < A.tele ? Math.min(1, a.t / 0.04) : 1 - (a.t - A.tele) / 0.07;
+    const cx = (x0 + x1) / 2 + (Math.random() - 0.5) * 1.6, cy = y0 - 46 + (Math.random() - 0.5) * 1.6, r = 23 * sc;
+    const P = (an, d) => [cx + Math.cos(an) * d, cy + Math.sin(an) * d];
+    setM(ID); ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
+    const ring = []; for (let i = 0; i <= 20; i++) ring.push(P(Math.PI / 2 + 0.6 + i / 20 * (TAU - 1.2), r));
+    const spikes = [[-Math.PI / 2, 15, true], [-3 * Math.PI / 4, 9], [-Math.PI / 4, 9], [Math.PI, 11, true], [0, 11, true], [-Math.PI / 2 - 0.4, 5], [-Math.PI / 2 + 0.4, 5]];
+    for (const [col, wk] of [[`rgb(${RED})`, 1], ['rgb(72,12,9)', 0.42]]) {   // a red stroke with a dark core down the middle
+      ctx.fillStyle = col;
+      ctx.fill(brushPath(ring, 7.5 * sc * wk, 0.08, 0.08, 0.9 * wk, 811));
+      spikes.forEach(([an, len, cross], i) => {
+        ctx.fill(brushPath([P(an, r - 1), P(an, r + len * 1.4 * sc)], 6 * sc * wk, 0.02, 0.75, 0, 820 + i));
+        if (cross) {   // a crossbar near the end of the long stakes
+          const [mx, my] = P(an, r + len * 1.4 * sc * 0.62), ux = -Math.sin(an) * 6.5 * sc, uy = Math.cos(an) * 6.5 * sc;
+          ctx.fill(brushPath([[mx - ux, my - uy], [mx, my], [mx + ux, my + uy]], 4.2 * sc * wk, 0.25, 0.25, 0, 840 + i));
+        }
+      });
+    }
+    ctx.restore();
+  }
   // the red warning zones: a watercolour wash that fills toward the moment the hit lands, hatched with red brush lines
   function drawDGZones() {
     const g = dg; if (!g || g.state !== 'atk') return;
     const a = g.atk, A = a.A, T1 = A.tele + (A.air || 0);
-    if (a.t >= T1) return;
+    if (a.t >= T1 || !a.zone) return;
     const z = a.zone, p = Math.min(1, a.t / T1), last = T1 - a.t < 0.1;
     setM(ID);
     const path = new Path2D();
