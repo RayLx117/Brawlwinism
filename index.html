@@ -3740,6 +3740,63 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   function homeHover(x, y) { const i = homeRowAt(x, y); if (i >= 0 && i !== home.sel) { home.sel = i; home.selT = 0; } }
   function homeClick(x, y) { const i = homeRowAt(x, y); if (i >= 0) { home.sel = i; HOME_ITEMS[i].act(); } }
   let homeBg = null, homeBgKey = '';
+  // ---- the title lettering: "Brawlwinism" painted from brush strokes, not a font. Each letter is a few skeleton strokes
+  // (x-height = 1, baseline 0, up is negative), slanted forward, each letter knocked a little off the line for a punky bounce.
+  // Strokes go on fast: a sharp entry, a heavy body, a tail that splinters into bristle hairlines, a dry streak through it.
+  // The B is a size up, tipped back, with a slash overshooting its stem and spatter around it.
+  const GLYPHS = {   // [advance, strokes: [points, weight]]
+    B: [1.15, [[[[0.02, -2.35], [0, -1.2], [-0.02, 0.05]], 1.35], [[[-0.12, -2.28], [0.45, -2.42], [0.86, -2.05], [0.62, -1.42], [0.04, -1.3]], 1.05],
+        [[[0.02, -1.36], [0.72, -1.3], [1.05, -0.72], [0.7, -0.06], [-0.18, 0.02]], 1.2], [[[-0.35, 0.18], [0.3, -0.08], [1.2, -0.42]], 0.55]]],
+    r: [0.6, [[[[0, -1], [0.01, -0.45], [0, 0.02]], 1], [[[0.02, -0.55], [0.18, -0.92], [0.42, -1.02], [0.6, -0.9]], 0.85]]],
+    a: [0.78, [[[[0.58, -0.82], [0.3, -1.02], [0.04, -0.72], [0.03, -0.22], [0.25, 0.02], [0.55, -0.32]], 0.9], [[[0.62, -1.02], [0.58, -0.4], [0.62, -0.02], [0.8, 0.04]], 1]]],
+    w: [0.86, [[[[-0.02, -1.02], [0.16, -0.02], [0.36, -0.78], [0.54, -0.02], [0.78, -1.06]], 0.95]]],
+    l: [0.34, [[[[0.08, -1.8], [0.02, -0.9], [0.02, -0.1], [0.2, 0.03]], 1]]],
+    i: [0.3, [[[[0.02, -0.98], [0, -0.45], [0.02, 0.02]], 1]], [0.05, -1.36]],   // (third entry: where the dot goes)
+    n: [0.68, [[[[0, -1], [0.01, -0.45], [0, 0.02]], 1], [[[0.02, -0.6], [0.22, -0.98], [0.48, -0.92], [0.56, -0.5], [0.58, 0.02]], 0.95]]],
+    s: [0.6, [[[[0.5, -0.9], [0.24, -1.02], [0.04, -0.82], [0.2, -0.54], [0.46, -0.32], [0.36, -0.03], [0.02, -0.06]], 1]]],
+    m: [0.98, [[[[0, -1], [0.01, -0.45], [0, 0.02]], 1], [[[0.02, -0.62], [0.2, -0.98], [0.4, -0.84], [0.44, 0.02]], 0.9], [[[0.44, -0.66], [0.62, -0.98], [0.84, -0.84], [0.88, 0.02]], 0.9]]],
+  };
+  let TITLE = null;
+  function buildTitle(cx, base) {
+    const word = 'Brawlwinism', XH = 64, SLANT = 0.22, GAP = 0.2, r = rng(1700);
+    const ink = new Path2D(), dry = new Path2D(), hair = new Path2D();
+    let adv = 0; for (const ch of word) adv += GLYPHS[ch][0] + GAP;
+    const W = (adv - GAP) * XH, x0 = cx - W / 2;
+    let pen = 0, seed = 1710;
+    for (const [n, ch] of [...word].entries()) {
+      const [aw, strokes, dotAt] = GLYPHS[ch], big = ch === 'B';
+      const rot = big ? -0.1 : (r() - 0.5) * 0.14, bob = big ? 0 : (r() - 0.5) * 0.16, sc = big ? 1.08 : 0.94 + r() * 0.12;
+      const ox = x0 + (pen + aw / 2) * XH, oy = base + bob * XH, cr = Math.cos(rot), sr = Math.sin(rot);
+      const P = ([u, v]) => { const x = (u - aw / 2) * sc, y = v * sc, xs = x - y * SLANT; return [ox + (xs * cr - y * sr) * XH, oy + (xs * sr + y * cr) * XH]; };
+      for (const [pts, wt] of strokes) {
+        const q = pts.map(P), w = 0.27 * XH * wt * (big ? 1.1 : 1);
+        ink.addPath(brushPath(q, w, 0.04 + r() * 0.04, 0.3 + r() * 0.12, w * 0.04, seed++));
+        if (q.length > 3 && r() < 0.7) {   // a dry streak where the brush skipped, partway along the longer strokes
+          const a0 = Math.floor(q.length * 0.3), seg = q.slice(a0, Math.min(q.length, a0 + 3));
+          if (seg.length > 1) dry.addPath(brushPath(seg.map(([x, y]) => [x - w * 0.14, y - w * 0.16]), w * 0.08, 0.4, 0.5, 0, seed++));
+        }
+        // the tail splinters: two or three hairlines flicked on past the stroke's end
+        const [ex, ey] = q[q.length - 1], [px, py] = q[q.length - 2], dl = Math.hypot(ex - px, ey - py) || 1, ux = (ex - px) / dl, uy = (ey - py) / dl;
+        for (let h = 0; h < 2 + (r() < 0.5 ? 1 : 0); h++) {
+          const o = (h - 1) * w * 0.28, len = w * (0.8 + r() * 1.4);
+          hair.addPath(brushPath([[ex - ux * w * 0.6 - uy * o, ey - uy * w * 0.6 + ux * o], [ex + ux * len - uy * o * 1.4, ey + uy * len + ux * o * 1.4]], w * 0.12, 0.1, 0.8, 0, seed++));
+        }
+      }
+      if (dotAt) {   // the i's dot: a fat dab of ink, flicked off to one side
+        const [dx, dy] = P(dotAt), d = new Path2D(); d.ellipse(dx, dy, 0.17 * XH, 0.12 * XH, -0.5, 0, TAU); ink.addPath(d);
+        hair.addPath(brushPath([[dx + 0.08 * XH, dy - 0.04 * XH], [dx + 0.3 * XH, dy - 0.14 * XH]], 0.05 * XH, 0.1, 0.8, 0, seed++));
+      }
+      if (big || n === word.length - 1) {   // spatter flicked off the B and off the last letter
+        for (let k = 0; k < (big ? 16 : 8); k++) {
+          const a = big ? Math.PI * (0.55 + r() * 0.9) : -Math.PI * (0.1 + r() * 0.5), d = XH * (big ? 1.1 + r() * 1.1 : 0.8 + r() * 0.9);
+          const [bx, by] = P(big ? [0.4, -1.2] : [0.8, -0.5]), rr = 1 + r() * (big ? 4.5 : 3);
+          const dot = new Path2D(); dot.ellipse(bx + Math.cos(a) * d, by + Math.sin(a) * d, rr, rr * (0.7 + r() * 0.3), r() * 3, 0, TAU); ink.addPath(dot);
+        }
+      }
+      pen += aw + GAP;
+    }
+    return { ink, dry, hair, w: W, x0 };
+  }
   function drawHome() {
     const key = canvas.width + 'x' + canvas.height;
     if (key !== homeBgKey) {   // plain sheet of paper with grain, built once per size
@@ -3753,10 +3810,13 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(homeBg, 0, 0);
     SHX = SHY = 0; setM(ID);
-    // title: big italic ink, a loaded brush stroke under it that runs dry into bristle hairlines
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = 'italic 700 104px Georgia, serif'; ctx.fillStyle = INK;
-    ctx.fillText('Brawlwinism', GW / 2, 270);
-    const tw = ctx.measureText('Brawlwinism').width, l = GW / 2 - tw / 2;
+    // title: the word painted in fast brush strokes (TITLE), a loaded brush stroke under it that runs dry into bristle hairlines
+    const T_ = TITLE || (TITLE = buildTitle(GW / 2, 270));
+    ctx.fillStyle = INK; ctx.fill(T_.ink);
+    ctx.fillStyle = 'rgba(236,228,211,0.8)'; ctx.fill(T_.dry);   // dry streaks where the brush skipped
+    ctx.fillStyle = INK; ctx.fill(T_.hair);
+    const tw = T_.w, l = T_.x0;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.fill(brushPath([[l - 10, 300], [l + tw * 0.35, 303], [l + tw * 0.75, 299], [l + tw + 14, 301]], 13, 0.03, 0.45, 0.8, 901));
     const r = rng(905);
     for (let h = 0; h < 6; h++) {   // the dry tail splitting into bristles
