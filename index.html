@@ -3177,6 +3177,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (g.slamWatch) dgSlamWatch(g, dt);
     // strike trail: the fist through the backhand. (The sword's tip trail was removed at Ray's request; Ray will supply new sword effects.)
     const a = g.atk;
+    dgSwingStep(g, dt);
     if (g.state === 'atk' && a.A.tip === 'backFist' && a.pin0 === undefined && a.t > a.A.tele - 0.03 && a.t < a.A.tele + (a.A.air || 0) + a.A.act + 0.06) { g.trail.push(dgTip(g, a.A.tip)); if (g.trail.length > 16) g.trail.shift(); }
     // worn down: red goo drips off him
     if (g.damage >= DG.weak && Math.random() < dt * 9) { const [cx, cy] = g.R.centre; addDrop(cx + (Math.random() - 0.5) * 120, cy + (Math.random() - 0.5) * 160, (Math.random() - 0.5) * 60, 40, 1 + Math.random(), RED); }
@@ -3189,6 +3190,66 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!dropping && (g.y > BLAST.bottom || offScreen(g.R.centre[0], g.R.centre[1]))) dgDie();
   }
 
+  // ---- the blade swing trail (cleave, heaven strike, sweep): a dry-brush crescent painted behind the blade as it swings. Heavy and
+  // loaded at the blade's end, splintering into bristle hairlines along its tail, a couple of thinner strokes riding its outer edge,
+  // and ink flicked off when the swing ends. Then it dries away from the tail forward. Numbers in DG_SWING.
+  const DG_SWING = { outer: 128, inner: 78, life: 0.34, retract: 0.8, bristles: 30 };   // the blade span it covers (blade units); fade (s); how far the tail dries back; bristle count
+  const isBladeSwing = (A) => A.tip === 'blade' && A.key !== 'pierce';
+  function dgSwingStep(g, dt) {
+    const a = g.atk, sw = g.swing;
+    const T2 = a ? a.A.tele + (a.A.air || 0) + a.A.act : 0;
+    let live = g.state === 'atk' && a && isBladeSwing(a.A) && a.pin0 === undefined && a.t > a.A.tele - 0.02 && a.t < T2 + 0.3;
+    if (live && sw && sw.atk === a && a.t > T2 && (sw.still > 2 || a.t > T2 + 0.12)) live = false;   // past the strike and the blade has come to rest (or the recovery has begun): the stroke is done
+    if (live && g.R) {
+      if (!sw || sw.atk !== a) g.swing = { atk: a, pts: [], age: 0, done: false, seed: 1600 + Math.floor(Math.random() * 200) };
+      const M = g.R.fa.lo, o = apply(M, 7.6, DG_SWING.outer), q = g.swing.pts[g.swing.pts.length - 1];
+      if (!q || Math.hypot(o[0] - q[0][0], o[1] - q[0][1]) > 7) { g.swing.pts.push([o, apply(M, 7.6, DG_SWING.inner)]); g.swing.still = 0; }   // only when the blade has moved, so a stopped blade can't pile points up
+      else g.swing.still = (g.swing.still || 0) + 1;
+    } else if (sw && !sw.done) {
+      sw.done = true;
+      const n = sw.pts.length;
+      if (n > 2) {   // ink flicked off the blade's end as it stops
+        const [o] = sw.pts[n - 1], [p] = sw.pts[n - 2], dx = o[0] - p[0], dy = o[1] - p[1], l = Math.hypot(dx, dy) || 1;
+        for (let i = 0; i < 16; i++) { const v = 250 + Math.random() * 450, j = (Math.random() - 0.5) * 0.8; addDrop(o[0], o[1], (dx / l + j * -dy / l) * v, (dy / l + j * dx / l) * v - 60, 0.7 + Math.random() * 1.6); }
+      }
+    }
+    if (g.swing && g.swing.done) { g.swing.age += dt; if (g.swing.age > DG_SWING.life) g.swing = null; }
+  }
+  // the crescent, painted as a fan of bristles laid along the swept band (inner .. outer edge of the blade's path). Head = where the
+  // blade is now: it tapers in to a point, swells quickly to full, then thins toward the tail; each bristle runs out at its own point
+  // (the outer ones furthest), with the odd skip, so the tail splinters and the body keeps its streaky texture.
+  function swingStroke(P, seed) {
+    const r = rng(seed), n = P.length, C = catmull(P.map(([o]) => o), 8), I = catmull(P.map(([, i]) => i), 8), N = C.length, path = new Path2D();
+    const prof = (s) => s < 0.12 ? Math.pow(s / 0.12, 0.55) : 1 - 0.6 * ((s - 0.12) / 0.88);   // the band's thickness along the stroke
+    const K = DG_SWING.bristles, band = P.reduce((t, [o, i]) => t + Math.hypot(o[0] - i[0], o[1] - i[1]), 0) / n;
+    for (let k = 0; k < K; k++) {
+      const u = -1 + 2 * (k + 0.5) / K + (r() - 0.5) * 0.7 / K, out = (u + 1) / 2;
+      const end = Math.min(1, 0.3 + 0.75 * r() ** 0.6 * (0.55 + 0.45 * out)), start = r() * 0.04;
+      const gapAt = r() < 0.4 ? start + (end - start) * (0.35 + r() * 0.5) : 2, gapLen = 0.03 + r() * 0.05, bw = band * 0.8 / K * (1.4 + r() * 1.1), ph = r() * 9;
+      let seg = [];
+      const flush = () => { if (seg.length > 2) path.addPath(brushPath(seg, bw, 0.12, 0.75, bw * 0.15, seed + k)); seg = []; };
+      for (let i = Math.floor(start * (N - 1)); i <= Math.round(end * (N - 1)); i++) {
+        const sP = i / (N - 1); if (sP > gapAt && sP < gapAt + gapLen) { flush(); continue; }
+        if (!seg.length) seg.t0 = sP;
+        const t = 0.6 + u * 0.4 * prof(sP) + Math.sin(sP * 14 + ph) * 0.012, [ox, oy] = C[i], [ix, iy] = I[i];
+        seg.push([ix + (ox - ix) * t, iy + (oy - iy) * t]);
+      }
+      flush();
+    }
+    // a solid core through the loaded head, so it reads as one heavy stroke there
+    const core = [], core2 = [], M = Math.max(3, Math.round(N * 0.5));
+    for (let i = 0; i < M; i++) { const sP = i / (N - 1), h = 0.3 * prof(sP) * (1 - Math.max(0, (sP - 0.3) / 0.2)), [ox, oy] = C[i], [ix, iy] = I[i]; core.push([ix + (ox - ix) * (0.6 + h), iy + (oy - iy) * (0.6 + h)]); core2.push([ix + (ox - ix) * (0.6 - h), iy + (oy - iy) * (0.6 - h)]); }
+    const cp = new Path2D(); [...core, ...core2.reverse()].forEach(([x, y], i) => i ? cp.lineTo(x, y) : cp.moveTo(x, y)); cp.closePath();
+    return { bristles: path, core: cp };
+  }
+  function drawDGSwing(g) {
+    const sw = g.swing; if (!sw || sw.pts.length < 3) return;
+    const k = sw.done ? sw.age / DG_SWING.life : 0, cut = Math.floor((sw.pts.length - 2) * k * DG_SWING.retract);
+    const P = sw.pts.slice(cut).reverse();   // head (the blade now) first, tail last
+    if (P.length < 3) return;
+    const st = swingStroke(P, sw.seed);
+    setM(ID); ctx.fillStyle = `rgba(21,18,15,${0.9 * (1 - k * k)})`; ctx.fill(st.core); ctx.fill(st.bristles);
+  }
   // ---- drawing him
   // the wheel above his head, painted in gold dry-brush strokes like Ray's sketch: a double rim, eight spokes, a hub,
   // and a knob on a short stalk past the end of each spoke. Seen at a slant; the far half is drawn behind the near half.
@@ -3293,6 +3354,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     goo(INK);
     if (d01 > 0) { ctx.save(); setM(ID); ctx.beginPath(); ctx.rect(-200, lev, GW + 400, GH + 400); ctx.clip(); goo(`rgb(${RED})`); ctx.restore(); }
     const inkAt = (m) => { const y = apply(m, 0, 0)[1], k = Math.max(0, Math.min(1, (y - lev) / 30)); return d01 > 0 && k > 0 ? redInk(k) : INK; };
+    drawDGSwing(g);   // the swing trail sits behind him
     for (const [p, m, back, fill] of layers) {
       if (p === DGP.head) {   // the wheel floats above the head, between the upper head wings, behind the near ones and the arms
         // it floats above the head along the head's own up direction, and tips with it
