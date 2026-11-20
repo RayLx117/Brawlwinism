@@ -35,6 +35,8 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 | Mythic | 40–50% | 5 |
 | Ancient | 65%, fixed (very rare) | 6 |
 
+**The sword asset** is Ray's ink katana (`reference/sword-ink.png`), traced to vector with potrace (`reference/sword-trace.svg`) and embedded as `SWORD.d`: a Path2D in lower-arm space, with the grip in the fist, the guard just past it, and the blade running on along the arm with its curve. Long stretches only the blade.
+
 **Holding a weapon:** the fighter holds it in the lead hand (`drawSword`). Hits from that arm reach out to the blade's tip. **Every** hit they land does the weapon's damage, worked through its modifiers (`wpnHit`), on the bot and on the Divine General (who takes his usual 60%). Ray will design proper weapon movesets later; this is the test setup.
 
 ### Modifiers (`MODS`)
