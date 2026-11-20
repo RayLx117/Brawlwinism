@@ -29,6 +29,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node dg-pierce.js` | His pierce from five angles (near, far, high, overhead, mid-air): prints when it skewered and where you landed; a frame sheet per case (`out/pierce-<case>.png`). |
 | `node dg-soak.js` | Lets him fight on his own for 90 s; prints the attacks he picked, repeats, skewers, and page errors. |
 | `node dg-crown-shot.js` | Close-ups of the pierce's warning halo on the player, standing and in the air (`out/crown-*.png`). |
+| `node dg-quake.js` | His quake stomp on the player and on the bot: prints damage, stun, how high they were popped, and that they weren't ragdolled; frame sheets `out/quake-player.png` and `out/quake-bot.png`. |
 
 ## Patterns for new tests
 

@@ -70,16 +70,20 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 - He dies only by leaving the screen.
 - From 100% on, red goo drips off him. Red rises up his border with damage, and his HUD portrait number turns red and pulses.
 
-**Attacks (`DG_ATK`).** Each one shows a red watercolour zone that fills toward the moment it hits, hatched with red brush lines and outlined in heavier red in the last 0.1 s. Every hit launches, and the launch grows with the target's damage.
+**Attacks (`DG_ATK`).** Each one shows a red watercolour zone that fills toward the moment it hits, hatched with red brush lines and outlined in heavier red in the last 0.1 s. Every hit launches, and the launch grows with the target's damage, except the Quake, which pops you up and hit-stuns you instead.
 
 | Attack | When | Zone | Tele / active / recovery (s) | Dmg % | KB / Pop |
 |---|---|---|---|---|---|
 | Cleave | you're in front, within 300 | low band in front, out to 340 px | 0.42 / 0.12 / 0.55 | 14 | 640 / 320 |
 | Backhand | you're behind him, within 300 | band behind, out to 280 px | 0.32 / 0.10 / 0.45 | 11 | 560 / 260 |
 | Heaven strike | you're above him (170+ px) | tall column above | 0.38 / 0.14 / 0.60 | 13 | 120 / 980 |
-| Quake | you're on the ground nearby (sometimes) | floor band, 440 px each way | 0.45 / 0.16 / 0.70 | 9 | 300 / 620, knocked away |
+| Quake | you're on the ground nearby | floor band, 440 px each way | 0.45 / 0.16 / 0.70 | 9 | popped up 720 (60 away) and hit-stunned 0.42 s, a jab's stun. **Not** a ragdoll |
 | Leap slam | you're 420+ px away (2.6 s cooldown) | ellipse where he'll land | 0.40 + 0.55 in the air / 0.12 / 0.70 | 15 | 420 / 520 |
 | Pierce | the skewer point can reach your middle after his lunge: any direction, near or far | **none**: a red crescent halo of thorns round your head instead | 0.30 wind-up / 0.25 stab with follow-through / on a miss he holds the stab 0.3, then 0.45 (on a hit: lift 0.26, hold 0.7, slam 0.12 to a dead stop, snap 0.16, then 0.45) | 10 + 6 on hitting the ground | flung off 680 forward / 820 down; rebounds 460 up, keeping 55% of the throw |
+
+**Quake** (stomp): while the floor zone fills (0.45 s), he lifts his front knee higher and higher. He stands tall on the back leg and leans back over it, the sword arm swings back and the other fist comes up for balance, and the front half of his skirt lifts with the knee. When the zone is full he stomps: he's driven down through the front foot and sinks into it. Ink erupts off the floor all along the zone, thickest at his foot, and the two ink crests run out both ways. Anyone caught is popped straight up and hit-stunned for 0.42 s, a jab's stun: no control, a dazed pose and the circling ink dots. It isn't a ragdoll, so he can follow up on them.
+
+The player has hitstun now too (`pl.stunT`). While it lasts, inputs are ignored, physics carry on, the short-hop cut and fast fall are off, and the pose and stun dots match the bot's.
 
 **Pierce** (`DG_ATK.pierce`, `dgPierceStep`):
 1. A red crescent of thorns circles the target's head like a halo. It's thick over the top and tapers to two open ends at the neck, with small raked-back thorns along its outer edge. It follows the head and sits behind the fighter, never across them.

@@ -1245,7 +1245,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   function update(dt) {
     pollPad();
     pl.time += dt; shakeT = Math.max(0, shakeT - dt);
-    pl.staggerT = Math.max(0, pl.staggerT - dt); pl.lungeT = Math.max(0, pl.lungeT - dt);
+    pl.staggerT = Math.max(0, pl.staggerT - dt); pl.lungeT = Math.max(0, pl.lungeT - dt); pl.stunT = Math.max(0, (pl.stunT || 0) - dt);
     const B = pl.buf; B.jump = Math.max(0, B.jump - dt); B.punch = Math.max(0, B.punch - dt); B.dash = Math.max(0, B.dash - dt);
     if (pressed.has('pause')) { openMenu(); pressed.clear(); }
     if (pressed.has('boxes')) showBoxes = !showBoxes;
@@ -1253,8 +1253,8 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       if (pressed.has('botmode')) setBotParry(bot.mode !== 'parry');
       plRagStep(dt); pl.hitShape = null; worldStep(dt); return;
     }
-    // stunned by a parry, mid-parry, or stuck after a missed parry: no inputs
-    const locked = pl.staggerT > 0 || pl.lockT > 0 || pl.parryT > 0;
+    // stunned by a parry, hit-stunned, mid-parry, or stuck after a missed parry: no inputs
+    const locked = pl.staggerT > 0 || pl.stunT > 0 || pl.lockT > 0 || pl.parryT > 0;
     if (locked) { for (const a of ['left', 'right', 'up', 'down', 'jump', 'punch', 'shift']) pressed.delete(a); B.jump = B.punch = B.dash = 0; }
     if (pressed.has('botmode')) setBotParry(bot.mode !== 'parry');
     const dir0 = locked ? 0 : (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
@@ -1354,7 +1354,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       if (pl.dashAir) pl.vy = dy * sp;
     } else if (pl.lockT > 0 || pl.parryT > 0) {   // parrying / missed parry: planted
       pl.vx = pl.onGround ? 0 : toward(pl.vx, 0, 900 * dt);
-    } else if (pl.staggerT > 0) {
+    } else if (pl.staggerT > 0 || pl.stunT > 0) {
       pl.vx = toward(pl.vx, 0, FRICTION * 0.5 * dt);
     } else if (pl.lungeT > 0) {
       pl.vx = pl.facing * Math.max(pl.vx * pl.facing, pl.lungeV);
@@ -1407,10 +1407,10 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
         for (let i = 0; i < 4; i++) addMote(pl.x + (Math.random() - 0.5) * 20, pl.y, (Math.random() - 0.5) * 120, 120 + Math.random() * 80, 0.3, 0.8 + Math.random() * 0.8, 300);
       }
     }
-    if (!held('jump') && pl.vy < -300 && pl.flipT <= 0 && pl.dashT <= 0 && !pl.launched && !(pl.punch.on && pl.punch.A.hop)) pl.vy = -300;   // short hop when the key is released early
+    if (!held('jump') && pl.vy < -300 && pl.flipT <= 0 && pl.dashT <= 0 && !pl.launched && !(pl.stunT > 0) && !(pl.punch.on && pl.punch.A.hop)) pl.vy = -300;   // short hop when the key is released early
     // fast fall: down in the air kicks in as soon as you're near the top of the jump or coming down,
     // even if it was pressed earlier or together with left/right
-    if (!pl.onGround && !pl.fastFall && held('down') && !sh.down && pl.dashT <= 0 && pl.vy > -260 && !(pl.punch.on && pl.punch.A.key === 'dair')) { pl.fastFall = true; pl.vy = Math.max(pl.vy, 780); pl.flipT = 0; }
+    if (!pl.onGround && !pl.fastFall && !(pl.stunT > 0) && held('down') && !sh.down && pl.dashT <= 0 && pl.vy > -260 && !(pl.punch.on && pl.punch.A.key === 'dair')) { pl.fastFall = true; pl.vy = Math.max(pl.vy, 780); pl.flipT = 0; }
     if (pl.fastFall && Math.random() < dt * 30) addMote(pl.x + (Math.random() - 0.5) * 30, pl.y - 40 - Math.random() * 60, 0, -pl.vy * 0.35, 0.18, 0.6 + Math.random() * 0.5, 0);
     let gk = pl.fastFall ? 1.3 : 1;
     if (pl.punch.on && pl.punch.A.air) { const A = pl.punch.A, t = pl.punch.t; gk *= t < A.wind ? (A.gravW ?? 1) : t < A.wind + A.act ? (A.gravK ?? 1) : 1; }   // aerials hang a moment
@@ -1482,6 +1482,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (pl.dashT > 0 && pl.dashAir) target = AIRDASH;
     else if (pl.dashT > 0) target = { ...sprintPose(1.2), tl: 0.85, hd: -0.55, fa1: 1.0, fa2: -0.05, ba1: 1.15, ba2: -0.05, fl1: -0.9, fl2: 1.5, bl1: 0.75, bl2: 0.9, ff: 0.3, bf: 0.6 };
     if (pl.staggerT > 0) target = parryStunPose(pl, target);   // parried: flinch, then slouch and sway
+    else if (pl.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
     if (pl.landT > 0) target = mixPose(target, idlePose(pl.time, 0.8), Math.min(1, pl.landT / 0.06));   // landing squat
     let atkRate = 0, atkPh = -1;
     if (pl.punch.on) {
@@ -2235,8 +2236,8 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     drawDrill();
     drawSparks();
     if (!pl.out) drawCooldown(r);
-    if (pl.staggerT > 0 && r && !inDrill()) {   // stunned by a parry: the same circling ink dots as the bot
-      const [hx, hy] = apply(r.head, 3, -40), k = Math.min(1, pl.staggerT / 0.1);
+    if ((pl.staggerT > 0 || pl.stunT > 0) && r && !inDrill()) {   // stunned (a parry, or a hit): the same circling ink dots as the bot
+      const [hx, hy] = apply(r.head, 3, -40), k = Math.min(1, Math.max(pl.staggerT, pl.stunT) / 0.1);
       setM(ID); ctx.fillStyle = `rgba(21,18,15,${0.85 * k})`;
       for (let i = 0; i < 3; i++) {
         const a = pl.time * 9 + i * Math.PI * 2 / 3, x = hx + Math.cos(a) * 17, y = hy + Math.sin(a) * 5, d = 0.7 + 0.3 * Math.sin(a);
@@ -2290,12 +2291,13 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     leapCd: 2.6,
   };
   // His attacks. tele = how long the red zone shows before the hit (kept short on purpose), act = live frames, rec = recovery.
-  // dmg / kb / pop are what they do to a fighter (launch grows with the fighter's damage, like a kill blow). Every hit ragdolls.
+  // dmg / kb / pop are what they do to a fighter (launch grows with the fighter's damage, like a kill blow). Every hit ragdolls,
+  // except ones with `stun`: those pop the fighter up and hit-stun them for that long instead.
   const DG_ATK = {
     cleave:   { tele: 0.42, act: 0.12, rec: 0.55, dmg: 14, kb: 640, pop: 320, lunge: 70, tip: 'blade' },   // forward: the arm blade swept flat across
     backhand: { tele: 0.32, act: 0.10, rec: 0.45, dmg: 11, kb: 560, pop: 260, tip: 'backFist' },           // behind: a spinning backhand
     heaven:   { tele: 0.38, act: 0.14, rec: 0.60, dmg: 13, kb: 120, pop: 980, tip: 'blade' },              // up: the blade driven straight up
-    quake:    { tele: 0.45, act: 0.16, rec: 0.70, dmg: 9, kb: 300, pop: 620, wave: true },                 // down: both fists into the floor, shockwaves both ways
+    quake:    { tele: 0.45, act: 0.16, rec: 0.70, dmg: 9, kb: 60, pop: 720, stun: 0.42, wave: true, stomp: true },   // the knee lifts higher and higher, then a stomp: ink erupts off the floor; anyone caught is popped straight up and hit-stunned (stun = a jab's), not ragdolled
     leap:     { tele: 0.40, air: 0.55, act: 0.12, rec: 0.70, dmg: 15, kb: 420, pop: 520, wave: true },     // far: leaps onto you and slams
     drop:     { tele: 0.60, air: 0.22, act: 0.10, rec: 0.90, dmg: 0, kb: 0, pop: 0, wave: true },           // round start: lands on his owner
     // any direction, near or far: a red halo of thorns marks you (no zone) while he draws the blade arm back, aimed at you; then he
@@ -2410,13 +2412,18 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
                { tl: -0.38, hd: 0.22, ba1: 2.05, ba2: -0.08, fa1: 0.35, fa2: -0.5, hip: 54, bfx: -34, ffx: 22, flare: 0.85 }],
     heaven: [{ tl: 0.55, hd: -0.3, fa1: 0.95, fa2: -0.35, ba1: 0.6, ba2: -0.5, hip: 44, ffx: 26, bfx: -26, flare: 0.25 },
              { tl: -0.18, hd: -0.5, fa1: -2.95, fa2: -0.08, ba1: 0.85, ba2: -0.3, hip: 66, ffy: 3, bfy: 6, flare: 1.05 }],
-    quake: [{ tl: -0.12, hd: -0.35, fa1: -2.95, fa2: -0.45, ba1: 2.95, ba2: 0.45, hip: 66, ffx: 20, bfx: -20, flare: 1.0 },
-            { tl: 0.85, hd: 0.25, fa1: -0.75, fa2: -0.25, ba1: -0.35, ba2: -0.3, hip: 40, ffx: 32, bfx: -32, flare: 0.3 }],
+    quake: [null,   // the charge is worked out as it fills (dgQuakeLift)
+            { tl: 0.32, hd: 0.2, fa1: -0.55, fa2: -0.5, ba1: 0.75, ba2: -0.6, hip: 47, ffx: 34, ffy: 0, bfx: -30, bfy: 0, flare: 0.9 }],   // the stomp: driven down through the front foot, sunk into it
     leap: [{ tl: 0.55, hd: -0.15, fa1: 0.85, fa2: -0.6, ba1: 0.95, ba2: -0.6, hip: 42, ffx: 24, bfx: -24, flare: 0.5 },
            { tl: 0.85, hd: 0.25, fa1: -0.75, fa2: -0.25, ba1: -0.35, ba2: -0.3, hip: 40, ffx: 32, bfx: -32, flare: 0.3 }],
     drop: [{ tl: 0.05, hd: -0.2, fa1: -2.7, fa2: -0.4, ba1: 2.7, ba2: 0.4, hip: 58, ffy: 12, bfy: 6, ffx: 22, bfx: -14, flare: 1.1 },
            { tl: 0.85, hd: 0.25, fa1: -0.75, fa2: -0.25, ba1: -0.35, ba2: -0.3, hip: 40, ffx: 32, bfx: -32, flare: 0.3 }],
   };
+  // the quake's charge, k 0..1 as the zone fills: the front knee lifting higher and higher, standing tall on the back leg,
+  // leaning back over it, arms spreading for balance and fists clenching up
+  const dgQuakeLift = (k) => { const c = k * k * (3 - 2 * k); return { tl: 0.06 - 0.24 * c, hd: -0.2 * c, fa1: -0.12 + 0.95 * c, fa2: -0.25 - 0.3 * c, ba1: 0.1 - 1.15 * c, ba2: -0.25 - 1.1 * c,
+    hip: 60 + 4 * c, ffx: 22 - 6 * c, ffy: 62 * c, bfx: -16 + 4 * c, bfy: 0, flare: 0.2 + 0.6 * c }; };
+  const DG_KNEEL = { tl: 0.85, hd: 0.25, fa1: -0.75, fa2: -0.25, ba1: -0.35, ba2: -0.3, hip: 40, ffx: 32, bfx: -32, flare: 0.3 };   // down on the floor, pushing up (getting up)
   const DG_AIR = { tl: 0.05, hd: -0.2, fa1: -2.7, fa2: -0.4, ba1: 2.7, ba2: 0.4, hip: 58, ffy: 12, bfy: 6, ffx: 22, bfx: -14, flare: 1.1 };   // both arms up, ready to come down
   const DG_ROAR = { tl: -0.22, hd: -0.55, fa1: -1.2, fa2: -0.9, ba1: 1.2, ba2: 0.9, hip: 62, ffx: 28, bfx: -28, flare: 1.25 };   // arms flung wide, head thrown back
   const DG_RAG = { tl: -0.3, hd: -0.3, fa1: 1.3, fa2: -0.4, ba1: 2.0, ba2: -0.3, hip: 58, ffx: 26, ffy: 6, bfx: -8, bfy: 10, flare: 0.4 };
@@ -2431,13 +2438,13 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       const up = chain(pelvis, T(hx, 0), R(a1)), lo = chain(up, T(0, 30), R(a2)), ft = chain(lo, T(0, 30), R(-a1 - a2 + (fy > 0.5 ? 0.3 : 0)));
       return { up, lo, ft, a1 };
     };
-    const LF = leg(12, q.ffx, q.ffy), LB = leg(-12, q.bfx, q.bfy);
+    const LF = leg(12, q.ffx, q.ffy), LB = leg(-12, q.bfx, q.bfy);   // (a high knee lifts its half of the skirt with it: skF)
     const torso = chain(pelvis, T(0, -4), R(q.tl));
     const head = chain(torso, T(2, -69), R(q.hd));
     const arm = (sx, a1, a2) => { const up = chain(torso, T(sx, -57), R(a1)); return { up, lo: chain(up, T(0, 30), R(a2)) }; };
     const sash = chain(pelvis, T(0, -2), R(q.tl * 0.25));
     return { root, pelvis, LF, LB, torso, head, sash, fa: arm(31, q.fa1, q.fa2), ba: arm(-29, q.ba1, q.ba2),
-      skF: chain(pelvis, T(12, -2), R(LF.a1 * 0.45)), skB: chain(pelvis, T(-12, -2), R(LB.a1 * 0.45)), tail: chain(sash, T(14, -1), R(g.tailA || 0)),
+      skF: chain(pelvis, T(12, -2), R(LF.a1 * (0.45 + 0.4 * Math.min(1, Math.max(0, q.ffy) / 50)))), skB: chain(pelvis, T(-12, -2), R(LB.a1 * 0.45)), tail: chain(sash, T(14, -1), R(g.tailA || 0)),
       hwNU: chain(head, T(21, -26), R(-0.42 - 0.1 * q.flare)), hwNL: chain(head, T(21.4, -20), R(-0.04 - 0.06 * q.flare)),
       hwFU: chain(head, T(-18, -26), Sc(-1, 1), R(-0.44 - 0.1 * q.flare)), hwFL: chain(head, T(-18.6, -20), Sc(-1, 1), R(-0.06 - 0.06 * q.flare)),
       wheel: apply(head, 1, -76), centre: apply(root, 0, -80) };
@@ -2500,6 +2507,17 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (dgParried(f, pt)) return;
     const ls = launchScale(f.damage || 0);
     f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
+    if (A.stun) {   // popped straight up and hit-stunned, like a regular hit (not a ragdoll)
+      const vx = dir * A.kb * (1 + 0.4 * (ls - 1)), vy = -A.pop * (1 + 0.3 * (ls - 1));
+      if (f === pl) {
+        Object.assign(pl, { stunT: A.stun, vx, vy, onGround: false, dashT: 0, slideT: 0, lungeT: 0, wallSlide: false, fastFall: false, landT: 0 });
+        pl.punch.on = false; pl.punch.queued = false;
+      } else Object.assign(bot, { stunT: A.stun, stunMax: A.stun, hurtT: 0.24, hurtKind: 1, vx, vy, onGround: false });
+      shakeT = Math.max(shakeT, 0.18);
+      if (showDmg) { for (const n of dmgNums) n.y -= 40; dmgNums.push({ x: pt[0] + dir * 30, y: pt[1] + 6, v: A.dmg, kill: false, dir, t: 0 }); }
+      for (let i = 0; i < 8; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 220, -200 - Math.random() * 300, 0.8 + Math.random(), Math.random() < Math.min(1, f.damage / 100) ? RED : undefined);
+      return;
+    }
     if (f === pl) plRagdoll(dir * A.kb * ls, -A.pop * ls, -8 * dir);
     else { startRagdoll(bot, dir * A.kb * ls, -A.pop * ls, -8); bot.combo = 0; }
     shakeT = 0.22;
@@ -2756,17 +2774,26 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
         else g.y = -520 + (PLAT.y + 520) * e * e;   // dropping out of the sky
         target = { ...target, ...DG_AIR }; rate = 16;
       } else if (a.t < T1) {
-        target = { ...target, ...P[0] }; rate = 14;
+        target = { ...target, ...(A.key === 'quake' ? dgQuakeLift(a.t / T1) : P[0]) }; rate = A.key === 'quake' ? 18 : 14;
         if (A.key === 'drop') { g.y = -520; target = { ...target, ...DG_AIR }; }
         else if (Math.random() < dt * 40 && g.R) {   // ink gathers on the striking limb while the zone is up
-          const [tx, ty] = A.tip ? dgTip(g, A.tip) : apply(g.R.fa.lo, 0, 40), an = Math.random() * TAU, d = 40 + Math.random() * 30;
+          const [tx, ty] = A.tip ? dgTip(g, A.tip) : A.stomp ? apply(g.R.LF.ft, 8, 4) : apply(g.R.fa.lo, 0, 40), an = Math.random() * TAU, d = 40 + Math.random() * 30;
           addMote(tx + Math.cos(an) * d, ty + Math.sin(an) * d, -Math.cos(an) * d * 6, -Math.sin(an) * d * 6, 0.16, 1 + Math.random() * 0.8, 0);
         }
-      } else if (a.t < T2 + 0.08) { target = { ...target, ...P[1] }; rate = 38; }
+      } else if (a.t < T2 + 0.08) { target = { ...target, ...P[1] }; rate = A.stomp ? 60 : 38; }
       else rate = 5;
       if (a.t >= T1 && !a.struck) {   // the moment it lands
         a.struck = true;
         if (A.air) { g.y = PLAT.y; if (A.key === 'leap') g.x = g.leapTo; }
+        if (A.stomp) {   // ink erupts off the floor all along the zone, thickest at his foot, plus a burst at the foot itself
+          const fx = g.x + g.facing * 60, z = a.zone;
+          for (let i = 0; i < 95; i++) {
+            const x = z ? z.x0 + Math.random() * (z.x1 - z.x0) : fx, near = Math.max(0, 1 - Math.abs(x - fx) / 460);
+            addDrop(x, PLAT.y - 3, (Math.random() - 0.5) * 140, -(300 + Math.random() * 650) * (0.5 + 0.7 * near), 1 + Math.random() * 2.2 * (0.4 + near));
+          }
+          for (let i = 0; i < 30; i++) { const x = fx + (Math.random() - 0.5) * 120; addMote(x, PLAT.y - 4, (Math.random() - 0.5) * 300, -260 - Math.random() * 520, 0.45, 1 + Math.random() * 1.8, 700); }
+          splash(fx, PLAT.y, 14);
+        }
         if (A.wave) {
           shakeT = 0.28;
           for (const d of [-1, 1]) dgWaves.push({ x: g.x + d * 40, dir: d, t: 0, life: 0.42 });
@@ -2811,7 +2838,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (g.state === 'getup') {
       g.t += dt; const e = Math.min(1, g.t / 0.7), s = e * e * (3 - 2 * e);
       g.rot = g.rot0 * (1 - s); g.y = g.gy0 + (PLAT.y - g.gy0) * s; g.vx = g.vy = 0;
-      target = { ...target, ...DG_POSE.quake[1] }; rate = 8;
+      target = { ...target, ...DG_KNEEL }; rate = 8;
       if (e >= 1) { g.rot = 0; g.y = PLAT.y; g.state = 'idle'; g.gapT = 0.4; }
     }
     // shoved by a hit: a short shudder through the body
@@ -3090,7 +3117,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     round.endT = 0; round.started = true;
     dg = null; dgWaves.length = 0; dmgNums.length = 0;
     Object.assign(pl, { x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, rag: null, out: false, launched: false, damage: 0, rot: 0, roll: 1,
-      staggerT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
+      staggerT: 0, stunT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
       wallT: 0, wallSlide: false, wallTouch: false, fastFall: false, landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null });
     pl.punch.on = false; pl.punch.queued = false; pl.pose = idlePose(pl.time); auraReady = false; forming.length = 0;
     R0 = rig(); auraUpdate(R0, 0);
@@ -3110,7 +3137,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
 
   // ---------------------------------------------------------------- the player can be launched now (by him): same ragdoll as the bot
   function plRagdoll(vx, vy, av) {
-    Object.assign(pl, { dashT: 0, slideT: 0, wallSlide: false, flipT: 0, airCarry: false, lungeT: 0, staggerT: 0, lockT: 0, parryT: 0, fastFall: false, landT: 0, launched: true, hitShape: null });
+    Object.assign(pl, { dashT: 0, slideT: 0, wallSlide: false, flipT: 0, airCarry: false, lungeT: 0, staggerT: 0, stunT: 0, lockT: 0, parryT: 0, fastFall: false, landT: 0, launched: true, hitShape: null });
     pl.punch.on = false; pl.punch.queued = false;
     pl.R = R0; startRagdoll(pl, vx, vy, av);
   }
