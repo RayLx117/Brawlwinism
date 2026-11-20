@@ -59,6 +59,10 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 3. If the other fighter dies, it's "Divine General wins" and the round restarts.
 4. If he's knocked off the screen, it's "Divine General falls" and his owner drops back in. The round carries on without him.
 
+**HUD entrance:** when he lands, his portrait (bust and damage %) flies in from the outside edge of the screen into his owner's slot and knocks the owner's portrait out of it. The owner's portrait spins up and inward with an ink splash, then falls off the screen. While he's in play, his portrait sits in that slot. When he falls, the owner's portrait drops back into its slot. Numbers are in `DGH`. The HUD no longer shakes with the screen; Ray found the portraits shaking all over during his entrance.
+
+**Effects:** Ray had the sword-tip trail removed from his sword attacks and will supply new sword effects. The backhand still leaves a swoosh along the fist.
+
 **AI:** He plays himself. He walks toward you in heavy steps that shake the screen a little, and turns round if you stay behind him for 0.35 s. Between attacks he pauses 0.35 to 0.75 s. He picks his next attack at random from the ones that work from where you are (`dgOptions`), never the one he just did. While his list is short, he repeats rather than stalls if the last one is the only option. Ray plans more attacks so the no-repeat rule matters more.
 
 **Tankiness (`DG`):**

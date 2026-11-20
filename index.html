@@ -2112,7 +2112,18 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (d > h.last + 0.01) h.popT = t;   // took a hit: the portrait jolts and the number swells
     h.last = d;
     const pop = Math.max(0, 1 - (t - h.popT) / 0.35), sh = 6 * pop * pop;
-    const cx = h.x, cy = HUD_Y, M0 = [1, 0, 0, 1, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh];
+    const cx = h.x, cy = HUD_Y;
+    let M0 = [1, 0, 0, 1, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh];
+    // the Divine General's portrait knocks this one out of its slot: sent spinning up and inward, then falling off the screen
+    const ht = dg && dg.owner === f ? dgHudT() : -1;
+    if (ht >= DGH.fly) {
+      const k = ht - DGH.fly, side = f === pl ? -1 : 1, x = -side * DGH.knockVx * k, y = DGH.knockVy * k + 0.5 * DGH.grav * k * k, a = -side * DGH.spin * k;
+      if (y > 140) { h.hidden = true; return; }
+      const c = Math.cos(a), sn = Math.sin(a);
+      M0 = [c, sn, -sn, c, cx + x - (c * cx - sn * cy), cy + y - (sn * cx + c * cy)];
+    } else if (ht < 0 && h.hidden) { h.hidden = false; h.backT = t; }   // he's gone: this portrait drops back into its slot
+    if (dg && dg.owner === f && ht >= DGH.fly && h.hidden) return;
+    if (h.backT !== undefined && t - h.backT < DGH.back) { const e = (t - h.backT) / DGH.back; M0[5] -= 160 * (1 - e) * (1 - e); }
     const A = 1, s = BUST.s;
     ctx.save();
     ctx.globalAlpha = A;
@@ -2155,8 +2166,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.restore();
     setM(M0);
     for (const g of h.ring) { ctx.fillStyle = `rgba(21,18,15,${g.a})`; ctx.fill(g.p); }
-    if (out) { ctx.fillStyle = 'rgba(221,211,191,0.7)'; ctx.beginPath(); ctx.arc(cx, cy, HUD_R + 9, 0, TAU); ctx.fill(); }   // knocked out: washed back into the page until the respawn
-    else {   // the number sits over the bottom of the portrait, cut out of it with a paper halo
+    if (out && !(ht >= DGH.fly)) { ctx.fillStyle = 'rgba(221,211,191,0.7)'; ctx.beginPath(); ctx.arc(cx, cy, HUD_R + 9, 0, TAU); ctx.fill(); }   // knocked out: washed back into the page until the respawn
+    else if (!out || ht >= DGH.fly) {   // the number sits over the bottom of the portrait, cut out of it with a paper halo
       const big = 30 * (1 + 0.35 * pop) * (d >= MAX_DAMAGE ? 1 + 0.05 * Math.sin(t * 9) : 1), num = String(Math.round(d));
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
       ctx.font = `italic 700 ${big.toFixed(1)}px Georgia, serif`; const wN = ctx.measureText(num).width;
@@ -2224,8 +2235,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     drawBotLabel();
     drawDmgNums();
-    drawHud();
-    drawDGPortrait();
+    { const sx = SHX, sy = SHY; SHX = SHY = 0; drawHud(); drawDGPortrait(); SHX = sx; SHY = sy; }   // the HUD sits still while the screen shakes
     drawRoundMsg();
     drawBoxes();
     drawMenu();
@@ -2823,7 +2833,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
           for (let i = 0; i < 26; i++) { const an = -Math.PI * Math.random(); addDrop(g.x + (Math.random() - 0.5) * 120, PLAT.y - 4, Math.cos(an) * (200 + Math.random() * 500), Math.sin(an) * (200 + Math.random() * 400), 1 + Math.random() * 1.6); }
         } else shakeT = Math.max(shakeT, 0.12);
         if (A.key === 'drop') {   // lands on his owner and sends them off the map
-          const o = g.owner;
+          const o = g.owner; g.hudT0 = g.time;   // his portrait flies in now and knocks his owner's out of its slot
           if (o === pl) { pl.out = false; plRagdoll(-1250, -1850, 9); pl.rag.left = 4; }
           else if (bot.dead <= 0) { startRagdoll(bot, -1250, -1850, 9); bot.rag.left = 4; }
           g.wheelTo += TAU;   // the wheel spins a full turn as he rises
@@ -2872,10 +2882,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     g.tailA += ((-0.4 * (g.pose.tl - 0.1) - (g.state === 'walk' ? 0.15 * Math.sin(g.stepPh) : 0)) - g.tailA) * (1 - Math.exp(-6 * dt));
     g.R = dgRig(g);
     if (g.pin) dgHoldPin(g);
+    if (g.hudT0 !== undefined && !g.hudHit && g.time - g.hudT0 >= DGH.fly) {   // his portrait hits his owner's: an ink splash at the HUD
+      g.hudHit = true; const h = DG_HUD[g.owner === pl ? 'pl' : 'bot'], side = h.side;
+      for (let i = 0; i < 18; i++) { const an = -Math.PI / 2 - side * (0.3 + Math.random() * 1.1); addDrop(h.x - side * HUD_R * 0.8, HUD_Y, Math.cos(an) * (200 + Math.random() * 380), Math.sin(an) * (200 + Math.random() * 300), 0.9 + Math.random() * 1.4); }
+    }
     if (g.slamWatch) dgSlamWatch(g, dt);
-    // strike trail: the blade tip or fist through the swing
+    // strike trail: the fist through the backhand. (The sword's tip trail was removed at Ray's request; Ray will supply new sword effects.)
     const a = g.atk;
-    if (g.state === 'atk' && a.A.tip && a.pin0 === undefined && a.t > a.A.tele - 0.03 && a.t < a.A.tele + (a.A.air || 0) + a.A.act + 0.06) { g.trail.push(dgTip(g, a.A.tip)); if (g.trail.length > 16) g.trail.shift(); }
+    if (g.state === 'atk' && a.A.tip === 'backFist' && a.pin0 === undefined && a.t > a.A.tele - 0.03 && a.t < a.A.tele + (a.A.air || 0) + a.A.act + 0.06) { g.trail.push(dgTip(g, a.A.tip)); if (g.trail.length > 16) g.trail.shift(); }
     // worn down: red goo drips off him
     if (g.damage >= DG.weak && Math.random() < dt * 9) { const [cx, cy] = g.R.centre; addDrop(cx + (Math.random() - 0.5) * 120, cy + (Math.random() - 0.5) * 160, (Math.random() - 0.5) * 60, 40, 1 + Math.random(), RED); }
     for (let i = dgWaves.length - 1; i >= 0; i--) {   // shockwaves racing along the floor
@@ -3001,7 +3015,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       }
       if (p === DGP.torso) { setM(m); ctx.fillStyle = inkAt(m); ctx.fill(DGP.necklace); }
     }
-    // strike trail: a heavy dry-brush swoosh along the blade tip / fist path
+    // strike trail: a heavy dry-brush swoosh along the backhand's fist path
     const a = g.atk;
     if (g.state === 'atk' && g.trail.length > 2) {
       const fade = Math.max(0, Math.min(1, (a.A.tele + (a.A.air || 0) + a.A.act + 0.16 - a.t) / 0.12));
@@ -3092,14 +3106,19 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
   }
   // HUD: his own portrait beside his owner's while he's in play
-  const DG_HUD = { pl: { x: GW / 2 - 300 }, bot: { x: GW / 2 + 300 } };
+  // his portrait takes his owner's slot: it flies in from the outside edge when he lands and knocks the owner's portrait out
+  const DG_HUD = { pl: { x: GW / 2 - 100, side: -1 }, bot: { x: GW / 2 + 100, side: 1 } };
+  const DGH = { fly: 0.22, from: 560, knockVx: 230, knockVy: -820, grav: 2600, spin: 9, back: 0.3 };   // fly-in time (s) and distance (px); the knocked portrait's launch; the owner's return drop (s)
+  const dgHudT = () => dg && dg.hudT0 !== undefined ? dg.time - dg.hudT0 : -1;   // time since his portrait started flying in (-1: not yet)
   for (const v of Object.values(DG_HUD)) v.ring = hudRing(v.x, HUD_Y, HUD_R, 91);
   function drawDGPortrait() {
-    const g = dg; if (!g) return;
+    const g = dg, ht = dgHudT(); if (!g || ht < 0) return;
     const h = DG_HUD[g.owner === pl ? 'pl' : 'bot'], cx = h.x, cy = HUD_Y, d = g.damage, d01 = Math.min(1, d / MAX_DAMAGE), weak = d >= DG.weak;
     if (d > (h.last || 0) + 0.01) h.popT = g.time;
     h.last = d;
-    const pop = Math.max(0, 1 - (g.time - (h.popT ?? -9)) / 0.35), sh = 6 * pop * pop, M0 = [1, 0, 0, 1, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh];
+    // flying in from the outside edge, accelerating into the slot; a little recoil after the hit
+    const e = Math.min(1, ht / DGH.fly), fx = h.side * DGH.from * (1 - e * e) - h.side * 10 * Math.sin(Math.PI * Math.min(1, Math.max(0, (ht - DGH.fly) / 0.18))) ;
+    const pop = Math.max(0, 1 - (g.time - (h.popT ?? -9)) / 0.35), sh = 6 * pop * pop, M0 = [1, 0, 0, 1, fx + (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh];
     ctx.save(); setM(M0);
     const disc = new Path2D(); disc.arc(cx, cy, HUD_R, 0, TAU);
     ctx.fillStyle = PAPER; ctx.fill(disc);
