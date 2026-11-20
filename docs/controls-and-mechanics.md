@@ -25,7 +25,16 @@ The controller works with the stick or d-pad: A/Y jump, X/B punch, bumpers or tr
 
 ## Home menu
 
-The game opens on a home menu: a plain sheet of paper with "Brawlwinism" painted in fast brush strokes (not a font: `GLYPHS` and `buildTitle`) over a dry-brush stroke that splinters into bristles. Each stroke has a sharp entry, a heavy body and a tail that splinters into hairlines, with dry streaks on some. The letters slant forward and are each knocked a little off the line. The B is a size up and tipped back, with a slash overshooting its stem and ink spatter around it; the last letter flicks a little spatter too. The only option for now is **Practice Tool**, which goes to the Practice stage. Select it with Enter, Space, J, the controller's A, or a click. Tests skip this screen with `__startPractice()`; `__step` also switches to practice on its own.
+The game opens on a home menu: a plain sheet of paper with "Brawlwinism" painted with a simulated bristle brush over a dry-brush underline. It's not a font: see `GLYPHS`, `bristleStroke` and `buildTitle`. Ray asked for each letter to show the obvious end of its strokes, where the line splinters and fades from the bristles, and for a bigger, mildly punky B.
+- **How a stroke is painted:** each stroke follows a skeleton and has three parts.
+  - It opens on a chisel cut: one edge of the flat brush lands first.
+  - It carries a solid body, heavy on downstrokes and thin on upstrokes.
+  - Past 58 to 72% of its length the brush lifts and runs dry. Its 9 to 30 bristles give out one by one, edge bristles first, with the odd skip, so the end splinters into separate streaks.
+- **Letter design:** the letters are a brush script drawn in stroke order. Each one ends on a flick, so the splinter shows.
+- **Punky touches:** the letters slant forward, and each is tilted and bounced a little off the line. The B is a size up and tipped back, its last stroke sweeps out left past the stem, and ink spatter with short tails flies off it. The end of the word throws a little spatter too.
+- **Rendering:** the strokes are built once and painted straight into the home backdrop.
+
+The only option for now is **Practice Tool**, which goes to the Practice stage. Select it with Enter, Space, J, the controller's A, or a click. Tests skip this screen with `__startPractice()`; `__step` also switches to practice on its own.
 
 ## Pause menu
 
