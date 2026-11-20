@@ -23,6 +23,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const INK = '#15120f';
   // Practice stage: floor runs from an open edge on the left into a wall on the right that goes up off-screen
   const WALL = 1180, PLAT = { x0: 150, x1: WALL, y: 540 };
+  // the stage's drawn depth: vp = the vanishing point, k = how far back the slab's back edge is (1 = no depth), fy / fx = how far the
+  // front plane sits in front of the play line / wall (so the feet land mid-slab). Drawing only: collision still uses PLAT and WALL
+  const STAGE3D = { vp: [640, 150], k: 0.9, fy: 20, fx: 28 };
   const PLAYER_RGB = [92, 128, 166];  // P1: dull blue
 
   const canvas = document.getElementById('game');
@@ -2061,30 +2064,85 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(70,52,30,0.16)');
     b.fillStyle = g; b.fillRect(0, 0, cv.width, cv.height);
     b.setTransform(k, 0, 0, k, 0, 0);
-    // solid ground: one L-shaped mass (floor + wall) in section, cross-hatched like a cut-away drawing
-    const mass = new Path2D();
-    mass.moveTo(x0, GH + 20); mass.lineTo(x0, y); mass.lineTo(WALL, y); mass.lineTo(WALL, -20); mass.lineTo(GW + 20, -20); mass.lineTo(GW + 20, GH + 20); mass.closePath();
-    b.save(); b.clip(mass);
-    b.fillStyle = '#ddd3bf'; b.fillRect(0, 0, GW, GH);
-    b.fillStyle = 'rgba(90,70,45,0.06)';
-    for (let i = 0; i < 2500; i++) b.fillRect(x0 + r() * (GW - x0), r() * GH, 1.2, 1.2);
-    b.fillStyle = 'rgba(21,18,15,0.5)';
-    for (let d = -GH; d < GW; d += 12) b.fill(brushPath([[d, GH + 10], [d + GH + 20, -10]], 1.3, 0.02, 0.02, 0.15, 200 + d));
-    // ink shading pooled along the faces, fading into the mass
-    const face = new Path2D(); face.moveTo(x0, GH + 20); face.lineTo(x0, y); face.lineTo(WALL, y); face.lineTo(WALL, -20);
-    b.lineJoin = 'miter';
-    for (const [w, a] of [[46, 0.07], [26, 0.09], [12, 0.12]]) { b.strokeStyle = `rgba(21,18,15,${a})`; b.lineWidth = w; b.stroke(face); }
+    // ---- the ground: brutalist board-formed concrete, drawn in a gentle one-point perspective so it reads as a slab with depth.
+    // The front plane sits a little in front of the play line and the back edge a little behind it, so the feet (PLAT.y, WALL,
+    // PLAT.x0) land in the middle of the slab's top. Front faces: plank marks, panel joints, tie holes, rain streaks. Top: lighter,
+    // with expansion joints running back. The wall's inner face catches the light from the left.
+    const ST = STAGE3D, back = ([px, py]) => [ST.vp[0] + (px - ST.vp[0]) * ST.k, ST.vp[1] + (py - ST.vp[1]) * ST.k];
+    const FY = y + ST.fy, FX = WALL + ST.fx, LX = x0 - ST.fx;   // the front plane's floor edge, wall edge, and the floor's open end
+    const [bLX, bFY] = back([LX, FY]), [bFX] = back([FX, FY]), [bFXt, bTop] = back([FX, -30]);
+    const poly = (pts) => { const p = new Path2D(); pts.forEach(([px, py], i) => i ? p.lineTo(px, py) : p.moveTo(px, py)); p.closePath(); return p; };
+    const front = poly([[LX, FY], [FX, FY], [FX, -30], [GW + 30, -30], [GW + 30, GH + 30], [LX, GH + 30]]);
+    const top = poly([[LX, FY], [FX, FY], [bFX, bFY], [bLX, bFY]]);
+    const side = poly([[FX, FY], [FX, -30], [bFXt, bTop], [bFX, bFY]]);
+    const conc = (path, base, seed, tint) => {   // a concrete wash: flat grey, mottled stains, aggregate speckle and pits
+      b.save(); b.clip(path);
+      b.fillStyle = base; b.fillRect(-40, -40, GW + 80, GH + 80);
+      const q = rng(seed);
+      b.filter = 'blur(3px)';
+      for (let i = 0; i < 160; i++) { b.fillStyle = `rgba(${tint},${0.03 + q() * 0.04})`; b.beginPath(); b.ellipse(q() * GW, q() * GH, 14 + q() * 60, 8 + q() * 26, q() * 3, 0, TAU); b.fill(); }
+      b.filter = 'none';
+      for (let i = 0; i < 5200; i++) { b.fillStyle = q() < 0.7 ? 'rgba(40,40,44,0.16)' : 'rgba(250,248,240,0.35)'; b.fillRect(q() * GW, q() * GH, 0.6 + q() * 1.1, 0.6 + q() * 0.9); }
+      for (let i = 0; i < 260; i++) { b.fillStyle = 'rgba(30,30,34,0.3)'; b.beginPath(); b.arc(q() * GW, q() * GH, 0.7 + q() * 1.3, 0, TAU); b.fill(); }   // air pockets
+      b.restore();
+    };
+    conc(front, '#a7a7a1', 211, '60,60,66'); conc(side, '#bdbcb5', 212, '70,70,74'); conc(top, '#c9c8c0', 213, '80,80,84');
+    // front faces: board-form marks (horizontal planks), panel joints, tie holes, rain streaks, a shadow under the lip
+    b.save(); b.clip(front);
+    for (let yy = FY + 14; yy < GH + 20; yy += 17) { b.fillStyle = `rgba(30,30,34,${0.1 + r() * 0.07})`; b.fill(brushPath([[LX - 10, yy], [GW * 0.5, yy + (r() - 0.5) * 1.6], [GW + 20, yy + (r() - 0.5) * 1.6]], 1.1, 0.02, 0.02, 0.4, 230 + yy)); }
+    for (let yy = FY - 30; yy > -30; yy -= 17) { b.fillStyle = `rgba(30,30,34,${0.1 + r() * 0.07})`; b.fill(brushPath([[FX, yy], [GW + 20, yy + (r() - 0.5) * 1.6]], 1.1, 0.02, 0.02, 0.4, 330 + yy)); }
+    const PANEL = 205;
+    for (let xx = LX + PANEL; xx < GW; xx += PANEL) { b.fillStyle = 'rgba(21,18,15,0.45)'; b.fill(brushPath([[xx, FY + 4], [xx + 0.6, (FY + GH) / 2], [xx, GH + 20]], 1.6, 0.02, 0.1, 0.3, 400 + xx)); }
+    for (let yy = 95; yy < FY; yy += 120) { b.fillStyle = 'rgba(21,18,15,0.45)'; b.fill(brushPath([[FX, yy], [GW + 20, yy]], 1.6, 0.02, 0.02, 0.3, 450 + yy)); }
+    const tie = (tx, ty) => { b.fillStyle = 'rgba(21,18,15,0.6)'; b.beginPath(); b.arc(tx, ty, 2.6, 0, TAU); b.fill(); b.fillStyle = 'rgba(250,248,240,0.4)'; b.beginPath(); b.arc(tx - 0.7, ty - 0.8, 1, 0, TAU); b.fill(); };
+    for (let xx = LX + PANEL / 4; xx < GW; xx += PANEL / 2) for (const yy of [FY + 46, FY + 128]) tie(xx, yy);
+    for (let yy = 50; yy < FY - 20; yy += 60) for (const xx of [FX + 26, FX + 76]) if (xx < GW) tie(xx, yy);
+    b.filter = 'blur(1.6px)';
+    for (let i = 0; i < 40; i++) {   // rain streaks: thin darker washes run down from the top edges and fade out
+      const onWall = i < 10, sx = onWall ? FX + 6 + r() * 90 : LX + 20 + r() * (FX - LX - 40), sy = onWall ? -10 + r() * 300 : FY + 4, len = 50 + r() * (onWall ? 260 : 130);
+      b.fillStyle = `rgba(40,40,46,${0.05 + r() * 0.07})`; b.fill(brushPath([[sx, sy], [sx + (r() - 0.5) * 2, sy + len * 0.5], [sx + (r() - 0.5) * 3, sy + len]], 1.5 + r() * 3.5, 0.3, 0.9, 0.4, 500 + i));
+    }
+    b.filter = 'none';
+    // ink hatching in the shade: dense under the lip, thinning out down the face, the way the old cut-away was hatched
+    for (let d = -GH; d < GW + 200; d += 9) {
+      const pts = [[d, FY + 4], [d + 70, FY + 74]];
+      b.fillStyle = 'rgba(21,18,15,0.22)'; b.fill(brushPath(pts, 1.1, 0.05, 0.85, 0.2, 800 + d));
+    }
+    for (let d = -60; d < 760; d += 9) { b.fillStyle = 'rgba(21,18,15,0.18)'; b.fill(brushPath([[FX + 4, d], [FX + 50, d + 46]], 1, 0.05, 0.85, 0.2, 900 + d)); }
+    for (const [w, al] of [[34, 0.08], [16, 0.11], [6, 0.16]]) { b.strokeStyle = `rgba(21,18,15,${al})`; b.lineWidth = w; b.beginPath(); b.moveTo(LX - 20, FY); b.lineTo(FX, FY); b.lineTo(FX, -40); b.stroke(); }   // shade tucked under the lip
+    // a couple of hairline cracks
+    for (const [cx, cy, sd] of [[LX + 330, FY + 4, 560], [FX + 40, 260, 561], [LX + 760, FY + 90, 562]]) {
+      let px = cx, py = cy; const pts = [[px, py]]; const q = rng(sd);
+      for (let j = 0; j < 6; j++) { px += (q() - 0.4) * 14; py += 8 + q() * 12; pts.push([px, py]); }
+      b.fillStyle = 'rgba(21,18,15,0.55)'; b.fill(brushPath(pts, 1.2, 0.05, 0.6, 0.2, sd));
+    }
     b.restore();
-    // bold ink lines on every surface you can stand on or hit
+    // the top: expansion joints running back toward the vanishing point, and a shadow where it meets the wall
+    b.save(); b.clip(top);
+    for (let xx = LX + PANEL; xx < FX; xx += PANEL) { const [bx2, by2] = back([xx, FY]); b.fillStyle = 'rgba(21,18,15,0.35)'; b.fill(brushPath([[xx, FY], [bx2, by2]], 1.3, 0.05, 0.05, 0.2, 600 + xx)); }
+    b.fillStyle = 'rgba(21,18,15,0.18)'; b.fill(brushPath([[LX, FY - 4], [FX, FY - 4]], 3, 0.1, 0.1, 0.4, 610));
+    for (const [w, al] of [[22, 0.07], [9, 0.11]]) { b.strokeStyle = `rgba(21,18,15,${al})`; b.lineWidth = w; b.beginPath(); b.moveTo(FX, FY); b.lineTo(bFX, bFY); b.stroke(); }
+    b.restore();
+    // the wall's inner face: its own board marks running back, darker toward the floor
+    b.save(); b.clip(side);
+    for (let yy = FY - 17; yy > -30; yy -= 17) { const [bx2, by2] = back([FX, yy]); b.fillStyle = 'rgba(30,30,34,0.13)'; b.fill(brushPath([[FX, yy], [bx2, by2]], 1, 0.02, 0.02, 0.2, 700 + yy)); }
+    for (const [w, al] of [[30, 0.06], [12, 0.1]]) { b.strokeStyle = `rgba(21,18,15,${al})`; b.lineWidth = w; b.beginPath(); b.moveTo(bFX, bFY); b.lineTo(bFXt, bTop); b.stroke(); }
+    for (let yy = FY - 4; yy > FY - 150; yy -= 8) { const a2 = 0.2 * (1 - (FY - yy) / 150); b.fillStyle = `rgba(21,18,15,${a2})`; b.fill(brushPath([[bFX, yy + 6], [FX, yy - 18]], 1, 0.05, 0.6, 0.2, 950 + yy)); }
+    b.restore();
+    // bold ink edges: heaviest on the front edge you stand on and the wall's front corner, lighter on the edges going back
     b.fillStyle = INK;
-    b.fill(brushPath([[x0 - 3, y + 1], [x0 + 260, y - 1], [(x0 + WALL) / 2, y + 1], [WALL - 200, y - 1], [WALL + 6, y]], 11, 0.03, 0.01, 0.8, 7));   // floor
-    b.fill(brushPath([[WALL, y + 4], [WALL - 1, y - 200], [WALL + 1, y - 420], [WALL, -30]], 11, 0.01, 0.02, 0.8, 8));                                 // wall face
-    b.fill(brushPath([[x0, y - 3], [x0 + 1, y + 70], [x0 - 1, y + 140], [x0, GH + 10]], 8, 0.01, 0.5, 0.6, 9));                                          // cliff face, dry-brushed out
-    b.fillRect(WALL - 5.5, y - 5.5, 11, 11);                                                                                                            // crisp inside corner
+    b.fill(brushPath([[LX - 2, FY + 1], [LX + 260, FY - 1], [(LX + FX) / 2, FY + 1], [FX - 200, FY - 1], [FX + 5, FY]], 9, 0.03, 0.01, 0.8, 7));   // front edge of the floor
+    b.fill(brushPath([[FX, FY + 4], [FX - 1, FY - 200], [FX + 1, FY - 420], [FX, -30]], 9, 0.01, 0.02, 0.8, 8));                                   // the wall's front corner
+    b.fill(brushPath([[bLX, bFY], [(bLX + bFX) / 2, bFY + 0.5], [bFX, bFY]], 3.2, 0.06, 0.04, 0.4, 10));                                            // back edge of the floor
+    b.fill(brushPath([[bFX, bFY], [bFXt, bTop]], 3.6, 0.02, 0.05, 0.4, 11));                                                                       // back corner of the wall
+    b.fill(brushPath([[FX, FY], [bFX, bFY]], 4, 0.05, 0.05, 0.3, 12));                                                                             // where the floor meets the wall
+    b.fill(brushPath([[LX, FY], [bLX, bFY]], 5, 0.05, 0.3, 0.3, 13));                                                                              // the floor's open end, going back
+    b.fill(brushPath([[LX, FY - 3], [LX + 1, FY + 70], [LX - 1, FY + 140], [LX, GH + 10]], 7, 0.01, 0.5, 0.6, 9));                                // cliff face, dry-brushed out
+    b.fillRect(FX - 4.5, FY - 4.5, 9, 9);                                                                                                           // crisp front corner
     // the lip of the edge splinters off into dry bristles
     for (let h = 0; h < 5; h++) {
-      const yy = y - 3 + h * 1.6, len = 26 + r() * 34;
-      b.fill(brushPath([[x0 + 30, yy], [x0 - len * 0.6, yy + (r() - 0.5) * 2], [x0 - len, yy + (r() - 0.5) * 3]], 1.4, 0.05, 0.6, 0.1, 20 + h));
+      const yy = FY - 3 + h * 1.6, len = 26 + r() * 34;
+      b.fill(brushPath([[LX + 30, yy], [LX - len * 0.6, yy + (r() - 0.5) * 2], [LX - len, yy + (r() - 0.5) * 3]], 1.4, 0.05, 0.6, 0.1, 20 + h));
     }
     // stage name, stencilled in the corner of the sheet
     b.textAlign = 'left'; b.textBaseline = 'alphabetic';

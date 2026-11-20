@@ -56,3 +56,20 @@ Ray wants an inky brush-stroke look. Everything should read as ink and watercolo
 - The bubble shield, the feint and the hold-to-shield.
 - The parry chest-pump and back-arch, which Ray tried and then dropped.
 - The 2D "paper flip" turn on the spin kick.
+
+
+## Practice stage: brutalist concrete with depth
+
+Ray asked for the platform and wall to look brutalist and concrete-like in the game's style, and for the big change to be the illusion of standing on a 3D surface.
+- **Perspective:** a gentle one-point perspective (`STAGE3D`: vanishing point 640,150; the back edge at 0.9 of the way). The floor shows its top surface going back (about 40 px deep), and the wall shows its inner side face.
+- **Play line:** the front plane sits 20 px in front of the play line and 28 px in front of the wall and the open end, so feet land in the middle of the slab. Collision still uses `PLAT` and `WALL`.
+- **Concrete:** flat grey washes, lighter on the top, mid on the wall's inner face and darker on the front faces. Small soft mottling, aggregate speckle and air pockets.
+- **Front faces:**
+  - board-form plank marks with panel joints every 205 px;
+  - form-tie holes;
+  - thin blurred rain streaks running down from the edges;
+  - a few hairline cracks;
+  - ink hatching and shade tucked under the lip.
+- **Top:** expansion joints running back toward the vanishing point, and a shadow where it meets the wall.
+- **Ink lines:** bold ink on the floor's front edge and the wall's front corner, lighter on the edges going back. The open end's lip still splinters into dry bristles.
+- **Background:** the graph paper stays for Practice only. Other maps will have their own dull colours.
