@@ -3864,7 +3864,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   };
   let homeL = null, homeKey = '';
   window.__homeLayers = () => homeL;   // test hook
-  function homeLayer(k, draw) { const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height; const g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0); draw(g); return c; }
+  function homeLayer(k, draw, extra = 0) { const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height + Math.ceil(extra * k); const g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0); draw(g); return c; }
   function ridgeShape(base, amp, seed) {   // a ridge's silhouette: two octaves of noise and a few sharper peaks
     const n = vnoise(5, seed), n2 = vnoise(19, seed + 3), p = new Path2D(), top = [];
     for (let x = -40; x <= GW + 40; x += 5) { const u = (x + 40) / (GW + 80); top.push([x, base - amp * (0.55 * n(u, 0.5) + 0.3 * n2(u, 0.2) + 0.15 * Math.abs(Math.sin(u * 8 + seed)))]); }
@@ -3923,7 +3923,8 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
         g.fillStyle = `rgba(66,62,56,${0.3 + r() * 0.4})`; g.beginPath(); g.ellipse(x, y, s * 1.4, s, r() - 0.5, 0, TAU); g.fill();
         g.fillStyle = 'rgba(236,232,224,0.35)'; g.beginPath(); g.ellipse(x - s * 0.3, y - s * 0.35, s * 0.5, s * 0.3, r() - 0.5, 0, TAU); g.fill();
       }
-    });
+      g.fillStyle = 'rgba(66,62,56,0.3)';   // the sand carries on below the screen's edge, so lifting the shore never shows a gap
+    }, HS.tide * 2 + 12);
     // mist banks: soft, long, pale; each drawn twice side by side so it can slide forever
     const mist = HS.mist.map(([y, h], i) => {   // three screens wide, the same puffs repeated each screen, so it wraps with no seam
       const c = document.createElement('canvas'); c.width = canvas.width * 3; c.height = canvas.height; const g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0);
