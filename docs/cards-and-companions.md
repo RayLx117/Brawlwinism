@@ -18,6 +18,25 @@ Each rarity is a watercolour wash over the card face. Drop chances come later, w
 
 The details panel shows the rarity name in its colour, then the card type and the card's text.
 
+## Weapons and rarity (`WEAPON_RARITY`, `rollWeapon`)
+
+Weapons use rarity differently from other cards. Every weapon is equal; a weapon's rarity says how good a copy you rolled, not which weapon it is.
+- **Damage:** each rarity rolls its per-hit damage at random from its range, to the nearest 0.5%. The ranges overlap a little on purpose.
+- **Modifiers:** each rarity gets one modifier per step above Common. They're drawn from `WEAPON_MODS` by weight, with no repeats. That pool is still being designed with Ray.
+- **Weapon scaling:** the weapon type then scales the rolled damage by its own multiplier (`WEAPONS[type].mult`). The sword is 1.0; heavy weapons are around 1.5 and light weapons around 0.7. No weapon types exist yet.
+
+| Rarity | Damage per hit (before the weapon's multiplier) | Modifiers |
+|---|---|---|
+| Common | 8–12% | 0 |
+| Uncommon | 10–15% | 1 |
+| Rare | 13–25% | 2 |
+| Epic | 20–33% | 3 |
+| Legendary | 30–43% | 4 |
+| Mythic | 40–50% | 5 |
+| Ancient | 65%, fixed (very rare) | 6 |
+
+`node tests/weapon-rolls.js` rolls 2000 of each and checks every roll stays in range.
+
 ## Card data (`CARDS`)
 
 Each card is `{ id, name, type, rarity, text, art }`:

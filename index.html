@@ -3548,6 +3548,35 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ancient: { label: 'Ancient', rgb: [184, 148, 66], gold: true },
   };
   Object.values(RARITIES).forEach((r, i) => { r.stain = stainTexture(r.rgb, 140 + i * 3); r.css = `rgb(${r.rgb.map(v => Math.round(v * 0.7))})`; });
+  // ---- weapons and rarity. Every weapon is equal: a weapon's rarity isn't which weapon it is, it's how good a copy you got.
+  // Each rarity rolls its per-hit damage at random from its own range (the ranges overlap a little), and gets one modifier per
+  // rarity step above Common. The weapon itself then scales the rolled damage by its own weight (WEAPONS[k].mult: the sword is
+  // 1.0, heavy weapons around 1.5, light ones around 0.7). dmg = [min, max] % per hit; mods = how many modifiers it rolls.
+  const WEAPON_RARITY = {
+    common:    { dmg: [8, 12],  mods: 0 },
+    uncommon:  { dmg: [10, 15], mods: 1 },
+    rare:      { dmg: [13, 25], mods: 2 },
+    epic:      { dmg: [20, 33], mods: 3 },
+    legendary: { dmg: [30, 43], mods: 4 },
+    mythic:    { dmg: [40, 50], mods: 5 },
+    ancient:   { dmg: [65, 65], mods: 6 },   // hard set, and very rare
+  };
+  const WEAPONS = {};          // the weapon types, added as Ray designs them: { name, mult, ... }
+  const WEAPON_MODS = [];      // the modifier pool, added once Ray picks them: { key, name, text, weight (how often it rolls) }
+  // rolls one weapon card: its rarity's damage at random (to the nearest 0.5%), and its modifier count. The modifiers themselves are
+  // picked from WEAPON_MODS by weight (no repeats) once that pool exists.
+  function rollWeapon(type, rarity, rnd = Math.random) {
+    const R = WEAPON_RARITY[rarity], [lo, hi] = R.dmg, base = Math.round((lo + (hi - lo) * rnd()) * 2) / 2;
+    const pool = WEAPON_MODS.slice(), mods = [];
+    while (mods.length < R.mods && pool.length) {
+      let x = rnd() * pool.reduce((t, m) => t + m.weight, 0), i = 0;
+      while (i < pool.length - 1 && (x -= pool[i].weight) > 0) i++;
+      mods.push(pool.splice(i, 1)[0].key);
+    }
+    const mult = WEAPONS[type] ? WEAPONS[type].mult : 1;
+    return { type, rarity, base, dmg: Math.round(base * mult * 10) / 10, modSlots: R.mods, mods };
+  }
+  window.__weapons = { WEAPON_RARITY, WEAPONS, WEAPON_MODS, rollWeapon };   // test hook
   const CARDS = [
     { id: 'divineGeneral', name: 'Divine General', type: 'companion', rarity: 'ancient', art: 'divineGeneral',
       text: 'At the start of the round he drops in and knocks you off the map. You aren’t out: your opponent has to beat him 1v1. Huge, very tanky, can’t be stunned; only a kill blow once he’s worn down sends him flying.' },
