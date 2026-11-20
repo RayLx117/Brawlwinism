@@ -1,6 +1,6 @@
-# Ink Fighter: project guide for Claude
+# Brawlwinism: project guide for Claude
 
-Ray is building a 2D platform fighter with an inky, dry-brush, watercolor look. It is being prototyped as one self-contained HTML file: `index.html`, which uses canvas 2D and has no dependencies. The plan is a downloadable game (.exe) later, possibly in Godot, but for now everything happens in the HTML prototype.
+The game is called **Brawlwinism** (it was "Ink Fighter" while it was a prototype). Ray is building a 2D platform fighter with an inky, dry-brush, watercolor look. It is being prototyped as one self-contained HTML file: `index.html`, which uses canvas 2D and has no dependencies. The plan is a downloadable game (.exe) later, possibly in Godot, but for now everything happens in the HTML prototype.
 
 This package was carried over from a claude.ai project on 2026-11-20, at prototype version v44. Read this file first. The `docs/` folder has the full detail.
 

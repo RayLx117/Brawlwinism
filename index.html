@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><title>Ink Fighter Prototype</title>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><title>Brawlwinism</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Layout: one 16:9 stage centred on a paper desk, controls line underneath. Single deliberate paper theme. */
@@ -3755,8 +3755,8 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     SHX = SHY = 0; setM(ID);
     // title: big italic ink, a loaded brush stroke under it that runs dry into bristle hairlines
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = 'italic 700 104px Georgia, serif'; ctx.fillStyle = INK;
-    ctx.fillText('Ink Fighter', GW / 2, 270);
-    const tw = ctx.measureText('Ink Fighter').width, l = GW / 2 - tw / 2;
+    ctx.fillText('Brawlwinism', GW / 2, 270);
+    const tw = ctx.measureText('Brawlwinism').width, l = GW / 2 - tw / 2;
     ctx.fill(brushPath([[l - 10, 300], [l + tw * 0.35, 303], [l + tw * 0.75, 299], [l + tw + 14, 301]], 13, 0.03, 0.45, 0.8, 901));
     const r = rng(905);
     for (let h = 0; h < 6; h++) {   // the dry tail splitting into bristles

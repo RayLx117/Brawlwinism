@@ -1,4 +1,4 @@
-# Ink Fighter
+# Brawlwinism
 
 This is the inky brush-stroke platform fighter prototype at v44. Open `index.html` in a browser to play.
 

@@ -25,7 +25,7 @@ The controller works with the stick or d-pad: A/Y jump, X/B punch, bumpers or tr
 
 ## Home menu
 
-The game opens on a home menu: a plain sheet of paper with "Ink Fighter" in big italic ink over a dry-brush stroke that splinters into bristles. The only option for now is **Practice Tool**, which goes to the Practice stage. Select it with Enter, Space, J, the controller's A, or a click. Tests skip this screen with `__startPractice()`; `__step` also switches to practice on its own.
+The game opens on a home menu: a plain sheet of paper with "Brawlwinism" in big italic ink over a dry-brush stroke that splinters into bristles. The only option for now is **Practice Tool**, which goes to the Practice stage. Select it with Enter, Space, J, the controller's A, or a click. Tests skip this screen with `__startPractice()`; `__step` also switches to practice on its own.
 
 ## Pause menu
 
