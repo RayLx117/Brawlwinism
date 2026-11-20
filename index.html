@@ -2302,10 +2302,11 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     // lunges it at your torso. On a hit you're skewered and lifted over his head, held there, then he slams the sword down in front
     // of him and you're thrown off it into the ground: impact damage when you hit, then the usual ragdoll for your damage.
     // tele = the halo / draw-back (s); act = the thrust (s); reach = how far past his shoulder the skewer point gets (px);
-    // lunge = the most he steps in (px); lift / hold / slam = raising you overhead, holding you there, the slam down (s);
-    // slamAt = how far into the slam he lets go; kb / down = the throw forward and down; impact = damage % for hitting the ground;
-    // bounce / recoil = how high they bounce off the floor and how far back they're knocked (both grow with damage)
-    pierce:   { tele: 0.30, act: 0.25, rec: 0.5, dmg: 10, impact: 6, kb: 150, down: 1300, bounce: 420, recoil: 170, reach: 250, lunge: 190, lift: 0.26, hold: 0.7, slam: 0.22, slamAt: 0.6, crown: true, tip: 'blade' },
+    // lunge = the most he steps in (px); back = the most he steps back from someone too close (px); miss = how long he stays in the stab when it misses (s);
+    // lift / hold = raising you overhead and holding you there (s); slam = the swing down to its dead stop, snap = the jolt after it (s);
+    // kb / down = how hard you fly off the blade, forward and down; impact = damage % for hitting the ground;
+    // bounce = how high you rebound off the floor, carry = how much of your speed carries through the bounce (all grow with damage)
+    pierce:   { tele: 0.30, act: 0.25, miss: 0.3, rec: 0.45, dmg: 10, impact: 6, kb: 680, down: 820, bounce: 460, carry: 0.55, reach: 250, lunge: 190, back: 130, lift: 0.26, hold: 0.7, slam: 0.12, snap: 0.16, crown: true, tip: 'blade' },
   };
   for (const [k, A] of Object.entries(DG_ATK)) A.key = k;
   let dg = null;   // the Divine General while he's in play
@@ -2532,6 +2533,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     return { w: Math.atan2(-lx, ly), phi, tl: Math.max(-0.45, Math.min(0.75, 0.5 - 0.5 * phi)), hip: 54 - 9 * dn + 8 * up, hd: -0.5 * phi };
   }
   const ease = (e) => e * e * (3 - 2 * e);
+  const DG_COCK = 2.5;   // the pierce wind-up: the upper arm's angle, up and back behind his head
   function dgPierceStep(g, E, dt) {
     const a = g.atk, A = a.A, f = g.facing, T1 = A.tele, T2 = T1 + A.act;
     a.t += dt;
@@ -2546,27 +2548,30 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
         const [tx, ty] = dgTip(g, 'blade'), an = Math.random() * TAU, d = 40 + Math.random() * 30;
         addMote(tx + Math.cos(an) * d, ty + Math.sin(an) * d, -Math.cos(an) * d * 6, -Math.sin(an) * d * 6, 0.16, 1 + Math.random() * 0.8, 0);
       }
-      // a deep punch wind-up: the blade arm hauled far back behind his torso, elbow folded so the blade still points at them,
-      // body twisted and leaning away, weight loaded onto the back leg, the other hand reaching out at them like a sight
+      // the deepest wind-up: the upper arm swung up behind his head with the elbow high, the forearm folded over his shoulder
+      // so the blade aims at them; the body twisted and leaning away on the back leg, the other hand reaching out at them like a sight
       const m = dgAim(g, a.T), c = ease(Math.min(1, a.t / T1));
-      return { pose: { tl: m.tl - 0.7 * c, hd: m.hd + 0.12 * c, fa1: m.w + 2.75 * c - g.pose.tl, fa2: -2.55 * c, ba1: m.w * c - g.pose.tl * c + 0.15, ba2: -0.15 * c,
-        hip: m.hip - 8 * c, ffx: 22 + 14 * c, bfx: -24 - 16 * c }, rate: 20 };
+      return { pose: { tl: m.tl - 0.5 * c, hd: m.hd + 0.15 * c, fa1: -0.12 + (DG_COCK - g.pose.tl + 0.12) * c, fa2: -0.25 + (wrapA(m.w - DG_COCK) + 0.25) * c,
+        ba1: (m.w - g.pose.tl + 0.15) * c, ba2: -0.15 * c, hip: m.hip - 7 * c, ffx: 22 + 14 * c, bfx: -24 - 16 * c }, rate: 26 };
     }
     if (!a.locked) {   // committed: the aim locks where they are now, and he works out how far to step in
       a.locked = true;
       const [sx, sy] = dgShoulder(g), dy = a.T[1] - sy, hx = Math.sqrt(Math.max(0, (A.reach * 0.92) ** 2 - dy * dy));
-      a.move = f * Math.max(0, Math.min(A.lunge, Math.abs(a.T[0] - sx) - hx));
+      a.move = f * Math.max(-A.back, Math.min(A.lunge, Math.abs(a.T[0] - sx) - hx));   // steps in, or back out if they're too close for the point
       g.wheelTo += Math.PI / 8;
     }
     const m = dgAim(g, a.T);   // aimed at where they were when the lunge started: it no longer tracks them
-    if (a.t < T1 + A.act * 0.6 && a.move) g.x = dgClampX(g.x + a.move / (A.act * 0.6) * dt);
-    // the lunge: the hauled-back arm driven out along the aim, accelerating into full extension by the middle, then the follow-through:
-    // the body keeps turning into it and dropping its weight forward, the off arm whipped back
-    const e = Math.min(1, (a.t - T1) / A.act), x = Math.min(1, e / 0.5), c = 1 - x * x, fo = e > 0.5 ? ease((e - 0.5) / 0.5) : 0;
-    const thrust = { tl: m.tl - 0.7 * c + 0.22 * fo, hd: m.hd + 0.12 * c + 0.1 * fo, fa1: m.w + 2.75 * c - 0.1 * fo - g.pose.tl, fa2: -2.55 * c, ba1: (m.w - g.pose.tl + 0.15) * c + 1.4 * (1 - c), ba2: -0.15 - 0.5 * (1 - c),
-      hip: m.hip - 8 * c - 6 * fo, ffx: 36 + 12 * x, bfx: -40 - 2 * x };
+    if (a.t < T1 + A.act * 0.4 && a.move) g.x = dgClampX(g.x + a.move / (A.act * 0.4) * dt);
+    // the stab: the forearm (and blade) stays dead on the aim line the whole way while the elbow drives over the shoulder and through,
+    // so the point goes straight in instead of swooping. Full extension at 40%, then the body follows through, weight dropping forward
+    const e = Math.min(1, (a.t - T1) / A.act), x = Math.min(1, e / 0.4), xx = x * x, fo = e > 0.4 ? ease((e - 0.4) / 0.6) : 0;
+    let wn = m.w; while (wn < DG_COCK) wn += TAU;   // the upper arm comes forward over the top
+    const uw = DG_COCK + (wn - DG_COCK) * xx;
+    if (x >= 1 && g.pose.fa1 > Math.PI) g.pose.fa1 -= TAU;   // done coming over the top: back to the plain range
+    const thrust = { tl: m.tl - 0.5 * (1 - xx) + 0.2 * fo, hd: m.hd + 0.15 * (1 - xx) + 0.08 * fo, fa1: (x >= 1 ? m.w : uw) - g.pose.tl, fa2: x >= 1 ? 0 : wrapA(m.w - uw),
+      ba1: (m.w - g.pose.tl + 0.15) * (1 - xx) + 1.4 * xx, ba2: -0.15 - 0.5 * xx, hip: m.hip - 7 * (1 - xx) - 6 * fo, ffx: 36 + 12 * x, bfx: -40 - 2 * x };
     // the strike: any point along the blade inside them
-    if (e >= 0.25 && e <= 0.85 && !a.hit && E && E.open && g.R) {   // only while the thrust is moving
+    if (e >= 0.15 && e <= 0.7 && !a.hit && E && E.open && g.R) {   // only while the stab is going in
       const sh = E.shapes();
       for (let y = 48; y <= 120 && !a.hit; y += 8) {
         const pt = apply(g.R.fa.lo, 7.6, y);
@@ -2574,7 +2579,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       }
     }
     if (a.pin0 !== undefined) {   // skewered: lifted over his head, held there, then the sword slammed down in front of him
-      const t = a.t - a.pin0, t1 = A.lift, t2 = t1 + A.hold, t3 = t2 + A.slam, UP = -2.95, DOWN = -0.5;
+      const t = a.t - a.pin0, t1 = A.lift, t2 = t1 + A.hold, t3 = t2 + A.slam, t4 = t3 + A.snap, UP = -2.95, STOP = -2.0;
       if (t < t1) {   // lift: the arm swings up overhead with them on it, standing tall
         const s = ease(t / t1), w = a.w0 + (UP - a.w0) * s;
         return { pose: { tl: a.tl0 * (1 - s) - 0.12 * s, hd: -0.35 * s, fa1: w - g.pose.tl, fa2: -0.1, ba1: 0.6, ba2: -0.6, hip: 54 + 9 * s, ffx: 34, bfx: -30 }, rate: 30 };
@@ -2583,17 +2588,20 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
         const tr = 0.03 * Math.sin(a.t * 47);
         return { pose: { tl: -0.12, hd: -0.4, fa1: UP + tr - g.pose.tl, fa2: -0.1, ba1: 0.6, ba2: -0.6, hip: 63, ffx: 34, bfx: -30 }, rate: 24 };
       }
-      if (t < t3) {   // the slam: overhead and down in front, bending into it; lets go on the way down
-        const e = (t - t2) / A.slam, s = e * e, w = UP + (DOWN - UP) * s;
-        if (g.pin && e >= A.slamAt) dgUnpin(g, true);
-        return { pose: { tl: -0.12 + 0.85 * s, hd: -0.4 + 0.6 * s, fa1: w - g.pose.tl, fa2: -0.1, ba1: 0.6 - 1.2 * s, ba2: -0.6, hip: 63 - 17 * s, ffx: 34 + 12 * s, bfx: -30 - 6 * s }, rate: 40 };
+      if (t < t3) {   // the slam: overhead and down, accelerating, to a dead stop halfway
+        const e = (t - t2) / A.slam, s = e * e, w = UP + (STOP - UP) * s;
+        return { pose: { tl: -0.12 + 0.4 * s, hd: -0.4 + 0.45 * s, fa1: w - g.pose.tl, fa2: -0.1, ba1: 0.6 - 0.9 * s, ba2: -0.6, hip: 63 - 9 * s, ffx: 34 + 10 * s, bfx: -30 - 6 * s }, rate: 70 };
       }
-      if (g.pin) dgUnpin(g, true);
-      if (t >= t3 + 0.5) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
+      if (g.pin) dgUnpin(g, true);   // the snap: they fly off the blade with everything it had
+      if (t < t4) {   // the arm stopped dead, shuddering, the body jolting forward over it
+        const k = (t - t3) / A.snap, j = 0.16 * Math.sin(k * Math.PI * 3) * (1 - k);
+        return { pose: { tl: 0.28 + 0.12 * (1 - k), hd: 0.05, fa1: STOP + j - g.pose.tl, fa2: -0.1, ba1: -0.3, ba2: -0.6, hip: 54, ffx: 44, bfx: -36 }, rate: 60 };
+      }
+      if (t >= t4 + 0.45) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
       return { pose: {}, rate: 4 };
     }
-    if (a.t < T2 + 0.1) return { pose: thrust, rate: 34 };
-    if (a.t >= T2 + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
+    if (a.t < T2 + A.miss) return { pose: thrust, rate: 34 };   // a miss: he stays in the stab a moment
+    if (a.t >= T2 + A.miss + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
     return { pose: {}, rate: 5 };
   }
   function dgPierceHit(g, a, E, pt, w) {
@@ -2625,12 +2633,12 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     const f = g.pin.f; g.pin = null;
     if (!f.rag) return;
     const ls = launchScale(f.damage || 0), A = DG_ATK.pierce;
-    const vx = slam ? g.facing * A.kb * ls : 0, vy = slam ? A.down * ls : 0, av = slam ? -g.facing * 6 : 0;
+    const vx = slam ? g.facing * A.kb * ls : 0, vy = slam ? A.down * ls : 0, av = slam ? g.facing * 14 : 0;
     if (f === pl) plRagdoll(vx, vy, av); else { startRagdoll(bot, vx, vy, av); bot.combo = 0; }
     if (slam) g.slamWatch = { f, t: 0 };
   }
   // the thrown fighter hitting the floor: impact damage, a crown of ink thrown up off the platform, crests running out both ways,
-  // a heavy jolt, and they bounce back up off it, knocked back the way they came and spinning
+  // a heavy jolt, and they rebound up off it, the throw's momentum still carrying them on, spinning
   function dgSlamWatch(g, dt) {
     const w = g.slamWatch, f = w.f; w.t += dt;
     if (!f.rag || w.t > 1.2 || (f === pl && pl.out)) { g.slamWatch = null; return; }
@@ -2639,10 +2647,10 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     g.slamWatch = null;
     const A = DG_ATK.pierce, ls = launchScale(f.damage || 0), x = f.x, y = PLAT.y;
     f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.impact);
-    f.vy = -A.bounce * (0.75 + 0.25 * ls); f.vx = -g.facing * A.recoil * ls;
-    Object.assign(f.rag, { phase: 'air', av: g.facing * 11 });
-    shakeT = Math.max(shakeT, 0.36);
-    splash(x, y, 16);
+    f.vy = -A.bounce * (0.75 + 0.25 * ls); f.vx *= A.carry;   // rebound up, still carried on by the throw
+    Object.assign(f.rag, { phase: 'air', av: g.facing * 13 });
+    shakeT = Math.max(shakeT, 0.42);
+    splash(x, y, 20);
     const red = Math.min(1, f.damage / 100);
     for (let i = 0; i < 46; i++) {   // the crown of ink: most thrown up and out in a fan, a few fine flecks high
       const an = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, v = 250 + Math.random() * 650;
