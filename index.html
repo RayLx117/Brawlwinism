@@ -2991,6 +2991,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // ---- drawing him
   // the wheel above his head, painted in gold dry-brush strokes like Ray's sketch: a double rim, eight spokes, a hub,
   // and a knob on a short stalk past the end of each spoke. Seen at a slant; the far half is drawn behind the near half.
+  // how far his head is tipped from upright (radians), from its up direction, so it works whichever way he faces
+  const headTilt = (m) => Math.atan2(-m[2], m[3]);
   function drawWheel(cx, cy, k, rot, tilt) {
     const Rr = 34 * k, sq = 0.46, GOLD = 'rgb(200,148,40)', ct = Math.cos(tilt), st = Math.sin(tilt);
     const P = (a, r) => { const x = Math.cos(a) * r, y = Math.sin(a) * r * sq; return [cx + x * ct - y * st, cy + x * st + y * ct]; };
@@ -3092,8 +3094,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const inkAt = (m) => { const y = apply(m, 0, 0)[1], k = Math.max(0, Math.min(1, (y - lev) / 30)); return d01 > 0 && k > 0 ? redInk(k) : INK; };
     for (const [p, m, back, fill] of layers) {
       if (p === DGP.head) {   // the wheel floats above the head, between the upper head wings, behind the near ones and the arms
-        const [wx, wy] = R_.wheel;
-        drawWheel(wx, wy + 3 * Math.sin(t * 2.4), DG.S, g.wheelRot + t * 0.15, -0.12 * g.facing);
+        // it floats above the head along the head's own up direction, and tips with it
+        const ht = headTilt(R_.head), bob = 3 * Math.sin(t * 2.4), [wx, wy] = R_.wheel;
+        drawWheel(wx - Math.sin(ht) * bob, wy + Math.cos(ht) * bob, DG.S, g.wheelRot + t * 0.15, -0.12 * g.facing + ht);
       }
       if (p.scarf) drawScarf(p, m, fill, inkAt); else drawPart(p, m, back, fill, inkAt);
       if (p === DGP.lowerArmF) {   // the sword, with its arm: solid ink with a pale edge
@@ -3191,7 +3194,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.strokeStyle = ctx.fillStyle = INK; ctx.lineJoin = 'round';
     for (const [p, m] of ls) { setM(m); ctx.lineWidth = 4.4; ctx.stroke(p.fill); ctx.fill(p.fill); }
     for (const [p, m, back, fill] of ls) {
-      if (p === DGP.head) drawWheel(R_.wheel[0], R_.wheel[1] + 2 * k * Math.sin(t * 2.4), k, t * 0.4, -0.12 * face);
+      if (p === DGP.head) { const ht = headTilt(R_.head), bob = 2 * k * Math.sin(t * 2.4); drawWheel(R_.wheel[0] - Math.sin(ht) * bob, R_.wheel[1] + Math.cos(ht) * bob, k, t * 0.4, -0.12 * face + ht); }
       drawPart(p, m, back, fill);
       if (p === DGP.torso) { setM(m); ctx.fillStyle = INK; ctx.fill(DGP.necklace); }
     }
