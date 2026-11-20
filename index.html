@@ -2706,13 +2706,13 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     const r = rng(77); ctx.fillStyle = GOLD;
     for (let i = 0; i < 14; i++) { const a = r() * TAU, [x, y] = P(a, Rr * (1.05 + r() * 0.35)); ctx.beginPath(); ctx.arc(x, y, (0.5 + r() * 1.1) * k, 0, TAU); ctx.fill(); }
   }
-  // the long scarf streaming back from his head, billowing in a slow wind (more when he flares up), in his head's units
+  // the scarf from the back of his head: it curves down and hangs behind his back, stirring in a slow wind (lifting a little when he flares up), in his head's units
   function dgScarf(t, fl) {
     const n = 24, C = [], W = [];
     for (let i = 0; i <= n; i++) {
-      const s = i / n, wv = Math.sin(t * 2.6 - s * 5.2) * (3 + 16 * s);
-      C.push([-16 - 132 * s + 6 * Math.sin(t * 1.7 - s * 3.5) * s, -24 - 30 * s + (96 - 50 * fl) * s * s + wv]);
-      W.push(6 + 40 * Math.sin(Math.PI * Math.pow(s, 0.5)) * (1 - 0.85 * s) * (0.88 + 0.12 * Math.sin(t * 3.3 - s * 7)));
+      const s = i / n, wv = Math.sin(t * 2.6 - s * 5.2) * (1.5 + 7 * s);
+      C.push([-16 - 74 * s + 4 * Math.sin(t * 1.7 - s * 3.5) * s + 34 * s * s, -22 + 6 * s + (88 - 30 * fl) * s * s + wv]);
+      W.push(4 + 22 * Math.sin(Math.PI * Math.pow(s, 0.6)) * (1 - 0.45 * s) * (0.88 + 0.12 * Math.sin(t * 3.3 - s * 7)));
     }
     const L = [], Rt = [];
     C.forEach(([x, y], i) => {

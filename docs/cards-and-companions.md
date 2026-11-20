@@ -44,7 +44,7 @@ Redrawn in v52 from Ray's second reference sketch (a horned, faceless god with a
 - about 3× a fighter's height;
 - a pale grey-white stain body with a heavy goo border;
 - a blank, faceless head with a pointed chin and a faint brow line, with four short thin wing-like blades fanning out sideways from the eye line, two each side: the top one angled up and out, the lower one almost flat, each with a small barb near the tip. They grow out of the face: the head's ink line is left open where they join and the head's fill covers their roots;
-- a long pale scarf streaming back from the head, billowing in a slow wind; it lifts higher when he flares up (`flare` in his poses);
+- a pale scarf from the back of the head that curves down and hangs behind his back, stirring in a slow wind; it lifts a little when he flares up (`flare` in his poses);
 - a gold eight-spoked wheel floating above the head between the horns. It's painted in gold dry-brush strokes, with no ink outline: a heavy outer rim, a thin inner rim, tapered spokes, a hub, and a small knob on a stalk past each spoke, plus a little gold spatter. It turns a notch before every attack and a full turn on his entrance;
 - a muscled V torso with dry-brush pec, ab and oblique marks, and a necklace of five rings with tassels;
 - a pale sash with a dark top band, a big knot at the front and a long notched tail, over a pale wrap skirt in two swinging halves with deep fold strokes;
