@@ -3404,6 +3404,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   // focus rows: 0 = gear slots, 1 = passive slots (+ at the end), 2 = tabs, 3 = gallery
   const R_GEAR = 0, R_PASS = 1, R_TABS = 2, R_GAL = 3;
   const cards = { row: 0, col: 0, tab: 0, scroll: 0, passScroll: 0, t: 0, selT: 0, hits: [], passSlot: -1 };
+  window.__cardsState = () => cards;   // test hook: the card screen's state (tab, focus, hit boxes)
   const CSHEET = { x0: 90, x1: 1190, y0: 20, y1: 708 };
   const SLOT = { x: 140, y: 124, w: 96, h: 110, gap: 22, y2: 272 };   // y2: the passives row
   const GAL = { x: 140, y: 456, w: 80, h: 104, gap: 14, cols: 11, rows: 2 };
@@ -3473,7 +3474,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (P('ok')) cardsActivate(cards.row, cards.col);
   }
   const cardsHit = (x, y) => cards.hits.find(h => x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
-  function cardsHover(x, y) { const h = cardsHit(x, y); if (h && h.row >= 0) cardsFocus(h.row, h.col); }
+  function cardsHover(x, y) { const h = cardsHit(x, y); if (h && h.row >= 0 && h.row !== R_TABS) cardsFocus(h.row, h.col); }   // the category tabs only switch on a click (or keys / bumpers), not on hover
   function cardsClick(x, y) {
     const h = cardsHit(x, y);
     if (!h) return;
