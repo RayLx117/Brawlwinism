@@ -512,7 +512,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const swirls = [];  // ink corkscrews left by air dashes
   let R0 = null;      // current rig, rebuilt every update
   window.__fighter = pl; // handy for poking at state from the console
-  window.__tick = (dt) => update(dt);   // test hook: advance without drawing
+  window.__tick = (dt) => update(dt);
+  window.__shake = (t) => { shakeT = t; };   // test hook: start a screen shake   // test hook: advance without drawing
   window.__limbTips = () => R0 && ['fa', 'ba', 'fl', 'bl'].map(L => limbChain(R0, L)[0].map(Math.round));   // test hook: fist / toe positions
   window.__step = (dt, n) => { pl.paused = true; game.mode = 'practice'; for (let i = 0; i < n; i++) update(dt); draw(); };
 
@@ -1595,6 +1596,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
   // ---------------------------------------------------------------- drawing
   let SHX = 0, SHY = 0;   // screen kick offset (game px)
+  let lastDt = 1 / 60;   // the last frame's time step, for effects that only live in drawing
   function setM(m) { const k = view.s * view.dpr; ctx.setTransform(m[0] * k, m[1] * k, m[2] * k, m[3] * k, (m[4] + SHX) * k, (m[5] + SHY) * k); }
   const ID = [1, 0, 0, 1, 0, 0];
 
@@ -2035,7 +2037,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     if (dg && dg.state === 'atk' && dg.atk.A.key === 'pierce') {   // the pierce: its aim line while he winds up, then the arrow
       const a = dg.atk, A = a.A; setM(ID);
-      if (!a.arrow && a.T && a.t < A.tele + A.push && dg.R) {   // where it will go: dashed while he's still tracking, solid once locked
+      if (!a.arrow && a.T && !a.fired && dg.R) {   // where it will go: dashed while he's still tracking, solid once locked
         const [sx, sy] = dgShoulder(dg), d = a.dir || (() => { const dx = a.T[0] - sx, dy = a.T[1] - sy, l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; })();
         ctx.setLineDash(a.locked ? [] : [8, 7]); ctx.strokeStyle = `rgba(255,140,0,${a.locked ? 0.75 : 0.45})`; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + d[0] * A.len, sy + d[1] * A.len); ctx.stroke(); ctx.setLineDash([]);
@@ -2234,6 +2236,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
 
     drawDGCrown();   // the pierce's halo of thorns sits behind the fighters
+    drawDGBooms(pl.paused ? 1 / 60 : lastDt);
     drawRagTrail();
     drawBot();
     drawDrops();
@@ -2315,14 +2318,15 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // he steps in pushing the arm forward, it snaps out into a straight jab, and the hit is a straight arrow along the aim that
     // shoots out with the arm and freezes at full extension. On a hit you're skewered and lifted over his head, held there, then he
     // slams the sword down in front of him and you're thrown off it into the ground: impact damage, then the usual ragdoll.
-    // tele = the wind-up while the halo is up (s), lock = the last part of it where the aim is frozen (s);
-    // act = the whole lunge (s): push = the arm starting forward and the step in, jab = the snap to full extension, the rest is follow-through;
+    // tele = the wind-up while the halo is up (s), lock = the last part of it where the aim is frozen (s); gap = the held beat after
+    // the halo falls off, before the flash (s). The jab itself is a flash: one frame he's coiled, the next his arm is out straight
+    // and he's stepped in, with a sound-barrier burst off both sides.
     // len = the arrow's length from his shoulder, out past the blade tip (px); width = its half-thickness (px); live = how long it
-    // stays live after full extension (s); lunge / back = the most he steps in, or back from someone too close (px);
-    // miss = how long he stays in the jab when it misses, from full extension (s); lift / hold = raising you overhead and holding
+    // stays live after the flash (s); lunge / back = the most he steps in, or back from someone too close (px);
+    // miss = how long he stays in the jab when it misses (s); lift / hold = raising you overhead and holding
     // you there (s); slam = the swing down to its dead stop, snap = the jolt after it (s); kb / down = how hard you fly off the blade;
     // impact = damage % for hitting the ground; bounce / carry = the rebound off the floor (all grow with damage)
-    pierce:   { tele: 1.2, lock: 0.22, act: 0.2, push: 0.12, jab: 0.04, len: 300, width: 15, live: 0.08, miss: 0.3, rec: 0.45, dmg: 10, impact: 6,
+    pierce:   { tele: 1.2, lock: 0.22, gap: 0.1, len: 300, width: 15, live: 0.1, miss: 0.3, rec: 0.45, dmg: 10, impact: 6,
       kb: 680, down: 820, bounce: 460, carry: 0.55, lunge: 190, back: 130, lift: 0.26, hold: 0.7, slam: 0.12, snap: 0.16, crown: true, tip: 'blade' },
   };
   for (const [k, A] of Object.entries(DG_ATK)) A.key = k;
@@ -2568,10 +2572,52 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   const ease = (e) => e * e * (3 - 2 * e);
   const DG_COCK = 2.5;   // the pierce wind-up: the upper arm's angle, up and back behind his head
+  // the sound-barrier burst off the flash jab: ink rings snapping out round the arm and blade, bow-wave strokes peeling off both
+  // sides and streaking back, and ink flung out sideways. Drawn by drawDGBooms
+  const dgBooms = [];
+  function dgBoom(S, dir, len) {
+    dgBooms.push({ S, dir, len, t: 0 });
+    shakeT = Math.max(shakeT, 0.14);
+    const [dx, dy] = dir, nx = -dy, ny = dx;
+    for (let i = 0; i < 26; i++) {
+      const sd = i % 2 ? 1 : -1, d = len * (0.35 + Math.random() * 0.65), v = 260 + Math.random() * 520, back = -(120 + Math.random() * 260);
+      addDrop(S[0] + dx * d, S[1] + dy * d, nx * sd * v + dx * back, ny * sd * v + dy * back, 0.6 + Math.random() * 1.1);
+    }
+  }
+  function drawDGBooms(dt) {
+    for (let i = dgBooms.length - 1; i >= 0; i--) {
+      const b = dgBooms[i]; b.t += dt; const k = b.t / 0.34; if (k >= 1) { dgBooms.splice(i, 1); continue; }
+      const [dx, dy] = b.dir, nx = -dy, ny = dx, L = (d, o) => [b.S[0] + dx * d + nx * o, b.S[1] + dy * d + ny * o], e = 1 - (1 - k) ** 3;
+      setM(ID);
+      const ink = (al) => { ctx.fillStyle = `rgba(21,18,15,${al})`; };
+      // the shock cones: two V's of brush strokes opening back from the blade tip and from mid-blade, flaring wider as they go,
+      // each stroke splintering into bristle hairs at its far end
+      for (const [d0, size, sd0] of [[b.len * 1.02, 1, 1300], [b.len * 0.62, 0.7, 1320]]) {
+        const ang = 0.42 - 0.12 * e, len = (70 + 170 * e) * size;
+        for (const sd of [-1, 1]) {
+          const ca = Math.cos(ang), sa = Math.sin(ang), back = (t) => L(d0 - len * t * ca, sd * len * t * sa * (1 + 0.35 * t));
+          const pts = [back(0.04), back(0.4), back(0.75), back(1)];
+          ink(0.88 * (1 - k)); ctx.fill(brushPath(pts, (8 * (1 - k) + 1.4) * size, 0.04, 0.6, 0.5, sd0 + (sd > 0 ? 1 : 0)));
+          for (let h = 0; h < 3; h++) { const [ex, ey] = back(0.78 + 0.05 * h), q = back(1.12 + 0.08 * h), o = (h - 1) * 3; ctx.fill(brushPath([[ex + o, ey], [q[0] + o * 2, q[1] + o]], 1.2 * (1 - k) * size, 0.1, 0.85, 0, sd0 + 4 + h)); }
+        }
+      }
+      // a ring snapping out round the blade just behind the tip, seen edge-on, broken where the brush skipped
+      { const rx = 4 + 12 * e, ry = 14 + 70 * e, c = b.len * 0.92 - 14 * e, pts = [];
+        for (let j = 0; j <= 26; j++) { const an = 0.4 + (TAU - 0.8) * j / 26; pts.push(L(c + Math.cos(an) * rx, Math.sin(an) * ry)); }
+        ink(0.8 * (1 - k)); ctx.fill(brushPath(pts, 6 * (1 - k) + 1, 0.15, 0.3, 1, 1310)); }
+      // speed streaks along the arm on both sides, whipping back
+      for (let j = 0; j < 5; j++) for (const sd of [-1, 1]) {
+        const o = sd * (16 + 9 * j), d0 = b.len * (0.3 + 0.13 * j), l = 50 + 120 * e;
+        ink(0.6 * (1 - k)); ctx.fill(brushPath([L(d0, o), L(d0 - l * 0.5, o * 1.05), L(d0 - l, o * 1.1)], 2.4 * (1 - k) + 0.5, 0.05, 0.8, 0, 1340 + j + (sd > 0 ? 6 : 0)));
+      }
+      // a dark streak drawn straight down the line, gone almost at once: the flash itself
+      if (k < 0.35) { ctx.fillStyle = `rgba(21,18,15,${0.9 * (1 - k / 0.35)})`; ctx.fill(brushPath([L(0, 0), L(b.len * 0.6, 0), L(b.len * 1.12, 0)], 5, 0.05, 0.6, 0.3, 1340)); }
+    }
+  }
   // where his shoulder is, and the arrow it would shoot along the locked aim, this frame
   function dgArrow(g, a, L) { const [sx, sy] = dgShoulder(g); return { S: [sx, sy], E: [sx + a.dir[0] * L, sy + a.dir[1] * L], L }; }
   function dgPierceStep(g, E, dt) {
-    const a = g.atk, A = a.A, T1 = A.tele, TL = T1 - A.lock, J0 = T1 + A.push, J1 = J0 + A.jab, T2 = T1 + A.act;
+    const a = g.atk, A = a.A, T1 = A.tele, TL = T1 - A.lock, J = T1 + A.gap;
     a.t += dt;
     if (!a.f && E) a.f = E.f;
     const R = a.f && dgRigOf(a.f), gone = !R || (a.f === pl && pl.out) || (a.f === bot && bot.dead > 0);
@@ -2591,8 +2637,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     // the arm aims at the end of the arrow once locked, so the full jab lines up with it exactly
     const aimAt = a.locked ? dgArrow(g, a, A.len).E : a.T, m = dgAim(g, aimAt);
-    if (a.t < T1) {
-      // the wind-up: the upper arm swung up behind his head with the elbow high, the forearm folded over his shoulder so the blade
+    if (a.t < J) {
+      // the wind-up (and the held beat after the halo falls, coiled and still): the upper arm swung up behind his head with the elbow high, the forearm folded over his shoulder so the blade
       // aims at them; the body twisted and leaning away on the back leg, the free hand reaching out at them like a sight. It gets
       // there in the first 0.45 s, then keeps coiling tighter and trembling while he hones in
       const c = ease(Math.min(1, a.t / 0.45)), coil = ease(Math.max(0, Math.min(1, (a.t - 0.45) / (T1 - 0.45)))), tr = 0.025 * coil * Math.sin(a.t * 41);
@@ -2604,25 +2650,28 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       return { pose: { tl: m.tl - 0.5 * c - 0.12 * coil, hd: m.hd + 0.15 * c, fa1: -0.12 + (ck - g.pose.tl + 0.12) * c + tr, fa2: -0.25 + (wrapA(m.w - ck) + 0.25) * c,
         ba1: (m.w - g.pose.tl + 0.15) * c, ba2: -0.15 * c, hip: m.hip - 7 * c - 4 * coil, ffx: 22 + 14 * c, bfx: -24 - 16 * c - 4 * coil }, rate: 24 };
     }
-    // the lunge. Push: the step in, the arm starting forward (the elbow coming over, the blade still on the aim line).
-    // Jab: it snaps the rest of the way to a straight arm. Then the weight settles forward over it.
-    if (a.t < J0 && a.move) g.x = dgClampX(g.x + a.move / A.push * dt);
-    const p = Math.min(1, (a.t - T1) / A.push), q = Math.max(0, Math.min(1, (a.t - J0) / A.jab)), fo = ease(Math.max(0, Math.min(1, (a.t - J1) / (T2 - J1))));
-    const x = 0.28 * p * p + 0.72 * q;   // how far the arm has come round: slow then the snap
-    let wn = m.w; while (wn < DG_COCK) wn += TAU;   // the upper arm comes forward over the top
-    const uw = DG_COCK + 0.22 * (1 - p) + (wn - DG_COCK - 0.22 * (1 - p)) * x, done = q >= 1;
-    if (done && g.pose.fa1 > Math.PI) g.pose.fa1 -= TAU;   // done coming over the top: back to the plain range
-    const lean = 0.5 * p + 0.15 * q;
-    const thrust = { tl: m.tl - 0.62 + lean + 0.12 * fo, hd: m.hd + 0.15 * (1 - q) + 0.06 * fo, fa1: (done ? m.w : uw) - g.pose.tl, fa2: done ? 0 : wrapA(m.w - uw),
-      ba1: (m.w - g.pose.tl + 0.15) * (1 - q) + 1.4 * q, ba2: -0.15 - 0.5 * q, hip: m.hip - 11 + 5 * p - 4 * fo, ffx: 36 + 14 * p, bfx: -40 - 4 * p };
-    // the hit: a straight arrow along the locked aim, shooting out with the jab and freezing at full extension
-    const L = A.len * q;
-    a.arrow = q > 0 ? { ...dgArrow(g, a, L), live: a.t <= J1 + A.live && !a.hit } : null;
-    if (a.arrow && a.arrow.live && E && E.open && L > 20) {
+    // the flash: no in-between. The frame it fires he's stepped in and the arm is out straight along the locked aim
+    const pose = () => {
+      const mm = dgAim(g, dgArrow(g, a, A.len).E);
+      return { tl: mm.tl - 0.05, hd: mm.hd + 0.05, fa1: mm.w - g.pose.tl, fa2: 0, ba1: 1.4, ba2: -0.65, hip: mm.hip - 8, ffx: 50, bfx: -40, w: mm.w };
+    };
+    if (!a.fired) {
+      a.fired = true;
+      if (a.move) g.x = dgClampX(g.x + a.move);
+      if (g.pose.fa1 > Math.PI) g.pose.fa1 -= TAU;
+      for (let it = 0; it < 3; it++) { const p = pose(); for (const k of DGK) if (p[k] !== undefined) g.pose[k] = p[k]; g.R = dgRig(g); }   // settle the snap onto the aim
+      a.wHit = pose().w;
+      const ar = dgArrow(g, a, A.len); dgBoom(ar.S, a.dir, A.len);
+    }
+    const thrust = pose();
+    delete thrust.w;
+    // the hit: a straight arrow along the locked aim, full length the instant it fires, live for a moment
+    a.arrow = { ...dgArrow(g, a, A.len), live: a.t <= J + A.live && !a.hit };
+    if (a.arrow.live && E && E.open) {
       const sh = E.shapes(), [sx, sy] = a.arrow.S;
-      for (let d = 30; d <= L && !a.hit; d += 8) {
+      for (let d = 30; d <= A.len && !a.hit; d += 8) {
         const pt = [sx + a.dir[0] * d, sy + a.dir[1] * d];
-        if (hurtHit(sh, pt[0], pt[1], A.width)) { a.hit = true; a.arrow.live = false; dgPierceHit(g, a, E, pt, m.w); }
+        if (hurtHit(sh, pt[0], pt[1], A.width)) { a.hit = true; a.arrow.live = false; dgPierceHit(g, a, E, pt, a.wHit); }
       }
     }
     if (a.pin0 !== undefined) {   // skewered: lifted over his head, held there, then the sword slammed down in front of him
@@ -2648,9 +2697,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (t >= t4 + 0.45) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
       return { pose: {}, rate: 4 };
     }
-    if (a.t < Math.max(T2, J1 + A.miss)) return { pose: thrust, rate: q > 0 && q < 1 ? 90 : 34 };   // the lunge, then on a miss he stays in the jab a moment
+    if (a.t < J + A.miss) return { pose: thrust, rate: 60 };   // on a miss he stays in the jab a moment
     a.arrow = null;
-    if (a.t >= J1 + A.miss + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
+    if (a.t >= J + A.miss + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
     return { pose: {}, rate: 5 };
   }
   // the sweep: steps in to where the blade's far end will catch them, hauls the sword back over his head while tracking them, then
@@ -3076,13 +3125,15 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // pops in, hangs there while he cocks the blade, and is gone as the lunge goes in
   function drawDGCrown() {
     const g = dg; if (!g || g.state !== 'atk' || !g.atk.A.crown) return;
-    const a = g.atk, A = a.A, TL = A.tele - A.lock, J0 = A.tele + A.push; if (!a.head || a.t > J0 + 0.08) return;
+    const a = g.atk, A = a.A, TL = A.tele - A.lock, T1 = A.tele, FALL = 0.24; if (!a.head || a.t > T1 + FALL) return;
     // it follows their head while he hones in, drawing tighter; at the lock it snaps in and stays on the spot they were;
-    // it's gone as the jab snaps out
-    const m = a.head, u = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));   // head units -> px
+    // when the wind-up ends it falls off, tipping as it drops and fading, and the flash comes a beat later
+    const fall = Math.max(0, a.t - T1), fy = 60 * fall + 3200 * fall * fall, ft = 2.6 * fall;
+    let m = a.head; if (fall > 0) { const [hx, hy] = apply(m, 1, -22), c = Math.cos(ft), sn = Math.sin(ft); m = chain([c, sn, -sn, c, hx - c * hx + sn * hy, hy + fy - sn * hx - c * hy], m); }
+    const u = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));   // head units -> px
     const pop = Math.min(1, a.t / 0.07), hone = Math.min(1, a.t / TL), lk = a.locked ? Math.min(1, (a.t - TL) / 0.12) : 0;
     const sc = (1.55 - 0.4 * hone * hone - 0.15 * (1 - (1 - pop) * (1 - pop))) * (1 - 0.14 * Math.sin(Math.PI * lk)) - 0.06 * lk;
-    const alpha = (a.t < J0 ? Math.min(1, a.t / 0.04) : 1 - (a.t - J0) / 0.08) * (0.75 + 0.25 * Math.max(hone, lk));
+    const alpha = (fall > 0 ? 1 - fall / FALL : Math.min(1, a.t / 0.04)) * (0.75 + 0.25 * Math.max(hone, lk));
     const cx = 1, cy = -22, rx = 31 * sc, ry = 31 * sc, gap = 0.7, a0 = Math.PI / 2 + gap, a1 = Math.PI / 2 - gap + TAU;
     const P = (an, d = 0) => apply(m, cx + (rx + d) * Math.cos(an), cy + (ry + d) * Math.sin(an));
     const arc = []; for (let i = 0; i <= 28; i++) arc.push(P(a0 + (a1 - a0) * i / 28));
@@ -3157,7 +3208,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     h.last = d;
     // flying in from the outside edge, accelerating into the slot; a little recoil after the hit
     const e = Math.min(1, ht / DGH.fly), fx = h.side * DGH.from * (1 - e * e) - h.side * 10 * Math.sin(Math.PI * Math.min(1, Math.max(0, (ht - DGH.fly) / 0.18))) ;
-    const pop = Math.max(0, 1 - (g.time - (h.popT ?? -9)) / 0.35), sh = 6 * pop * pop, M0 = [1, 0, 0, 1, fx + (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh];
+    const pop = Math.max(0, 1 - (g.time - (h.popT ?? -9)) / 0.35), sh = 6 * pop * pop, M0 = [1, 0, 0, 1, fx, 0];   // his portrait stays put (only the number swells when he's hit)
     ctx.save(); setM(M0);
     const disc = new Path2D(); disc.arc(cx, cy, HUD_R, 0, TAU);
     ctx.fillStyle = PAPER; ctx.fill(disc);
@@ -4070,7 +4121,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   R0 = rig(); auraUpdate(R0, 0); bot.R = rig(bot); botInk(bot.R);
   let last = performance.now();
   function frame(now) {
-    const dt = Math.min(0.033, (now - last) / 1000); last = now;
+    const dt = Math.min(0.033, (now - last) / 1000); last = now; lastDt = menu.open ? 0 : dt;
     if (!pl.paused) {   // paused = a test is stepping frames by hand
       if (game.mode === 'home') { pollPad(); homeStep(dt); drawHome(); }
       else { if (menu.open) { pollPad(); menuStep(dt); } else update(dt); draw(); }

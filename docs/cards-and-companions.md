@@ -59,7 +59,7 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 3. If the other fighter dies, it's "Divine General wins" and the round restarts.
 4. If he's knocked off the screen, it's "Divine General falls" and his owner drops back in. The round carries on without him.
 
-**HUD entrance:** when he lands, his portrait (bust and damage %) flies in from the outside edge of the screen into his owner's slot and knocks the owner's portrait out of it. The owner's portrait spins up and inward with an ink splash, then falls off the screen. While he's in play, his portrait sits in that slot. When he falls, the owner's portrait drops back into its slot. Numbers are in `DGH`. The HUD no longer shakes with the screen; Ray found the portraits shaking all over during his entrance.
+**HUD entrance:** when he lands, his portrait (bust and damage %) flies in from the outside edge of the screen into his owner's slot and knocks the owner's portrait out of it. The owner's portrait spins up and inward with an ink splash, then falls off the screen. While he's in play, his portrait sits in that slot. When he falls, the owner's portrait drops back into its slot. Numbers are in `DGH`. The HUD doesn't shake with the screen, and his portrait doesn't jolt when he's hit; only its number swells. Ray wanted his border and icon fixed.
 
 **Effects:** Ray had the sword-tip trail removed from his sword attacks and will supply new sword effects. The backhand still leaves a swoosh along the fist.
 
@@ -84,7 +84,7 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 | Quake | you're on the ground nearby | floor band, 440 px each way | 0.45 / 0.16 / 0.70 | 9 | popped up 720 (60 away) and hit-stunned 0.42 s, a jab's stun. **Not** a ragdoll |
 | Sweep | **only straight after a Quake that lands** | none: read off his wind-up | starts 0.1 after the stomp lands / 0.46 / 0.16 / 0.55 | 12 | 680 / 220, ragdoll sideways. **Parryable** |
 | Leap slam | you're 420+ px away (2.6 s cooldown) | ellipse where he'll land | 0.40 + 0.55 in the air / 0.12 / 0.70 | 15 | 420 / 520 |
-| Pierce | the arrow can reach your middle after his step: any direction, near or far | **none**: a red halo of thorns round your head instead | 1.2 wind-up (aim locks for the last 0.22) / 0.2 lunge (0.12 push, 0.04 snap, settle) / on a miss he holds the jab 0.3 from full extension, then 0.45 (on a hit: lift 0.26, hold 0.7, slam 0.12 to a dead stop, snap 0.16, then 0.45) | 10 + 6 on hitting the ground | flung off 680 forward / 820 down; rebounds 460 up, keeping 55% of the throw |
+| Pierce | the arrow can reach your middle after his step: any direction, near or far | **none**: a red halo of thorns round your head instead | 1.2 wind-up (aim locks for the last 0.22), the halo falls off, a 0.1 beat, then the flash jab; on a miss he holds the jab 0.3, then 0.45 (on a hit: lift 0.26, hold 0.7, slam 0.12 to a dead stop, snap 0.16, then 0.45) | 10 + 6 on hitting the ground | flung off 680 forward / 820 down; rebounds 460 up, keeping 55% of the throw |
 
 **Quake** (stomp): while the floor zone fills (0.45 s), he lifts his front knee higher and higher. He stands tall on the back leg and leans back over it, the sword arm swings back and the other fist comes up for balance, and the front half of his skirt lifts with the knee. When the zone is full he stomps: he's driven down through the front foot and sinks into it. Ink erupts off the floor all along the zone, thickest at his foot, and the two ink crests run out both ways. Anyone caught is popped straight up and hit-stunned for 0.42 s, a jab's stun: no control, a dazed pose and the circling ink dots. It isn't a ragdoll, so he can follow up on them.
 
@@ -100,11 +100,15 @@ The Sweep is never picked on its own; `dgOptions` doesn't list it.
 **Pierce** (`DG_ATK.pierce`, `dgPierceStep`). Ray had it reworked because it felt too locked-on and unreadable.
 1. **Wind-up (1.2 s), honing in:** a red crescent of thorns circles the target's head like a halo. It starts wide and draws tighter while he tracks you. He hauls the blade arm back as deep as it goes: the upper arm up behind his head, the forearm over his shoulder with the blade aimed at you, the body twisted away on the back leg, the free hand reaching out like a sight. After 0.45 s he's in that pose, then he keeps coiling tighter and the arm trembles, with ink gathering on the blade faster as it builds.
 2. **Lock (the last 0.22 s of the wind-up):** the aim freezes on where you are. The halo snaps tight with a red burst and stays on that spot even if you move, so you can see exactly where it's going and dodge.
-3. **Lunge (0.2 s, snappy like a pistol shrimp; Ray first saw it at 0.5 s to judge the motion), which no longer tracks you:**
-   - For 0.12 s he steps in (up to 190 px, or back up to 130 px if you're too close) and pushes the arm forward, the elbow coming over with the blade still on the aim line.
-   - It snaps out to a straight jab in 0.04 s, then his weight settles forward.
-   - The aim is worked out from where his shoulder will be after the step, so the full jab lines up with the locked spot.
-4. **The hit is a straight arrow** along the locked aim, from his shoulder out to 300 px, 15 px each side of the line. It shoots out with the snap, freezes at full extension, and stays live 0.08 s more.
+3. **The flash jab.** When the wind-up ends, the halo falls off: it drops and tips as it fades. After a 0.1 s held beat, the jab is a flash with no in-between frames. One frame he's coiled; the next he's stepped in (up to 190 px, or back up to 130 px if you're too close) with his arm out straight along the locked aim. Blink and you miss it. It doesn't track you.
+   - **The sound-barrier burst** comes off it, drawn by `drawDGBooms`, and fades in about 0.34 s:
+     - two V-shaped shock cones of brush strokes opening back from the blade tip and from mid-blade, splintering at their ends;
+     - an ink ring snapping out round the blade near the tip;
+     - speed streaks whipping back along both sides of the arm;
+     - a dark streak down the line for a moment;
+     - ink flung out to both sides, and a small screen jolt.
+   - Ray has had it at 0.5 s (to judge the motion) and 0.2 s before settling on the flash.
+4. **The hit is a straight arrow** along the locked aim, from his shoulder out to 300 px, 15 px each side of the line. It's full length the instant the jab fires and stays live for 0.1 s.
    - With hitboxes on (H), you can see it as an orange arrow. During the wind-up a dashed orange line shows the aim, and it goes solid at the lock.
 5. **Skewer:** a hit skewers you (10%). His arm is set straight out along the aim on contact, so you're on the blade, then he lifts you over his head and holds you there for 0.7 s with his arm trembling. Then he swings the sword down and it snaps to a dead stop halfway, shuddering, with his body jolting forward over it. You fly off the blade, fast, forward and down.
 6. **Hitting the ground:** 6% impact damage. A crown of ink splashes up off the platform, two short ink crests run out both ways, and the screen jolts hard. You rebound up with the throw's momentum still carrying you on, spinning. The throw and the rebound grow with your damage. Your ragdoll timer starts only when you leave the blade, and it lasts the usual time for your damage.
