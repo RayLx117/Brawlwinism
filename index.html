@@ -2322,7 +2322,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // miss = how long he stays in the jab when it misses, from full extension (s); lift / hold = raising you overhead and holding
     // you there (s); slam = the swing down to its dead stop, snap = the jolt after it (s); kb / down = how hard you fly off the blade;
     // impact = damage % for hitting the ground; bounce / carry = the rebound off the floor (all grow with damage)
-    pierce:   { tele: 1.2, lock: 0.22, act: 0.5, push: 0.36, jab: 0.07, len: 300, width: 15, live: 0.08, miss: 0.3, rec: 0.45, dmg: 10, impact: 6,
+    pierce:   { tele: 1.2, lock: 0.22, act: 0.2, push: 0.12, jab: 0.04, len: 300, width: 15, live: 0.08, miss: 0.3, rec: 0.45, dmg: 10, impact: 6,
       kb: 680, down: 820, bounce: 460, carry: 0.55, lunge: 190, back: 130, lift: 0.26, hold: 0.7, slam: 0.12, snap: 0.16, crown: true, tip: 'blade' },
   };
   for (const [k, A] of Object.entries(DG_ATK)) A.key = k;

@@ -8,7 +8,7 @@ const CASES = [   // [name, player x offset in front of him, player height above
   ['near', 150, 0], ['far', 400, 0], ['high', 220, 300], ['overhead', 70, 380], ['low-air', 330, 120], ['miss', 300, 0],
 ];
 const BOXES = process.env.BOXES !== '0';   // BOXES=0 renders without the hitbox view
-const SHOTS = [0.2, 0.6, 0.98, 1.15, 1.3, 1.45, 1.58, 1.62, 1.66, 1.8, 2.3, 2.9, 3.2, 3.3, 3.5, 3.9];
+const SHOTS = [0.2, 0.6, 0.98, 1.15, 1.25, 1.3, 1.34, 1.37, 1.42, 1.55, 2.0, 2.6, 2.9, 3.0, 3.2, 3.6];
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 820 }, deviceScaleFactor: 1 });
   const errs = []; p.on('pageerror', e => errs.push(e.stack)); await p.goto(GAME); await p.waitForTimeout(600);
@@ -26,7 +26,7 @@ const SHOTS = [0.2, 0.6, 0.98, 1.15, 1.3, 1.45, 1.58, 1.62, 1.66, 1.8, 2.3, 2.9,
         const P = window.__pt, g = __dg();
         while (P.t < ts - 1e-6) {
           if (P.hitT === null && !__fighter.rag) Object.assign(__fighter, { x: P.hold[0], y: P.hold[1], vx: 0, vy: 0 });
-          if (P.miss && P.t >= 1.1 && !P.moved) { P.moved = true; P.hold[0] -= 520; }   // steps away just as the stab starts
+          if (P.miss && P.t >= 1.15 && !P.moved) { P.moved = true; P.hold[0] -= 520; }   // steps away just as the stab starts
           __step(1 / 60, 1); P.t += 1 / 60;
           if (P.hitT === null && g && g.pin) P.hitT = +P.t.toFixed(3);
         }
