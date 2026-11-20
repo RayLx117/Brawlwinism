@@ -40,14 +40,17 @@ The player can now be hit, so the player has a damage % too, shown on the HUD. D
 
 ## Divine General (companion, Ancient)
 
-Drawn from Ray's reference in the ink style, seen three-quarters from the front:
+Redrawn in v52 from Ray's second reference sketch (a horned, faceless god with a gold wheel) in the ink style, seen three-quarters from the front:
 - about 3× a fighter's height;
 - a pale grey-white stain body with a heavy goo border;
-- a gold eight-spoked wheel floating above the head, which turns a notch before every attack and a full turn on his entrance;
-- two big feathered wings flaring up either side of the head;
-- small cheek wings and a grinning mouth of teeth;
-- a tassel necklace, broad V torso, grey sash with a dark belt plate and a hanging tail, and a long dark hakama in two swinging halves;
-- ankle and wrist bands, and a bandaged blade arm carrying a long ink sword.
+- a blank, faceless head with a pointed chin and a faint brow line, two long horns sweeping up and out, and small spiky points at the sides;
+- a long pale scarf streaming back from the head, billowing in a slow wind; it lifts higher when he flares up (`flare` in his poses);
+- a gold eight-spoked wheel floating above the head between the horns. It's painted in gold dry-brush strokes, with no ink outline: a heavy outer rim, a thin inner rim, tapered spokes, a hub, and a small knob on a stalk past each spoke, plus a little gold spatter. It turns a notch before every attack and a full turn on his entrance;
+- a muscled V torso with dry-brush pec, ab and oblique marks, and a necklace of five rings with tassels;
+- a pale sash with a dark top band, a big knot at the front and a long notched tail, over a pale wrap skirt in two swinging halves with deep fold strokes;
+- wrist and ankle bands, bare feet with toes, a bandaged blade arm, and a long thin ink sword held point-down with a small guard.
+
+Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[points], width]`.
 
 **Flow:**
 1. At round start a red column follows his owner for 0.6 s. Then he drops out of the sky onto them, with shockwaves and a "Divine General" banner, and launches them off the map.
