@@ -43,7 +43,7 @@ The player can now be hit, so the player has a damage % too, shown on the HUD. D
 Redrawn in v52 from Ray's second reference sketch (a horned, faceless god with a gold wheel) in the ink style, seen three-quarters from the front:
 - about 3× a fighter's height;
 - a pale grey-white stain body with a heavy goo border;
-- a blank, faceless head with a pointed chin and a faint brow line, two long horns sweeping up and out, and small spiky points at the sides;
+- a blank, faceless head with a pointed chin and a faint brow line, with four thin wing-like blades fanning out sideways from the eye line, two each side: a long one sweeping up and out and a shorter one running out almost flat, each with a small barb near the tip (Ray asked for these in place of horns and ear spikes);
 - a long pale scarf streaming back from the head, billowing in a slow wind; it lifts higher when he flares up (`flare` in his poses);
 - a gold eight-spoked wheel floating above the head between the horns. It's painted in gold dry-brush strokes, with no ink outline: a heavy outer rim, a thin inner rim, tapered spokes, a hub, and a small knob on a stalk past each spoke, plus a little gold spatter. It turns a notch before every attack and a full turn on his entrance;
 - a muscled V torso with dry-brush pec, ab and oblique marks, and a necklace of five rings with tassels;

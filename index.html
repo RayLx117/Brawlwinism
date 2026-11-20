@@ -2316,10 +2316,10 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     // blank and faceless, with a pointed chin; a faint brow and cheek plane like the sketch
     head: { fill: 'M-9,0 C-3,4 6,6 15,4 L19,-7 C22,-15 22,-26 18,-34 C14,-41 6,-44 -2,-43 C-10,-42 -16,-36 -18,-28 C-19,-19 -17,-7 -10,2 Z',
       strokes: [[[[-3, -27], [5, -24], [15, -27]], 1.6], [[[8, -21], [11, -12], [12, -3]], 1.3], [[[-12, -30], [-13, -18], [-9, -6]], 1.2]], brush: 'head', shade: 7 },
-    // two long horns sweeping up and out, tapering to a fine point
-    horn: { fill: 'M-4.5,0 C-3,-16 -2,-30 2,-44 C5,-55 10,-63 18,-72 C13,-61 8.5,-52 6.5,-42 C3.5,-28 3.5,-14 4.5,0 Z',
-      strokes: [[[[0, -4], [1, -26], [5, -46]], 1.2]], brush: 'head', shade: 3 },
-    ear: { fill: 'M0,0 L9,-5 L19,-14 L13,-5 L23,-7 L13,1 L21,4 L6,5 Z', brush: 'head', shade: 3 },   // the small spiky points at the sides of the head
+    // four thin wing-like blades fanning out sideways from the eye line, two each side (Ray's sketch): a long one sweeping up
+    // and out, a shorter one running out almost flat. One shape, pointing out along +x from its root, with a small barb near the tip
+    headWing: { fill: 'M0,-2.2 C14,-3.4 26,-5 36,-7 L43,-11.5 L41,-7.6 C49,-9 57,-11 68,-14 C58,-8.6 48,-5.2 38,-3.4 C24,-1.2 12,0.6 0,2.2 Z',
+      strokes: [[[[4, -0.4], [26, -3.4], [52, -8.4]], 0.9]], brush: 'head', shade: 3 },
     upperArm: { fill: 'M-14,-4 C-12,-12 -4,-15 4,-14 C12,-12 17,-4 16,4 C16,14 13,24 10,32 L-9,32 C-12,24 -15,14 -15,4 Z',
       strokes: [[[[-13, 6], [-4, 12], [6, 12.5], [14, 7]], 2.1], [[[-7, 16], [-9, 24], [-7, 30]], 1.6], [[[10, 14], [9.5, 24]], 1.4]], brush: 'limb', shade: 6 },
     // the blade arm: bandaged from elbow to wrist, then a wrist band and the fist
@@ -2416,8 +2416,8 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     const sash = chain(pelvis, T(0, -2), R(q.tl * 0.25));
     return { root, pelvis, LF, LB, torso, head, sash, fa: arm(31, q.fa1, q.fa2), ba: arm(-29, q.ba1, q.ba2),
       skF: chain(pelvis, T(12, -2), R(LF.a1 * 0.45)), skB: chain(pelvis, T(-12, -2), R(LB.a1 * 0.45)), tail: chain(sash, T(14, -1), R(g.tailA || 0)),
-      hornN: chain(head, T(8, -38), R(0.32 + 0.05 * q.flare)), hornF: chain(head, T(-9, -37), Sc(-1, 1), R(0.36 + 0.05 * q.flare)),
-      earN: chain(head, T(13, -24), R(-0.25 - 0.12 * q.flare)), earF: chain(head, T(-15, -24), Sc(-1, 1), R(-0.25 - 0.12 * q.flare)),
+      hwNU: chain(head, T(14, -25), R(-0.78 - 0.14 * q.flare)), hwNL: chain(head, T(16, -21), R(-0.14 - 0.08 * q.flare)),
+      hwFU: chain(head, T(-15, -25), Sc(-1, 1), R(-0.8 - 0.14 * q.flare)), hwFL: chain(head, T(-16, -21), Sc(-1, 1), R(-0.18 - 0.08 * q.flare)),
       wheel: apply(head, 1, -76), centre: apply(root, 0, -80) };
   }
   const dgTip = (g, k) => k === 'blade' ? apply(g.R.fa.lo, 7.6, 118) : apply(g.R.ba.lo, 0, 40);
@@ -2721,9 +2721,9 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
       [DGP.upperArm, R.ba.up, true, dgSkin], [DGP.lowerArmB, R.ba.lo, true, dgSkin],
       [DGP.shin, R.LB.lo, true, dgSkin], [DGP.foot, R.LB.ft, true, dgSkin], [DGP.shin, R.LF.lo, false, dgSkin], [DGP.foot, R.LF.ft, false, dgSkin],
       [DGP.skirtL, R.skB, true, dgCloth], [DGP.skirtR, R.skF, false, dgCloth],
-      [DGP.horn, R.hornF, true, dgHead], [DGP.ear, R.earF, true, dgHead],
+      [DGP.headWing, R.hwFU, true, dgHead], [DGP.headWing, R.hwFL, true, dgHead],
       [DGP.torso, R.torso, false, dgSkin], [DGP.sash, R.sash, false, dgSash], [DGP.sashTail, R.tail, false, dgSash], [DGP.knot, R.sash, false, dgSash],
-      [DGP.head, R.head, false, dgHead], [DGP.ear, R.earN, false, dgHead], [DGP.horn, R.hornN, false, dgHead],
+      [DGP.head, R.head, false, dgHead], [DGP.headWing, R.hwNU, false, dgHead], [DGP.headWing, R.hwNL, false, dgHead],
       [DGP.upperArm, R.fa.up, false, dgSkin], [DGP.lowerArmF, R.fa.lo, false, dgWrap],
     ];
   }
@@ -2756,7 +2756,7 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     if (d01 > 0) { ctx.save(); setM(ID); ctx.beginPath(); ctx.rect(-200, lev, GW + 400, GH + 400); ctx.clip(); goo(`rgb(${RED})`); ctx.restore(); }
     const inkAt = (m) => { const y = apply(m, 0, 0)[1], k = Math.max(0, Math.min(1, (y - lev) / 30)); return d01 > 0 && k > 0 ? redInk(k) : INK; };
     for (const [p, m, back, fill] of layers) {
-      if (p === DGP.head) {   // the wheel floats above the head, between the horns, behind the near horn and the arms
+      if (p === DGP.head) {   // the wheel floats above the head, between the upper head wings, behind the near ones and the arms
         const [wx, wy] = R_.wheel;
         drawWheel(wx, wy + 3 * Math.sin(t * 2.4), DG.S, g.wheelRot + t * 0.15, -0.12 * g.facing);
       }
@@ -2819,8 +2819,8 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   // his bust (head, shoulders, wheel) at any size: the HUD portrait and his card art
   function dgBust(cx, cy, k, t, face) {
     const R_ = dgRig({ x: cx, y: cy + 150 * k, s: k, facing: face, pose: dgIdle(t), rot: 0, tailA: 0 }), head = R_.head;
-    const ls = [[DGP.upperArm, R_.ba.up, true, dgSkin], [DGP.horn, R_.hornF, true, dgHead], [DGP.ear, R_.earF, true, dgHead], [DGP.torso, R_.torso, false, dgSkin],
-      [DGP.head, head, false, dgHead], [DGP.ear, R_.earN, false, dgHead], [DGP.horn, R_.hornN, false, dgHead], [DGP.upperArm, R_.fa.up, false, dgSkin]];
+    const ls = [[DGP.upperArm, R_.ba.up, true, dgSkin], [DGP.headWing, R_.hwFU, true, dgHead], [DGP.headWing, R_.hwFL, true, dgHead], [DGP.torso, R_.torso, false, dgSkin],
+      [DGP.head, head, false, dgHead], [DGP.headWing, R_.hwNU, false, dgHead], [DGP.headWing, R_.hwNL, false, dgHead], [DGP.upperArm, R_.fa.up, false, dgSkin]];
     ctx.strokeStyle = ctx.fillStyle = INK; ctx.lineJoin = 'round';
     for (const [p, m] of ls) { setM(m); ctx.lineWidth = 4.4; ctx.stroke(p.fill); ctx.fill(p.fill); }
     for (const [p, m, back, fill] of ls) {
