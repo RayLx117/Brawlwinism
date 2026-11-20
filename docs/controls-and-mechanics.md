@@ -25,7 +25,15 @@ The controller works with the stick or d-pad: A/Y jump, X/B punch, bumpers or tr
 
 ## Home menu
 
-The game opens on a home menu: a plain sheet of paper with "Brawlwinism" painted with a simulated bristle brush over a dry-brush underline. It's not a font: see `GLYPHS`, `bristleStroke` and `buildTitle`. Ray asked for each letter to show the obvious end of its strokes, where the line splinters and fades from the bristles, and for a bigger, mildly punky B.
+The game opens on a home menu over an animated ink-wash scene (Ray picked concept C of the mockups, `tests/menu-mockups.js`). The scene: misty mountains across a lake, with the bottom of the screen as the lake's near shore. Its numbers are in `HS`.
+- **Mountains:** three soft ridges in dull blue-grey washes with no outlines. Ray asked for soft, not hard lines. Each ridge dissolves into mist at its foot.
+- **Sky:** a faded red sun and a faint wash high in the sky.
+- **Lake:** it reflects the mountains and the sun, drawn in thin slices that shimmer more the nearer they are. Short pale and dark ripple dashes drift and fade in and out. Three mist banks slide between the ridges at their own speeds; each is a strip three screens wide, so it wraps with no seam.
+- **Shore:** sand with grit, pebbles and a damp band along a ragged edge. The water slowly rises and falls on it, about 7 px over 7.5 s plus a smaller second swell, with a line of foam lapping along the edge. Reed clumps in both near corners sway in the breeze.
+- **Birds:** a flock of six loops a slow figure-of-eight round the sky by the sun, every 26 s, each bird flapping on its own beat.
+- **Performance:** everything still is painted once per screen size into layers (`buildHome`); per frame only the moving parts are drawn (`drawHomeScene`). It holds 60 fps.
+
+The title, "Brawlwinism", is painted with a simulated bristle brush over a dry-brush underline. It's not a font: see `GLYPHS`, `bristleStroke` and `buildTitle`. Ray asked for each letter to show the obvious end of its strokes, where the line splinters and fades from the bristles, and for a bigger, mildly punky B.
 - **How a stroke is painted:** each stroke follows a skeleton and has three parts.
   - It opens on a chisel cut: one edge of the flat brush lands first.
   - It carries a solid body, heavy on downstrokes and thin on upstrokes.

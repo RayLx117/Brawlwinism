@@ -28,6 +28,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node mouse-controls.js` | Mouse controls: left click punches in a fight, right click doesn't punch or open the browser menu, the aim follows the mouse, the cursor is the crosshair in the arena and the ink arrow in menus, and menu clicks don't punch. Writes `out/cursors.png`. |
 | `node home-shot.js` | The home (title) screen (`out/home.png`) and the page title. |
 | `node menu-mockups.js` | Still mockups of main-menu background ideas (ink in water, the Divine General's wheel, misty mountains, ensō) behind the real brush title. Reuses the game's own brush and title code; writes `out/menu-mock-*.png` and `out/menu-mockups.png`. |
+| `node home-video.js` | Records about 10 s of the animated main menu to `out/home-menu.webm` and prints the average frame interval. |
 | `node shimmer-shot.js` | The bot ragdolled after a sucker punch, showing the can't-be-hit shimmer. |
 | `node dg-shot.js [prefix]` | Divine General close-ups: standing, cleave, heaven strike, quake (`out/<prefix>-*.png`). |
 | `node dg-card-shot.js [prefix]` | His HUD portrait and his card in Select Cards. |

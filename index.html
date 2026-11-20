@@ -3739,7 +3739,6 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
   }
   function homeHover(x, y) { const i = homeRowAt(x, y); if (i >= 0 && i !== home.sel) { home.sel = i; home.selT = 0; } }
   function homeClick(x, y) { const i = homeRowAt(x, y); if (i >= 0) { home.sel = i; HOME_ITEMS[i].act(); } }
-  let homeBg = null, homeBgKey = '';
   // ---- the title lettering: "Brawlwinism" painted with a simulated bristle brush, not a font.
   // bristleStroke paints one stroke along a skeleton: a quick pressed entry, a full body, then the brush lifts and runs dry, so
   // its bristles give out one by one at different points and the end splinters into separate streaks. Every stroke ends that way,
@@ -3850,20 +3849,162 @@ kbd { font: 600 .8rem/1 var(--font); color: var(--ink); background: var(--key); 
     }
     return { body, hairs, spat, w: W, x0 };
   }
+  // ---- the home screen's scene: misty ink mountains across a lake, the shore of the lake along the bottom of the screen.
+  // Everything still is painted once per screen size into layers; per frame only the moving parts are drawn: the reflection's
+  // shimmer, ripples drifting on the lake, mist banks sliding between the ridges, the water rising and falling on the shore,
+  // and a few birds looping round the sky by the sun. Soft washes only: no hard outlines on the mountains.
+  const HS = {
+    paper: [229, 229, 223], lake: [206, 211, 214], horizon: 478,   // the far shore of the lake (y)
+    sun: [975, 200, 64], sunCol: [168, 88, 64],
+    // ridges far to near: [base y, height, colour, alpha, noise seed]
+    ridges: [[452, 190, [184, 191, 198], 0.6, 71], [462, 170, [152, 163, 175], 0.62, 72], [470, 128, [118, 130, 146], 0.66, 75]],
+    shore: 666, tide: 7, tidePeriod: 7.5,   // where the near shore meets the water (y), how far the water rises and falls (px), one rise-and-fall (s)
+    mist: [[408, 46, 9], [446, 40, -6], [470, 30, 13]],   // drifting mist banks: [y, height, speed px/s]
+    birds: 6, flock: [985, 190, 150, 62], loop: 26,   // the flock loops round this patch of sky [cx, cy, rx, ry]; one lap (s)
+  };
+  let homeL = null, homeKey = '';
+  window.__homeLayers = () => homeL;   // test hook
+  function homeLayer(k, draw) { const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height; const g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0); draw(g); return c; }
+  function ridgeShape(base, amp, seed) {   // a ridge's silhouette: two octaves of noise and a few sharper peaks
+    const n = vnoise(5, seed), n2 = vnoise(19, seed + 3), p = new Path2D(), top = [];
+    for (let x = -40; x <= GW + 40; x += 5) { const u = (x + 40) / (GW + 80); top.push([x, base - amp * (0.55 * n(u, 0.5) + 0.3 * n2(u, 0.2) + 0.15 * Math.abs(Math.sin(u * 8 + seed)))]); }
+    p.moveTo(-40, base + 60); top.forEach(([x, y]) => p.lineTo(x, y)); p.lineTo(GW + 40, base + 60); p.closePath();
+    return p;
+  }
+  function buildHome() {
+    const k = view.s * view.dpr, rgba = (c, a) => `rgba(${c.join(',')},${a})`, H = HS.horizon;
+    const grain = (g, seed) => { const r = rng(seed); g.fillStyle = 'rgba(90,70,45,0.05)'; for (let i = 0; i < 9000; i++) g.fillRect(r() * GW, r() * GH, 0.9, 0.9); g.fillStyle = 'rgba(90,70,45,0.03)'; for (let x = 0; x < GW; x += 3) g.fillRect(x, 0, 0.6, GH); };
+    const soft = (g, px, fn) => { g.save(); g.filter = `blur(${px * k}px)`; fn(); g.restore(); };
+    // the mountains on their own, so the lake can reflect them
+    const hills = homeLayer(k, (g) => {
+      for (const [base, amp, col, a, seed] of HS.ridges) {
+        // each ridge on its own sheet: a soft-edged wash with no outline, then its foot dissolved away into mist, so the ridges
+        // don't stack into a dark band along the bottom
+        const one = homeLayer(k, (h) => {
+          soft(h, 1.6, () => { h.fillStyle = rgba(col, a); h.fill(ridgeShape(base, amp, seed)); });
+          h.globalCompositeOperation = 'destination-out';
+          soft(h, 18, () => { h.fillStyle = 'rgba(0,0,0,0.92)'; h.fillRect(-60, base - amp * 0.28, GW + 120, amp + 90); });
+        });
+        g.drawImage(one, 0, 0, GW, GH);
+      }
+      const r = rng(88); g.fillStyle = 'rgba(70,80,96,0.12)';   // pigment granulation in the washes
+      for (let i = 0; i < 2600; i++) { const x = r() * GW, y = 250 + r() * (H - 250); g.fillRect(x, y, 0.8, 0.8); }
+    });
+    const sky = homeLayer(k, (g) => {
+      g.fillStyle = `rgb(${HS.paper.join(',')})`; g.fillRect(0, 0, GW, GH); grain(g, 41);
+      soft(g, 40, () => { g.fillStyle = 'rgba(150,162,176,0.16)'; g.beginPath(); g.ellipse(250, 60, 520, 150, 0.1, 0, TAU); g.fill(); });   // a faint wash high in the sky
+      const [sx, sy, sr] = HS.sun; soft(g, 1.2, () => { g.fillStyle = rgba(HS.sunCol, 0.3); g.beginPath(); g.arc(sx, sy, sr, 0, TAU); g.fill(); });
+      g.drawImage(hills, 0, 0, GW, GH);
+      // the lake: a pale wash from the far shore down, a little darker toward us
+      soft(g, 3, () => { g.fillStyle = rgba(HS.lake, 0.75); g.fillRect(-20, H, GW + 40, GH - H + 20); });
+      soft(g, 30, () => { g.fillStyle = 'rgba(120,134,148,0.18)'; g.fillRect(-60, H + 120, GW + 120, 200); });
+      soft(g, 6, () => { g.fillStyle = rgba(HS.paper, 0.8); g.fillRect(-20, H - 3, GW + 40, 9); });   // the bright line where the far shore meets the water
+    });
+    // the reflection: the hills and sun flipped about the far shore, faded and softened; drawn per frame in shimmering slices
+    const refl = homeLayer(k, (g) => {
+      g.save(); g.translate(0, 2 * H); g.scale(1, -1); g.filter = `blur(${2.5 * k}px)`; g.globalAlpha = 0.42; g.drawImage(hills, 0, 0, GW, GH);
+      const [sx, sy, sr] = HS.sun; g.globalAlpha = 0.25; g.fillStyle = rgba(HS.sunCol, 1); g.beginPath(); g.ellipse(sx, sy, sr * 0.9, sr * 1.15, 0, 0, TAU); g.fill(); g.restore();
+    });
+    // the near shore: a band of damp sand and pebbles in a sepia-grey wash, with an uneven edge where the water meets it
+    let shoreTop = [];
+    const shore = homeLayer(k, (g) => {
+      // the shore's edge wanders: low spits running out into the water and shallow bays between them
+      const n = vnoise(5, 301), n2 = vnoise(19, 302), p = new Path2D(), top = [];
+      for (let x = -20; x <= GW + 20; x += 4) { const u = (x + 20) / (GW + 40); top.push([x, HS.shore + 14 - 26 * n(u, 0.4) - 8 * n2(u, 0.6)]); }
+      p.moveTo(-20, GH + 40); top.forEach(([x, y]) => p.lineTo(x, y)); p.lineTo(GW + 20, GH + 40); p.closePath(); shoreTop = top;
+      soft(g, 1.2, () => { g.fillStyle = 'rgba(138,128,114,0.6)'; g.fill(p); });
+      soft(g, 26, () => { g.fillStyle = 'rgba(92,84,74,0.4)'; g.fillRect(-20, GH - 30, GW + 40, 60); });   // darker toward us
+      soft(g, 5, () => { g.strokeStyle = 'rgba(88,82,74,0.45)'; g.lineWidth = 12; g.beginPath(); top.forEach(([x, y], i) => i ? g.lineTo(x, y + 6) : g.moveTo(x, y + 6)); g.stroke(); });   // damp sand along the edge
+      const r = rng(303), gr = rng(304);
+      for (let i = 0; i < 2200; i++) { const x = gr() * GW, y = HS.shore - 10 + gr() * 80; g.fillStyle = 'rgba(70,64,56,0.18)'; g.fillRect(x, y, 0.8, 0.8); }   // grit
+      for (let i = 0; i < 150; i++) {   // pebbles, bigger and more of them nearer the bottom
+        const y = HS.shore + 4 + r() ** 0.7 * 70, near = (y - HS.shore) / 70, x = r() * GW, s = 0.8 + r() * r() * (2 + 6 * near);
+        if (y < top[Math.min(top.length - 1, Math.round((x + 20) / 4))][1] + 3) continue;
+        g.fillStyle = `rgba(66,62,56,${0.3 + r() * 0.4})`; g.beginPath(); g.ellipse(x, y, s * 1.4, s, r() - 0.5, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(236,232,224,0.35)'; g.beginPath(); g.ellipse(x - s * 0.3, y - s * 0.35, s * 0.5, s * 0.3, r() - 0.5, 0, TAU); g.fill();
+      }
+    });
+    // mist banks: soft, long, pale; each drawn twice side by side so it can slide forever
+    const mist = HS.mist.map(([y, h], i) => {   // three screens wide, the same puffs repeated each screen, so it wraps with no seam
+      const c = document.createElement('canvas'); c.width = canvas.width * 3; c.height = canvas.height; const g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0);
+      const r = rng(400 + i), puffs = Array.from({ length: 11 }, (_, j) => [(j + r() * 0.8) * GW / 11, 120 + r() * 180, h * (0.3 + r() * 0.25)]);
+      soft(g, h * 0.35, () => { g.fillStyle = rgba(HS.paper, 0.85); for (const rep of [0, 1, 2]) for (const [x, rx, ry] of puffs) { g.beginPath(); g.ellipse(x + rep * GW, y, rx, ry, 0, 0, TAU); g.fill(); } });
+      return c;
+    });
+    // ripples on the lake: short pale and dark brush dashes, fixed shapes that drift and breathe
+    const rr = rng(500), ripples = [];
+    for (let i = 0; i < 46; i++) {
+      const y = H + 10 + rr() ** 1.3 * (HS.shore - H - 20), len = 14 + rr() * 50 * (0.5 + (y - H) / (HS.shore - H)), w = 0.9 + rr() * 1.6 * (y - H) / (HS.shore - H) + 0.4;
+      ripples.push({ x: rr() * GW, y, path: brushPath([[-len / 2, 0], [0, -0.6], [len / 2, 0]], w, 0.3, 0.3, 0, 510 + i), light: rr() < 0.55, ph: rr() * TAU, sp: 0.35 + rr() * 0.5, v: 3 + rr() * 6 });
+    }
+    // the birds: each one's place on the loop, and its own wing beat
+    const br = rng(600), birds = Array.from({ length: HS.birds }, (_, i) => ({ ph: i / HS.birds * TAU + br() * 0.4, off: [(br() - 0.5) * 30, (br() - 0.5) * 22], s: 7 + br() * 4, flap: 6 + br() * 3, fp: br() * TAU }));
+    // reeds in the near corners: clumps of tall blades, each swaying on its own
+    const qr = rng(700), reeds = [];
+    for (const [cx, n0] of [[60, 9], [150, 5], [1170, 7], [1240, 10]]) for (let i = 0; i < n0; i++) {
+      const h = 60 + qr() * 110 * (cx < 100 || cx > 1200 ? 1.2 : 0.8);
+      reeds.push({ x: cx + (qr() - 0.5) * 70, y: GH + 6, h, lean: (qr() - 0.5) * 0.5 + (cx < 640 ? 0.12 : -0.12), w: 2 + qr() * 2.6, ph: qr() * TAU, sp: 0.6 + qr() * 0.5, head: qr() < 0.35, seed: 710 + reeds.length });
+    }
+    return { sky, refl, shore, shoreTop: shoreTop.filter((_, i) => i % 5 === 0), mist, ripples, birds, reeds };
+  }
+  // the moving parts, over the still sky
+  function drawHomeScene(t) {
+    const k = view.s * view.dpr, L = homeL, H = HS.horizon;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(L.sky, 0, 0);
+    // the water's level on the shore this moment: a slow swell in and out
+    const tide = Math.sin(t * TAU / HS.tidePeriod) * HS.tide + Math.sin(t * TAU / (HS.tidePeriod * 0.43) + 1) * HS.tide * 0.25;
+    // the reflection, in thin slices nudged side to side so it shimmers, more toward us
+    for (let y = H; y < HS.shore + 20; y += 4) {
+      const d = (y - H) / (HS.shore - H), dx = Math.sin(t * 1.1 + y * 0.21) * (0.6 + 2.4 * d) + Math.sin(t * 0.7 + y * 0.05) * 1.2;
+      ctx.drawImage(L.refl, 0, y * k, canvas.width, 4 * k, dx * k, y * k, canvas.width, 4 * k);
+    }
+    setM(ID);
+    for (const p of L.ripples) {   // ripples drift along and fade in and out
+      const a = Math.max(0, Math.sin(t * p.sp + p.ph)), x = ((p.x + t * p.v) % (GW + 120) + GW + 120) % (GW + 120) - 60;
+      if (a < 0.02) continue;
+      setM([1, 0, 0, 1, x, p.y]); ctx.fillStyle = p.light ? `rgba(240,240,236,${0.55 * a})` : `rgba(96,110,126,${0.32 * a})`; ctx.fill(p.path);
+    }
+    setM(ID);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    HS.mist.forEach(([, , v], i) => {   // mist banks sliding between the ridges, each at its own pace
+      const off = ((t * v) % GW + GW) % GW, img = L.mist[i];
+      ctx.globalAlpha = 0.75 + 0.2 * Math.sin(t * 0.13 + i);
+      ctx.drawImage(img, off * k - 2 * canvas.width, 0);   // the middle screen's worth of the strip, slid along
+    });
+    ctx.globalAlpha = 1;
+    // the near shore, lifted and lowered by the water: when the water rises, it covers more of the sand
+    ctx.drawImage(L.shore, 0, tide * k);
+    setM(ID);
+    const edge = L.shoreTop.map(([x, y]) => [x, y + 2 + tide + Math.sin(x * 0.02 + t * 0.9) * 1.4]);   // foam along the shore's own ragged edge
+    ctx.fillStyle = 'rgba(244,243,238,0.7)'; ctx.fill(brushPath(edge, 2.2, 0.02, 0.02, 0.8, 520));   // a thin line of foam where the water laps
+    ctx.fillStyle = 'rgba(244,243,238,0.35)'; ctx.fill(brushPath(edge.map(([x, y]) => [x, y - 5 - 2 * Math.sin(t * 0.6 + x * 0.05)]), 1.2, 0.05, 0.05, 0.6, 521));
+    // reeds: each blade bends a little in a slow breeze, more toward its tip; some carry a seed head
+    for (const q of L.reeds) {
+      const sw = Math.sin(t * q.sp + q.ph) * 0.07 + Math.sin(t * 0.37 + q.x * 0.01) * 0.05, pts = [];
+      for (let j = 0; j <= 4; j++) { const u = j / 4, b = (q.lean + sw * u) * u * u; pts.push([q.x + Math.sin(b) * q.h * u, q.y - Math.cos(b) * q.h * u]); }
+      ctx.fillStyle = 'rgba(52,54,50,0.82)'; ctx.fill(brushPath(pts, q.w, 0.02, 0.85, 0, q.seed));
+      if (q.head) { const [hx, hy] = pts[3], [ex, ey] = pts[4]; ctx.fill(brushPath([[hx, hy], [(hx + ex) / 2, (hy + ey) / 2], [ex, ey]], q.w * 2.4, 0.3, 0.4, 0, q.seed + 50)); }
+    }
+    // the flock: a slow figure-of-eight round the sky by the sun, each bird on its own beat, wings swept down and up
+    const [fx, fy, frx, fry] = HS.flock;
+    for (const b of L.birds) {
+      const a = t * TAU / HS.loop + b.ph, x = fx + Math.sin(a) * frx + b.off[0] + Math.sin(t * 0.5 + b.ph * 3) * 8, y = fy + Math.sin(2 * a) * fry * 0.6 + b.off[1] + Math.cos(t * 0.7 + b.ph) * 5;
+      const dir = Math.cos(a) >= 0 ? 1 : -1, w = Math.sin(t * b.flap + b.fp), s = b.s, tip = -s * (0.15 + 0.55 * w);
+      ctx.fillStyle = 'rgba(42,44,50,0.62)';
+      ctx.fill(brushPath([[x - s * dir, y + tip], [x - s * 0.45 * dir, y - s * 0.32 - w * s * 0.15], [x, y]], 1.7, 0.05, 0.15, 0, 530));
+      ctx.fill(brushPath([[x, y], [x + s * 0.45 * dir, y - s * 0.32 - w * s * 0.15], [x + s * 0.9 * dir, y + tip * 0.9]], 1.5, 0.15, 0.6, 0, 531));
+    }
+    // the title, painted once, laid over it all
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(L.title, 0, 0);
+  }
   function drawHome() {
     const key = canvas.width + 'x' + canvas.height;
-    if (key !== homeBgKey) {   // plain sheet of paper with grain, built once per size
-      homeBgKey = key; homeBg = document.createElement('canvas'); homeBg.width = canvas.width; homeBg.height = canvas.height;
-      const b = homeBg.getContext('2d'), r = rng(41), k = view.s * view.dpr;
-      b.fillStyle = '#ece4d3'; b.fillRect(0, 0, homeBg.width, homeBg.height);
-      b.fillStyle = 'rgba(90,70,45,0.05)';
-      for (let i = 0; i < 9000; i++) b.fillRect(r() * homeBg.width, r() * homeBg.height, 1.2 * k, 1.2 * k);
-      b.fillStyle = 'rgba(90,70,45,0.035)';
-      for (let x = 0; x < homeBg.width; x += 3 * k) b.fillRect(x, 0, k, homeBg.height);   // laid-paper lines
-      const T_ = TITLE || (TITLE = buildTitle(GW / 2, 270));   // the painted title goes straight onto the sheet
-      b.setTransform(k, 0, 0, k, 0, 0); b.fillStyle = INK; b.fill(T_.body); b.fill(T_.hairs); b.fill(T_.spat);
+    if (key !== homeKey) {
+      homeKey = key; homeL = buildHome();
+      const T_ = TITLE || (TITLE = buildTitle(GW / 2, 270));
+      homeL.title = homeLayer(view.s * view.dpr, (g) => { g.fillStyle = INK; g.fill(T_.body); g.fill(T_.hairs); g.fill(T_.spat); });
     }
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(homeBg, 0, 0);
+    drawHomeScene(home.t);
     SHX = SHY = 0; setM(ID);
     // title: the word painted with the bristle brush (TITLE, drawn into the backdrop), a loaded brush stroke under it that runs dry into bristle hairlines
     const T_ = TITLE || (TITLE = buildTitle(GW / 2, 270));   // (painted into the backdrop above)
