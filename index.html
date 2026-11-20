@@ -2033,6 +2033,22 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       for (const { m, e } of dgHurtShapes(dg.R)) { setM(m); ctx.beginPath(); ctx.ellipse(e[0], e[1], e[2], e[3], 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,105,180,0.14)'; ctx.fill(); ctx.strokeStyle = 'rgba(214,51,132,0.6)'; ctx.lineWidth = 1 / DG.S; ctx.stroke(); }
       setM(ID);
     }
+    if (dg && dg.state === 'atk' && dg.atk.A.key === 'pierce') {   // the pierce: its aim line while he winds up, then the arrow
+      const a = dg.atk, A = a.A; setM(ID);
+      if (!a.arrow && a.T && a.t < A.tele + A.push && dg.R) {   // where it will go: dashed while he's still tracking, solid once locked
+        const [sx, sy] = dgShoulder(dg), d = a.dir || (() => { const dx = a.T[0] - sx, dy = a.T[1] - sy, l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; })();
+        ctx.setLineDash(a.locked ? [] : [8, 7]); ctx.strokeStyle = `rgba(255,140,0,${a.locked ? 0.75 : 0.45})`; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + d[0] * A.len, sy + d[1] * A.len); ctx.stroke(); ctx.setLineDash([]);
+      }
+      if (a.arrow) {   // the arrow: a thick shaft and a head, bright while it's live, faded once it's frozen and spent
+        const { S: [sx, sy], E: [ex, ey], live } = a.arrow, [dx, dy] = a.dir, nx = -dy, ny = dx, w = A.width, hl = 26;
+        const al = live ? 1 : 0.4, path = new Path2D();
+        path.moveTo(sx + nx * w, sy + ny * w); path.lineTo(ex - dx * hl + nx * w, ey - dy * hl + ny * w); path.lineTo(ex - dx * hl + nx * w * 1.9, ey - dy * hl + ny * w * 1.9);
+        path.lineTo(ex, ey); path.lineTo(ex - dx * hl - nx * w * 1.9, ey - dy * hl - ny * w * 1.9); path.lineTo(ex - dx * hl - nx * w, ey - dy * hl - ny * w);
+        path.lineTo(sx - nx * w, sy - ny * w); path.closePath();
+        ctx.fillStyle = `rgba(255,140,0,${0.32 * al})`; ctx.fill(path); ctx.strokeStyle = `rgba(255,140,0,${0.95 * al})`; ctx.lineWidth = 1.4; ctx.stroke(path);
+      }
+    }
     if (bot.R && !bot.dead) ovals(bot.R, !!bot.rag);   // dashed + faint while ragdolled: can't be hit
     for (const h of pl.hitShape || []) {
       const c = h.kill ? [255, 140, 0] : [255, 214, 0];
@@ -2294,15 +2310,20 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // delay = the beat after the stomp lands before he starts; step = how fast he closes in (px/s); stand = how far from them he
     // plants (px, from his middle) so the blade's tip end catches them; arc = how far round the sword sweeps (radians)
     sweep:    { delay: 0.1, tele: 0.46, act: 0.16, rec: 0.55, dmg: 12, kb: 680, pop: 220, step: 700, stand: 300, arc: 2.6, follow: true, tip: 'blade' },
-    // any direction, near or far: a red halo of thorns marks you (no zone) while he draws the blade arm back, aimed at you; then he
-    // lunges it at your torso. On a hit you're skewered and lifted over his head, held there, then he slams the sword down in front
-    // of him and you're thrown off it into the ground: impact damage when you hit, then the usual ragdoll for your damage.
-    // tele = the halo / draw-back (s); act = the thrust (s); reach = how far past his shoulder the skewer point gets (px);
-    // lunge = the most he steps in (px); back = the most he steps back from someone too close (px); miss = how long he stays in the stab when it misses (s);
-    // lift / hold = raising you overhead and holding you there (s); slam = the swing down to its dead stop, snap = the jolt after it (s);
-    // kb / down = how hard you fly off the blade, forward and down; impact = damage % for hitting the ground;
-    // bounce = how high you rebound off the floor, carry = how much of your speed carries through the bounce (all grow with damage)
-    pierce:   { tele: 0.30, act: 0.25, miss: 0.3, rec: 0.45, dmg: 10, impact: 6, kb: 680, down: 820, bounce: 460, carry: 0.55, reach: 250, lunge: 190, back: 130, lift: 0.26, hold: 0.7, slam: 0.12, snap: 0.16, crown: true, tip: 'blade' },
+    // any direction, near or far. A red halo of thorns marks you (no zone) while he winds the blade arm back behind his head, the
+    // blade aimed at you, honing in. Near the end the aim locks: the halo snaps tight and stays on the spot you were. Then the lunge:
+    // he steps in pushing the arm forward, it snaps out into a straight jab, and the hit is a straight arrow along the aim that
+    // shoots out with the arm and freezes at full extension. On a hit you're skewered and lifted over his head, held there, then he
+    // slams the sword down in front of him and you're thrown off it into the ground: impact damage, then the usual ragdoll.
+    // tele = the wind-up while the halo is up (s), lock = the last part of it where the aim is frozen (s);
+    // act = the whole lunge (s): push = the arm starting forward and the step in, jab = the snap to full extension, the rest is follow-through;
+    // len = the arrow's length from his shoulder, out past the blade tip (px); width = its half-thickness (px); live = how long it
+    // stays live after full extension (s); lunge / back = the most he steps in, or back from someone too close (px);
+    // miss = how long he stays in the jab when it misses, from full extension (s); lift / hold = raising you overhead and holding
+    // you there (s); slam = the swing down to its dead stop, snap = the jolt after it (s); kb / down = how hard you fly off the blade;
+    // impact = damage % for hitting the ground; bounce / carry = the rebound off the floor (all grow with damage)
+    pierce:   { tele: 1.2, lock: 0.22, act: 0.5, push: 0.36, jab: 0.07, len: 300, width: 15, live: 0.08, miss: 0.3, rec: 0.45, dmg: 10, impact: 6,
+      kb: 680, down: 820, bounce: 460, carry: 0.55, lunge: 190, back: 130, lift: 0.26, hold: 0.7, slam: 0.12, snap: 0.16, crown: true, tip: 'blade' },
   };
   for (const [k, A] of Object.entries(DG_ATK)) A.key = k;
   let dg = null;   // the Divine General while he's in play
@@ -2537,7 +2558,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgPierceReach(g, E) {
     const R = dgRigOf(E.f); if (!R) return false;
     const A = DG_ATK.pierce, [tx, ty] = R.centre, sy = dgShoulder(g)[1];
-    return Math.hypot(Math.max(0, Math.abs(tx - g.x) - 60 - A.lunge), ty - sy) <= A.reach;
+    return Math.hypot(Math.max(0, Math.abs(tx - g.x) - 60 - A.lunge), ty - sy) <= A.len * 0.9;
   }
   // the blade arm aimed at world point T: the arm's angle in his body frame, how high the target is, and a lean/stance to match
   function dgAim(g, T) {
@@ -2547,51 +2568,65 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   const ease = (e) => e * e * (3 - 2 * e);
   const DG_COCK = 2.5;   // the pierce wind-up: the upper arm's angle, up and back behind his head
+  // where his shoulder is, and the arrow it would shoot along the locked aim, this frame
+  function dgArrow(g, a, L) { const [sx, sy] = dgShoulder(g); return { S: [sx, sy], E: [sx + a.dir[0] * L, sy + a.dir[1] * L], L }; }
   function dgPierceStep(g, E, dt) {
-    const a = g.atk, A = a.A, f = g.facing, T1 = A.tele, T2 = T1 + A.act;
+    const a = g.atk, A = a.A, T1 = A.tele, TL = T1 - A.lock, J0 = T1 + A.push, J1 = J0 + A.jab, T2 = T1 + A.act;
     a.t += dt;
     if (!a.f && E) a.f = E.f;
-    const R = a.f && dgRigOf(a.f);
-    if (a.t < T1 || !a.T) {   // the halo is up: he tracks the target, drawing the blade arm back with the blade kept pointed at them
-      if (R && !(a.f === pl && pl.out)) a.T = R.centre.slice();
+    const R = a.f && dgRigOf(a.f), gone = !R || (a.f === pl && pl.out) || (a.f === bot && bot.dead > 0);
+    if (a.t < TL || !a.T) {   // honing in: he tracks them, turning to face them
+      if (!gone) { a.T = R.centre.slice(); a.head = R.head.slice(); }
       if (!a.T) { g.state = 'idle'; g.gapT = 0.3; return { pose: {}, rate: 10 }; }
       g.facing = Math.sign(a.T[0] - g.x) || g.facing;
       if (!a.popped) { a.popped = true; for (let i = 0; i < 6; i++) addDrop(a.T[0] + (Math.random() - 0.5) * 30, a.T[1] - 90, (Math.random() - 0.5) * 160, -60 - Math.random() * 120, 0.8 + Math.random() * 0.6, RED); }
-      if (g.R && Math.random() < dt * 40) {   // ink gathers on the blade
+    } else if (!a.locked) {   // the aim locks: from here it goes where they were. The halo snaps tight and stays on that spot
+      a.locked = true;
+      const [sx, sy] = dgShoulder(g), dy = a.T[1] - sy, hx = Math.sqrt(Math.max(0, (A.len * 0.85) ** 2 - dy * dy));
+      a.move = g.facing * Math.max(-A.back, Math.min(A.lunge, Math.abs(a.T[0] - sx) - hx));   // steps in, or back out if they're too close for the point
+      const nx = dgClampX(g.x + a.move) - g.x, dx = a.T[0] - (sx + nx), d = Math.hypot(dx, dy) || 1;   // aimed from where the shoulder will be after the step
+      a.move = nx; a.dir = [dx / d, dy / d];
+      g.wheelTo += Math.PI / 8;
+      for (let i = 0; i < 10; i++) { const an = Math.random() * TAU; addDrop(a.T[0] + Math.cos(an) * 30, a.T[1] - 70 + Math.sin(an) * 20, Math.cos(an) * 160, Math.sin(an) * 160 - 60, 0.7 + Math.random() * 0.6, RED); }
+    }
+    // the arm aims at the end of the arrow once locked, so the full jab lines up with it exactly
+    const aimAt = a.locked ? dgArrow(g, a, A.len).E : a.T, m = dgAim(g, aimAt);
+    if (a.t < T1) {
+      // the wind-up: the upper arm swung up behind his head with the elbow high, the forearm folded over his shoulder so the blade
+      // aims at them; the body twisted and leaning away on the back leg, the free hand reaching out at them like a sight. It gets
+      // there in the first 0.45 s, then keeps coiling tighter and trembling while he hones in
+      const c = ease(Math.min(1, a.t / 0.45)), coil = ease(Math.max(0, Math.min(1, (a.t - 0.45) / (T1 - 0.45)))), tr = 0.025 * coil * Math.sin(a.t * 41);
+      if (g.R && Math.random() < dt * (25 + 40 * coil)) {   // ink gathers on the blade, more as it builds
         const [tx, ty] = dgTip(g, 'blade'), an = Math.random() * TAU, d = 40 + Math.random() * 30;
         addMote(tx + Math.cos(an) * d, ty + Math.sin(an) * d, -Math.cos(an) * d * 6, -Math.sin(an) * d * 6, 0.16, 1 + Math.random() * 0.8, 0);
       }
-      // the deepest wind-up: the upper arm swung up behind his head with the elbow high, the forearm folded over his shoulder
-      // so the blade aims at them; the body twisted and leaning away on the back leg, the other hand reaching out at them like a sight
-      const m = dgAim(g, a.T), c = ease(Math.min(1, a.t / T1));
-      return { pose: { tl: m.tl - 0.5 * c, hd: m.hd + 0.15 * c, fa1: -0.12 + (DG_COCK - g.pose.tl + 0.12) * c, fa2: -0.25 + (wrapA(m.w - DG_COCK) + 0.25) * c,
-        ba1: (m.w - g.pose.tl + 0.15) * c, ba2: -0.15 * c, hip: m.hip - 7 * c, ffx: 22 + 14 * c, bfx: -24 - 16 * c }, rate: 26 };
+      const ck = DG_COCK + 0.22 * coil;
+      return { pose: { tl: m.tl - 0.5 * c - 0.12 * coil, hd: m.hd + 0.15 * c, fa1: -0.12 + (ck - g.pose.tl + 0.12) * c + tr, fa2: -0.25 + (wrapA(m.w - ck) + 0.25) * c,
+        ba1: (m.w - g.pose.tl + 0.15) * c, ba2: -0.15 * c, hip: m.hip - 7 * c - 4 * coil, ffx: 22 + 14 * c, bfx: -24 - 16 * c - 4 * coil }, rate: 24 };
     }
-    if (!a.locked) {   // committed: the aim locks where they are now, and he works out how far to step in
-      a.locked = true;
-      const [sx, sy] = dgShoulder(g), dy = a.T[1] - sy, hx = Math.sqrt(Math.max(0, (A.reach * 0.92) ** 2 - dy * dy));
-      a.move = f * Math.max(-A.back, Math.min(A.lunge, Math.abs(a.T[0] - sx) - hx));   // steps in, or back out if they're too close for the point
-      g.wheelTo += Math.PI / 8;
-    }
-    const m = dgAim(g, a.T);   // aimed at where they were when the lunge started: it no longer tracks them
-    if (a.t < T1 + A.act * 0.4 && a.move) g.x = dgClampX(g.x + a.move / (A.act * 0.4) * dt);
-    // the stab: the forearm (and blade) stays dead on the aim line the whole way while the elbow drives over the shoulder and through,
-    // so the point goes straight in instead of swooping. Full extension at 40%, then the body follows through, weight dropping forward
-    const e = Math.min(1, (a.t - T1) / A.act), x = Math.min(1, e / 0.4), xx = x * x, fo = e > 0.4 ? ease((e - 0.4) / 0.6) : 0;
+    // the lunge. Push: the step in, the arm starting forward (the elbow coming over, the blade still on the aim line).
+    // Jab: it snaps the rest of the way to a straight arm. Then the weight settles forward over it.
+    if (a.t < J0 && a.move) g.x = dgClampX(g.x + a.move / A.push * dt);
+    const p = Math.min(1, (a.t - T1) / A.push), q = Math.max(0, Math.min(1, (a.t - J0) / A.jab)), fo = ease(Math.max(0, Math.min(1, (a.t - J1) / (T2 - J1))));
+    const x = 0.28 * p * p + 0.72 * q;   // how far the arm has come round: slow then the snap
     let wn = m.w; while (wn < DG_COCK) wn += TAU;   // the upper arm comes forward over the top
-    const uw = DG_COCK + (wn - DG_COCK) * xx;
-    if (x >= 1 && g.pose.fa1 > Math.PI) g.pose.fa1 -= TAU;   // done coming over the top: back to the plain range
-    const thrust = { tl: m.tl - 0.5 * (1 - xx) + 0.2 * fo, hd: m.hd + 0.15 * (1 - xx) + 0.08 * fo, fa1: (x >= 1 ? m.w : uw) - g.pose.tl, fa2: x >= 1 ? 0 : wrapA(m.w - uw),
-      ba1: (m.w - g.pose.tl + 0.15) * (1 - xx) + 1.4 * xx, ba2: -0.15 - 0.5 * xx, hip: m.hip - 7 * (1 - xx) - 6 * fo, ffx: 36 + 12 * x, bfx: -40 - 2 * x };
-    // the strike: any point along the blade inside them
-    if (e >= 0.15 && e <= 0.7 && !a.hit && E && E.open && g.R) {   // only while the stab is going in
-      const sh = E.shapes();
-      for (let y = 48; y <= 120 && !a.hit; y += 8) {
-        const pt = apply(g.R.fa.lo, 7.6, y);
-        if (hurtHit(sh, pt[0], pt[1], 6)) { a.hit = true; dgPierceHit(g, a, E, pt, m.w); }
+    const uw = DG_COCK + 0.22 * (1 - p) + (wn - DG_COCK - 0.22 * (1 - p)) * x, done = q >= 1;
+    if (done && g.pose.fa1 > Math.PI) g.pose.fa1 -= TAU;   // done coming over the top: back to the plain range
+    const lean = 0.5 * p + 0.15 * q;
+    const thrust = { tl: m.tl - 0.62 + lean + 0.12 * fo, hd: m.hd + 0.15 * (1 - q) + 0.06 * fo, fa1: (done ? m.w : uw) - g.pose.tl, fa2: done ? 0 : wrapA(m.w - uw),
+      ba1: (m.w - g.pose.tl + 0.15) * (1 - q) + 1.4 * q, ba2: -0.15 - 0.5 * q, hip: m.hip - 11 + 5 * p - 4 * fo, ffx: 36 + 14 * p, bfx: -40 - 4 * p };
+    // the hit: a straight arrow along the locked aim, shooting out with the jab and freezing at full extension
+    const L = A.len * q;
+    a.arrow = q > 0 ? { ...dgArrow(g, a, L), live: a.t <= J1 + A.live && !a.hit } : null;
+    if (a.arrow && a.arrow.live && E && E.open && L > 20) {
+      const sh = E.shapes(), [sx, sy] = a.arrow.S;
+      for (let d = 30; d <= L && !a.hit; d += 8) {
+        const pt = [sx + a.dir[0] * d, sy + a.dir[1] * d];
+        if (hurtHit(sh, pt[0], pt[1], A.width)) { a.hit = true; a.arrow.live = false; dgPierceHit(g, a, E, pt, m.w); }
       }
     }
     if (a.pin0 !== undefined) {   // skewered: lifted over his head, held there, then the sword slammed down in front of him
+      a.arrow = null;
       const t = a.t - a.pin0, t1 = A.lift, t2 = t1 + A.hold, t3 = t2 + A.slam, t4 = t3 + A.snap, UP = -2.95, STOP = -2.0;
       if (t < t1) {   // lift: the arm swings up overhead with them on it, standing tall
         const s = ease(t / t1), w = a.w0 + (UP - a.w0) * s;
@@ -2613,8 +2648,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (t >= t4 + 0.45) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
       return { pose: {}, rate: 4 };
     }
-    if (a.t < T2 + A.miss) return { pose: thrust, rate: 34 };   // a miss: he stays in the stab a moment
-    if (a.t >= T2 + A.miss + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
+    if (a.t < Math.max(T2, J1 + A.miss)) return { pose: thrust, rate: q > 0 && q < 1 ? 90 : 34 };   // the lunge, then on a miss he stays in the jab a moment
+    a.arrow = null;
+    if (a.t >= J1 + A.miss + A.rec) { g.state = 'idle'; g.gapT = DG.gap[0] + Math.random() * (DG.gap[1] - DG.gap[0]); }
     return { pose: {}, rate: 5 };
   }
   // the sweep: steps in to where the blade's far end will catch them, hauls the sword back over his head while tracking them, then
@@ -2657,6 +2693,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgPierceHit(g, a, E, pt, w) {
     const f = E.f, A = a.A;
     if (dgParried(f, pt)) return;
+    g.pose.fa1 = w - g.pose.tl; g.pose.fa2 = 0;   // the jab arrives straight: the arm is out along the aim, with no wind-round left in it
     f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
     if (f === pl) plRagdoll(0, 0, 0); else { startRagdoll(bot, 0, 0, 0); bot.combo = 0; }
     g.pin = { f }; a.pin0 = a.t; a.w0 = w; a.tl0 = g.pose.tl;
@@ -3039,11 +3076,13 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // pops in, hangs there while he cocks the blade, and is gone as the lunge goes in
   function drawDGCrown() {
     const g = dg; if (!g || g.state !== 'atk' || !g.atk.A.crown) return;
-    const a = g.atk, A = a.A; if (!a.f || a.t > A.tele + 0.07) return;
-    const R = dgRigOf(a.f); if (!R) return;
-    const m = R.head, u = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));   // head units -> px
-    const k = Math.min(1, a.t / 0.07), sc = 1.35 - 0.35 * (1 - (1 - k) * (1 - k));
-    const alpha = a.t < A.tele ? Math.min(1, a.t / 0.04) : 1 - (a.t - A.tele) / 0.07;
+    const a = g.atk, A = a.A, TL = A.tele - A.lock, J0 = A.tele + A.push; if (!a.head || a.t > J0 + 0.08) return;
+    // it follows their head while he hones in, drawing tighter; at the lock it snaps in and stays on the spot they were;
+    // it's gone as the jab snaps out
+    const m = a.head, u = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));   // head units -> px
+    const pop = Math.min(1, a.t / 0.07), hone = Math.min(1, a.t / TL), lk = a.locked ? Math.min(1, (a.t - TL) / 0.12) : 0;
+    const sc = (1.55 - 0.4 * hone * hone - 0.15 * (1 - (1 - pop) * (1 - pop))) * (1 - 0.14 * Math.sin(Math.PI * lk)) - 0.06 * lk;
+    const alpha = (a.t < J0 ? Math.min(1, a.t / 0.04) : 1 - (a.t - J0) / 0.08) * (0.75 + 0.25 * Math.max(hone, lk));
     const cx = 1, cy = -22, rx = 31 * sc, ry = 31 * sc, gap = 0.7, a0 = Math.PI / 2 + gap, a1 = Math.PI / 2 - gap + TAU;
     const P = (an, d = 0) => apply(m, cx + (rx + d) * Math.cos(an), cy + (ry + d) * Math.sin(an));
     const arc = []; for (let i = 0; i <= 28; i++) arc.push(P(a0 + (a1 - a0) * i / 28));

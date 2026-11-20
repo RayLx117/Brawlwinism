@@ -7,25 +7,26 @@ const GAME = 'file://' + path.resolve(__dirname, '../index.html'); const OUT = p
 const CASES = [   // [name, player x offset in front of him, player height above the floor]
   ['near', 150, 0], ['far', 400, 0], ['high', 220, 300], ['overhead', 70, 380], ['low-air', 330, 120], ['miss', 300, 0],
 ];
-const SHOTS = [0.15, 0.3, 0.34, 0.38, 0.42, 0.55, 1.1, 1.4, 1.44, 1.48, 1.54, 1.62, 1.72, 1.9, 2.2, 2.6];
+const BOXES = process.env.BOXES !== '0';   // BOXES=0 renders without the hitbox view
+const SHOTS = [0.2, 0.6, 0.98, 1.15, 1.3, 1.45, 1.58, 1.62, 1.66, 1.8, 2.3, 2.9, 3.2, 3.3, 3.5, 3.9];
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 820 }, deviceScaleFactor: 1 });
   const errs = []; p.on('pageerror', e => errs.push(e.stack)); await p.goto(GAME); await p.waitForTimeout(600);
   const box = await p.locator('canvas').boundingBox(), k = box.width / 1280;
   for (const [name, off, h] of CASES) {
     await p.evaluate(() => { __startPractice(); __cards.LOADOUT.pl.companion = null; __cards.LOADOUT.bot.companion = 'divineGeneral'; __resetRound(); __step(1 / 60, 200); });
-    await p.evaluate(([off, h, name]) => {
+    await p.evaluate(([off, h, name, BOXES_]) => {
       const g = __dg(); Object.assign(g, { x: 560, y: 540, state: 'idle', gapT: 999, facing: 1, rot: 0 });
       Object.assign(__fighter, { x: 560 + off, y: 540 - h, vx: 0, vy: 0, rag: null, onGround: h === 0, damage: 40 });
-      __step(1 / 60, 1); __dgStart('pierce'); window.__pt = { hold: [560 + off, 540 - h], t: 0, hitT: null, miss: name === 'miss' };
-    }, [off, h, name]);
+      __step(1 / 60, 1); if (!window.__boxesOn && BOXES_) { window.__boxesOn = 1; window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' })); window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyH' })); __step(1 / 60, 1); } __dgStart('pierce'); window.__pt = { hold: [560 + off, 540 - h], t: 0, hitT: null, miss: name === 'miss' };
+    }, [off, h, name, BOXES]);
     const frames = [];
     for (const ts of SHOTS) {
       const r = await p.evaluate((ts) => {
         const P = window.__pt, g = __dg();
         while (P.t < ts - 1e-6) {
           if (P.hitT === null && !__fighter.rag) Object.assign(__fighter, { x: P.hold[0], y: P.hold[1], vx: 0, vy: 0 });
-          if (P.miss && P.t >= 0.3 && !P.moved) { P.moved = true; P.hold[0] -= 520; }   // steps away just as the stab starts
+          if (P.miss && P.t >= 1.1 && !P.moved) { P.moved = true; P.hold[0] -= 520; }   // steps away just as the stab starts
           __step(1 / 60, 1); P.t += 1 / 60;
           if (P.hitT === null && g && g.pin) P.hitT = +P.t.toFixed(3);
         }
