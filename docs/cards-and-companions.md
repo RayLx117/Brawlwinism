@@ -43,7 +43,10 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 - **Jumping and the somersault:** one hand, the arm as the jump has it, the blade out forward and a little up. It tumbles with the flip.
 - **Attacking, parrying, stunned or wall-sliding:** the blade lines up with the forearm, so the moves strike along it. The punch swoosh follows the fist, not the tip.
 
-**The sword's ink coat (`SWORD_COAT`):** a tight goo layer wraps the held sword. A crisp edge sits right on it, and a wet layer eases after the blade (its angle and position) but is capped a few degrees and px behind, so on a fast swing it only thickens the trailing edge. Both are painted opaque off-screen and laid on together at 75%, against clutter, with a slight wobble. During attacks, when the blade moves faster than 520 px/s, it sheds small ink flecks from its outer half (at most 3 a frame), carried a little along the swing.
+**The held sword's outline and swing afterimages (`SWORD_FX`):**
+- **Outline:** a solid ink outline (1.6 px) round the sword's silhouette, with no lag. It replaced a lagging goo coat that Ray had removed.
+- **Afterimages:** in attacks only, the swinging blade leaves an afterimage each frame (once the tip has moved 6 px). Each one is the whole sword at 50% opacity, fading to nothing in 0.05 s, so a swing reads as a quick fan of blades.
+- **Ink flecks:** the blade still sheds a few when it moves fast in an attack (over 520 px/s, at most 3 a frame).
 
 **Holding a weapon:** the fighter holds it in the lead hand (`drawSword`). Hits from that arm reach out to the blade's tip. **Every** hit they land does the weapon's damage, worked through its modifiers (`wpnHit`), on the bot and on the Divine General (who takes his usual 60%). Ray will design proper weapon movesets later; this is the test setup.
 
