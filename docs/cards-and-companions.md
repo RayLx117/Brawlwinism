@@ -135,16 +135,7 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 
 **HUD entrance:** when he lands, his portrait (bust and damage %) flies in from the outside edge of the screen into his owner's slot and knocks the owner's portrait out of it. The owner's portrait spins up and inward with an ink splash, then falls off the screen. While he's in play, his portrait sits in that slot. When he falls, the owner's portrait drops back into its slot. Numbers are in `DGH`. The HUD doesn't shake with the screen, and his portrait doesn't jolt when he's hit; only its number swells. Ray wanted his border and icon fixed.
 
-**Effects:** the old sword-tip trail was removed. In its place, his blade swings (Cleave, Heaven Strike, Sweep, but not the Pierce, which has its own burst) paint a **swing trail** after Ray's reference sheet of ink swooshes (`DG_SWING`, `swingStroke`):
-- It's a dry-brush crescent swept behind the blade over its outer span.
-- It's heaviest and loaded at the blade's end: it tapers in to a point, swells, and has a solid core.
-- It's made of about 30 overlapping bristles that run out at different points (the outer ones furthest, with the odd skip), so the body stays streaky and the tail splinters.
-- Ink flicks off the blade's end when it stops.
-- Afterwards the trail dries back from the tail and fades over 0.34 s.
-
-It records only while the blade moves through the strike. It doesn't record the wind-up hold or the recovery.
-
-The backhand still leaves a swoosh along the fist.
+**Effects:** Ray had the sword-tip trail removed from his sword attacks and will supply new sword effects. The backhand still leaves a swoosh along the fist.
 
 **AI:** He plays himself. He walks toward you in heavy steps that shake the screen a little, and turns round if you stay behind him for 0.35 s. Between attacks he pauses 0.35 to 0.75 s. He picks his next attack at random from the ones that work from where you are (`dgOptions`), never the one he just did. While his list is short, he repeats rather than stalls if the last one is the only option. Ray plans more attacks so the no-repeat rule matters more.
 

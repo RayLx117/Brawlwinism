@@ -39,7 +39,6 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node dg-quake.js` | His quake stomp on the player and on the bot: prints damage, stun, how high they were popped, and that they weren't ragdolled; frame sheets `out/quake-player.png` and `out/quake-bot.png`. |
 | `node dg-hud-entrance.js` | His HUD entrance for both owners: his portrait flies in and knocks the owner's out (`out/dg-hud-entrance-*.png`). |
 | `node dg-flash-shot.js` | Close-up frames of the pierce's flash jab and its sound-barrier burst (`out/flash.png`). `node dg-pierce.js` covers the hits from every angle; `BOXES=0` renders it without the hitbox view. |
-| `node dg-swing-shot.js` | His blade swing trail on the cleave, heaven strike and sweep, frame by frame (`out/dg-swing.png`). |
 | `node dg-rounds.js` | Four Divine General rounds back to back: checks his portrait's number stays normal size after each respawn, and that nothing from the last round lingers (`out/dg-rounds.png`). |
 | `node weapon-rolls.js` | Rolls 2000 weapons of each rarity: prints the damage spread and modifier slots, and checks every roll is in range. |
 | `node weapon-mods.js` | Every weapon modifier in a fight (on the bot, and a set of them against the Divine General); checks the stacking / curse / bless maths, Anchor, and page errors. |
