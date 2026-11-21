@@ -41,7 +41,7 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 - **Standing or walking:** both hands on the grip in front, the blade angled up and out toward where you face (tilted back 10° at Ray's request), swaying a little with the stance.
 - **Sprinting, ground-dashing or sliding:** one hand, the arm swept back and the blade trailing behind with its tip just off the ground.
 - **Jumping and the somersault:** one hand, the arm as the jump has it, the blade out forward and a little up. It tumbles with the flip.
-- **Parrying, or stuck after a missed parry:** a loaded guard, like a deep wound-back punch (Ray's design for 2D). The upper arm cocks back behind the body. The forearm stays folded forward, so the fist faces front by the shoulder with the other hand on the grip. The blade lies almost flat across the top of the torso, pointing forward about 7° down. The parry's duck and shake are kept. Numbers in `SWORD_HOLD.parry`.
+- **Parrying, or stuck after a missed parry:** like the idle stance's two-handed hold, hands a little higher, with the blade swung back to rest diagonally up over the shoulder. There's a quick shake as it comes up, and the parry's knee dip, flash and sparks are kept. Numbers in `SWORD_HOLD.parry`. Ray tried a hanging guard and a wound-back guard before this.
 - **Attacking, stunned or wall-sliding:** the blade lines up with the forearm, so the moves strike along it. The punch swoosh follows the fist, not the tip.
 
 **The held sword's outline and swing afterimages (`SWORD_FX`):**
