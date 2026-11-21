@@ -275,7 +275,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   //  - in the air (jumps, the somersault): one hand, arm as it is, the sword sitting naturally across the fist.
   //  - attacking: the blade lines up with the forearm, so the moves strike along it as before.
   const SWORD_HOLD = { scale: 1.7, guard: { fa1: -0.55, fa2: -1.05, ba1: -0.42, ba2: -1.0, abs: -2.22 }, trail: { fa1: 0.95, fa2: -0.05, abs: 1.12 }, air: -1.8,
-    parry: { lead: [0, -1.2], off: [-1.76, -2.12], abs: -2.75, turnX: 1, turnY: 1 } };   // parry, a supported block: the lead hand holds the blade upright in front (lead = its upper arm / forearm angles in the body frame; abs = the blade's angle, ±π = straight up), and the off arm's forearm braces across the back of the blade's middle (off). turnX / turnY: no foreshortening
+    parry: { lead: [0.1, -1.0], off: [-1.49, -1.94], abs: -2.75, turnX: 1, turnY: 1 } };   // parry, a supported block: the lead hand holds the blade upright in front (lead = its upper arm / forearm angles in the body frame; abs = the blade's angle, ±π = straight up), and the off arm's forearm braces across the back of the blade's middle (off). turnX / turnY: no foreshortening
   function swordHold(f, tg) {
     const S_ = SWORD_HOLD, P_ = f.punch, nt = { ...tg };
     f.swordTurnTo = 0;
