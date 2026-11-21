@@ -275,13 +275,13 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   //  - in the air (jumps, the somersault): one hand, arm as it is, the sword sitting naturally across the fist.
   //  - attacking: the blade lines up with the forearm, so the moves strike along it as before.
   const SWORD_HOLD = { scale: 1.7, guard: { fa1: -0.55, fa2: -1.05, ba1: -0.42, ba2: -1.0, abs: -2.22 }, trail: { fa1: 0.95, fa2: -0.05, abs: 1.12 }, air: -1.8,
-    parry: { fa1: -0.5, fa2: -1.35, ba1: -0.38, ba2: -1.3, abs: 2.4, turnX: 1, turnY: 1 } };   // parry: the idle stance's two-handed hold, hands a little higher, with the blade swung back to rest diagonally over the shoulder (abs: body frame, + = back, 2.4 = back and up). turnX / turnY: no foreshortening
+    parry: { lead: [-0.35, -1.3], off: [-2.39, -1.68], abs: -3.1, turnX: 1, turnY: 1 } };   // parry, a supported block: the lead hand holds the blade upright in front (lead = its upper arm / forearm angles in the body frame; abs = the blade's angle, ±π = straight up), and the off arm's forearm braces across the back of the blade's middle (off). turnX / turnY: no foreshortening
   function swordHold(f, tg) {
     const S_ = SWORD_HOLD, P_ = f.punch, nt = { ...tg };
     f.swordTurnTo = 0;
     if (f.parryT > 0 || f.lockT > 0) {   // the sword parry: hilt to the cheek in both hands, blade turned down across the body
       const Pp = S_.parry, jit = f.parryT > 0 ? 0.05 * Math.exp(-(PARRY_WIN - f.parryT) / 0.12) * Math.sin((PARRY_WIN - f.parryT) * 95) : 0;   // a quick shake as it comes up
-      Object.assign(nt, { fa1: Pp.fa1 + jit, fa2: Pp.fa2, ba1: Pp.ba1 + jit, ba2: Pp.ba2 });
+      Object.assign(nt, { fa1: Pp.lead[0] - tg.tl + jit, fa2: Pp.lead[1] - Pp.lead[0], ba1: Pp.off[0] - tg.tl + jit, ba2: Pp.off[1] - Pp.off[0] });   // angles given in the body frame, made relative to the torso / the upper arm
       f.swordAim = { abs: Pp.abs, rate: 40 }; f.swordTurnTo = 1; return nt;
     }
     if (P_.on || f.staggerT > 0 || f.wallSlide) { f.swordAim = { rel: 0, rate: 30 }; return tg; }   // its own pose: the blade along the forearm
@@ -547,7 +547,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   let R0 = null;      // current rig, rebuilt every update
   window.__fighter = pl; // handy for poking at state from the console
   window.__tick = (dt) => update(dt);
-  window.__shake = (t) => { shakeT = t; };   // test hook: start a screen shake   // test hook: advance without drawing
+  window.__shake = (t) => { shakeT = t; };   // test hook: start a screen shake
+  window.__rigPose = (pose) => rig({ ...pl, pose: { ...pl.pose, ...pose } });   // test hook: the player's rig in a given pose
+  window.__swordAt = (R, abs, tl, fa1, fa2, u) => apply(swordMat(R.fa.lo, abs - (tl + fa1 + fa2), SWORD_HOLD.scale), SWORD.tip[0] * u, SWORD.guard + (SWORD.tip[1] - SWORD.guard) * u);   // test hook: a point u of the way up the blade   // test hook: advance without drawing
   window.__limbTips = () => R0 && ['fa', 'ba', 'fl', 'bl'].map(L => limbChain(R0, L)[0].map(Math.round));   // test hook: fist / toe positions
   window.__step = (dt, n) => { pl.paused = true; game.mode = 'practice'; for (let i = 0; i < n; i++) update(dt); draw(); };
 
