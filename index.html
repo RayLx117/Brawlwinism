@@ -275,7 +275,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   //  - in the air (jumps, the somersault): one hand, arm as it is, the sword sitting naturally across the fist.
   //  - attacking: the blade lines up with the forearm, so the moves strike along it as before.
   const SWORD_HOLD = { scale: 1.7, guard: { fa1: -0.55, fa2: -1.05, ba1: -0.42, ba2: -1.0, abs: -2.22 }, trail: { fa1: 0.95, fa2: -0.05, abs: 1.12 }, air: -1.8,
-    parry: { up: -2.55, fore: 1.15, back: 0.1, abs: -1.45, turnX: 1, turnY: 1 } };   // parry, a loaded guard: the arms wound back, elbows raised and pointing forward (up = the upper arm's angle in the body frame), forearms folded right back so the hands sit behind the head (fore = the forearm's angle), and the blade laid almost flat across the top of the torso, pointing forward about 7° down (abs). turnX / turnY: no foreshortening
+    parry: { up: 1.95, fore: -1.45, back: 0.12, abs: -1.45, turnX: 1, turnY: 1 } };   // parry, a loaded guard like a deep wound-back punch: the upper arm cocked back behind (up = its angle in the body frame, + = back), the forearm folded forward so the fist stays front-facing by the shoulder (fore), and the blade laid almost flat across the top of the torso pointing forward about 7° down (abs). turnX / turnY: no foreshortening
   function swordHold(f, tg) {
     const S_ = SWORD_HOLD, P_ = f.punch, nt = { ...tg };
     f.swordTurnTo = 0;
