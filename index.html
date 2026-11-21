@@ -2001,7 +2001,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
   function drawFighter(r, f = pl, st = stain, hs = headStain, ink = INK) {
     const P_ = f.punch, A = P_.on ? P_.A : null;
-    const crossFront = (A && A.limb === 'ba' && P_.t > A.wind && P_.t < A.end - 0.05) || f.parryT > 0 || f.lockT > 0;   // parry X: both arms in front
+    const crossFront = (A && A.limb === 'ba' && P_.t > A.wind && P_.t < A.end - 0.05) || (!f.wpn && (f.parryT > 0 || f.lockT > 0));   // parry X: both arms in front (with a sword the off arm stays behind the torso)
     const kickFront = A && A.limb === 'bl' && P_.t > A.wind * 0.4 && P_.t < A.end - 0.12;   // rear-leg kick swings round in front of the body
     if (!crossFront) {
       drawPart(PARTS.upperArm, r.ba.up, true, st, ink);
