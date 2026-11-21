@@ -281,6 +281,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     f.swordTurnTo = 0;
     if (f.parryT > 0 || f.lockT > 0) {   // the sword parry: hilt to the cheek in both hands, blade turned down across the body
       const Pp = S_.parry, jit = f.parryT > 0 ? 0.05 * Math.exp(-(PARRY_WIN - f.parryT) / 0.12) * Math.sin((PARRY_WIN - f.parryT) * 95) : 0;   // a quick shake as it comes up
+      nt.hd = 0.07 - nt.tl;   // head kept upright (no duck)
       Object.assign(nt, { fa1: Pp.lead[0] - tg.tl + jit, fa2: Pp.lead[1] - Pp.lead[0], ba1: Pp.off[0] - tg.tl + jit, ba2: Pp.off[1] - Pp.off[0] });   // angles given in the body frame, made relative to the torso / the upper arm
       f.swordAim = { abs: Pp.abs, rate: 40 }; f.swordTurnTo = 1; return nt;
     }
@@ -480,7 +481,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function parrySparks(f, R, dt, burst) {
     if (!R || !burst) return;
     const [ax, ay] = apply(R.fa.lo, 0, 9), [bx, by] = apply(R.ba.lo, 0, 9);
-    const cx = (ax + bx) / 2, cy = (ay + by) / 2;
+    let cx = (ax + bx) / 2, cy = (ay + by) / 2;
+    if (f.wpn) [cx, cy] = apply(R.ba.lo, 0, 6);   // with a sword: where the off forearm braces against the blade
     glints.push({ x: cx, y: cy, t: 0 });
     for (let i = 0; i < 6; i++) {
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4 + (f.facing > 0 ? 0.3 : -0.3), sp = 220 + Math.random() * 200;
