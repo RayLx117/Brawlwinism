@@ -2473,12 +2473,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
   }
   // ---- weapon swing trails (Ray's design): invisible points along the centre of the weapon's damaging part (the sword's blade,
-  // guard to tip) each leave a thin, fading ink line along their path while an attack is under way, like the shading hairlines on
+  // guard to tip) each leave a thin, fading ink line along their path while the weapon's hitbox is live, like the shading hairlines on
   // the bodies. Fast swings are filled in between frames so the arcs stay smooth; a point that barely moves draws nothing, so
   // slow wind-ups leave no streaks. n = points, from = where along the blade they start (0 guard, 1 tip), life = how long a line
   // lasts (s): each point gets its own, picked fresh in this range every swing, so the lines trail different lengths; width (px),
   // alpha, speed = the point's speed (px/s) where its line starts to show and where it's at full strength, sub = steps a frame
-  const SWING_TRAIL = { n: 21, from: 0.18, life: [0.04, 0.09], width: 0.9, alpha: 0.42, speed: [700, 1400], sub: 3 };
+  const SWING_TRAIL = { n: 21, from: 0.18, life: [0.012, 0.09], width: 0.9, alpha: 0.42, speed: [700, 1400], sub: 3 };
   // the sword blade's centre line, guard to tip (sword space, before the blade's stretch): straight, then curving out to the tip
   const swordCentre = (u) => { const y = SWORD.guard + (SWORD.tip[1] - SWORD.guard) * u, c = Math.max(0, (y - 42) / (SWORD.tip[1] - 42)); return [1.8 + (SWORD.tip[0] - 1.8) * c * c, y]; };
   function weaponTrailPts(f, R, w, fs, tw) {   // the trail points in the world (each weapon gives its own; the sword's run along its blade)
@@ -2489,9 +2489,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function swingTrailStep(f, R, dt) {
     const C = SWING_TRAIL, T_ = f.trails || (f.trails = { lines: [], prev: null, life: [] }), now = f.time || 0;
     for (const L of T_.lines) while (L.length && (!L[0] || now - L[0].t > L[0].life)) L.shift();
-    if (!f.wpn || !f.punch.on || !R) { T_.prev = null; return; }
+    const Pn = f.punch, A = Pn.A;
+    if (!f.wpn || !Pn.on || !R || A.limb !== 'fa') { T_.prev = null; T_.live = false; return; }
     const cur = { pose: { ...f.pose }, x: f.x, y: f.y, w: f.swordW || 0, fs: f.swordFS || 1 }, P = T_.prev, tw = f.swordTwist ?? 1, samples = [];
-    if (!P) {   // a new attack: its lines don't join on to the last one's, and every point gets a fresh life (a different length of line)
+    T_.prev = cur;   // (kept through the whole attack, so the first live frame draws the arc it swept, just as the hit test checks it)
+    const live = Pn.t >= A.wind && Pn.t < A.wind + A.act;   // only while the weapon's hitbox is live
+    if (!live) { T_.live = false; return; }
+    if (!T_.live) {   // a new swing: its lines don't join on to the last one's, and every point gets a fresh life (a different length of line)
+      T_.live = true;
       for (const L of T_.lines) if (L.length) L.push(null);
       T_.life = Array.from({ length: C.n }, () => C.life[0] + Math.random() * (C.life[1] - C.life[0]));
     }
@@ -2501,7 +2506,6 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     samples.push([now, weaponTrailPts(f, R, cur.w, cur.fs, tw)]);
     for (const [t, pts] of samples) pts.forEach((q, i) => (T_.lines[i] || (T_.lines[i] = [])).push({ x: q[0], y: q[1], t, life: T_.life[i] }));
-    T_.prev = cur;
   }
   function drawSwingTrails(f) {
     const T_ = f.trails; if (!T_) return; const C = SWING_TRAIL, now = f.time || 0;

@@ -1,5 +1,5 @@
-// Weapon swing trails: close-ups at the moment of each sword swing (rising slash, overhead chop, sword spin) so the thin trail
-// lines can be judged. Sheet: out/swing-trail.png
+// Weapon swing trails (only while the weapon's hitbox is live): close-ups at the moment of each sword swing (rising slash,
+// overhead chop, sword spin) so the thin trail lines can be judged. Sheet: out/swing-trail.png
 const { chromium } = require('playwright'); const path = require('path'), fs = require('fs'), { execSync } = require('child_process');
 const OUT = path.join(__dirname, 'out') + '/'; fs.mkdirSync(OUT, { recursive: true });
 (async () => { const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 4 }); const errs = []; p.on('pageerror', e => errs.push(e.message));
