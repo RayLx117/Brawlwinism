@@ -1386,7 +1386,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // stock = where the stock is cut short so it ends at the shoulder (rifle units behind the grip); mag = where the near fist holds it
     // (the mag under the scope, rifle units); flash = the muzzle flash's life (s)
     gripDown: 3, fore: [25, 6.5], reach: 0.97, stock: -9, mag: [13.5, 6], flash: 0.09,
-    kneel: { fx: 10, fy: 16, bl1: 0.12, bl2: 1.5, bf: 1.35, tl: 0.18 } };   // on one knee (on the ground): the front foot's place from the hip, the back thigh / shin / foot angles, the body's lean
+    kneel: { fx: 10, fy: 12, bl1: 0.1, bl2: 1.47, bf: 2.9, tl: 0.18 } };   // on one knee (on the ground): the front foot's place from the hip, the back thigh / shin / foot angles (knee on the floor, shin flat behind, foot laid back along the floor), the body's lean
   const NOSCOPE_BACK = 2.55;   // where the whip starts: the lead arm's angle against the torso, back behind the shoulder
   let noItemCd = false;   // practice switch (pause menu): card cooldowns off (No Scope, and every future ability or card)
   const itemCd = (v) => noItemCd ? 0 : v;   // every card cooldown goes through this, so new cards must set theirs with it
