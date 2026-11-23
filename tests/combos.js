@@ -5,13 +5,13 @@ await p.evaluate(() => {
   const k = (c, d) => window.dispatchEvent(new KeyboardEvent(d ? 'keydown' : 'keyup', { code: c }));
   window.K = k;
   window.reset = (px=790, air=null, dmg=0) => { const f=__fighter, bo=__bot; __step(1/60,1);
-    Object.assign(bo,{x:860,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:dmg,dead:0,combo:0,label:'',move:'',moveT:0,parryT:0});
+    Object.assign(bo,{x:860,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:dmg,dead:0,combo:0,label:'',moveLab:'',moveLabT:0,parryT:0});
     Object.assign(f,{x:px,y:air??540,vx:0,vy:0,onGround:air==null,facing:1,dashT:0,slideT:0,crouchK:0,staggerT:0,lockT:0,landT:0,airJumps:1,airDashes:1,airDashCd:0,fastFall:false});
     f.punch.on=false; f.punch.next=0; f.punch.lastEnd=-9; for (const c of ['KeyA','KeyD','KeyS','KeyW','KeyJ','ShiftLeft','Space']) k(c,0); __step(1/60,1); };
   // script: list of [frame, key, down]; runs N frames, logs hits
   window.run = (script, N) => { const ev=[]; let last=0; const bo=__bot;
     for (let i=0;i<N;i++){ for (const [f,c,d] of script) if (f===i) K(c,d); __step(1/60,1);
-      if (bo.moveT>1.38 && bo.moveT !== last) { ev.push(i+':'+bo.move+(bo.label?' ['+bo.label+']':'')+(bo.rag?' RAG':'')+' bot y'+(bo.y|0)); } last = bo.moveT; }
+      if (bo.moveLabT>1.38 && bo.moveLabT !== last) { ev.push(i+':'+bo.moveLab+(bo.label?' ['+bo.label+']':'')+(bo.rag?' RAG':'')+' bot y'+(bo.y|0)); } last = bo.moveLabT; }
     return ev.join(' | ') + '  || pl y'+(__fighter.y|0)+' x'+(__fighter.x|0)+' bot x'+(__bot.x|0); };
 });
 const T = {

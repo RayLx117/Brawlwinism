@@ -5,7 +5,7 @@ const box = await p.locator('canvas').boundingBox(); const sx = box.width/1280; 
 await p.evaluate(() => {
   const k = (c, d) => window.dispatchEvent(new KeyboardEvent(d ? 'keydown' : 'keyup', { code: c })); window.K = k;
   window.reset = (px=600, air=null) => { const f=__fighter, bo=__bot; for (const c of ['KeyA','KeyD','KeyS','KeyW','KeyJ','ShiftLeft','Space']) k(c,0); __step(1/60,30);
-    Object.assign(bo,{x:1150,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:0,dead:0,combo:0,label:'',move:'',moveT:0,parryT:0,labelT:0});
+    Object.assign(bo,{x:1150,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:0,dead:0,combo:0,label:'',moveLab:'',moveLabT:0,parryT:0,labelT:0});
     Object.assign(f,{x:px,y:air??540,vx:0,vy:0,onGround:air==null,facing:1,dashT:0,slideT:0,crouchK:0,staggerT:0,lockT:0,landT:0,airJumps:1,airDashes:1,airDashCd:0,fastFall:false,moveT:0});
     f.punch.on=false; f.punch.next=0; f.punch.lastEnd=-9; __step(1/60,1); };
   window.str = (n) => { K('KeyJ',1);__step(1/60,1);K('KeyJ',0); __step(1/60,n); };

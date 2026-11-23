@@ -16,7 +16,7 @@ const { chromium } = require('playwright'); const path = require('path');
       if (i % 3 === 0) { ev('keydown', 'KeyJ'); ev('keyup', 'KeyJ'); }
       const before = __bot.stunT, d0 = __bot.damage;
       __tick(1 / 60); t += 1 / 60;
-      if (__bot.damage > d0) { hits.push({ t: +t.toFixed(2), move: __bot.move, stunLeft: +before.toFixed(2), combo: __bot.combo, botY: __bot.y | 0 }); }
+      if (__bot.damage > d0) { hits.push({ t: +t.toFixed(2), move: __bot.moveLab, stunLeft: +before.toFixed(2), combo: __bot.combo, botY: __bot.y | 0 }); }
       if (__fighter.onGround && i > 30) { ev('keydown', 'Space'); __tick(1 / 60); ev('keyup', 'Space'); }
     }
     ev('keyup', 'KeyW'); return hits;

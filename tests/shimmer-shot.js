@@ -5,7 +5,7 @@ const box = await p.locator('canvas').boundingBox(); const sx = box.width/1280; 
 await p.evaluate(() => {
   const K = (c, d) => window.dispatchEvent(new KeyboardEvent(d ? 'keydown' : 'keyup', { code: c })); window.K = K;
   for (const c of ['KeyA','KeyD','KeyS','KeyW','KeyJ','ShiftLeft','Space']) K(c,0); __step(1/60,30);
-  Object.assign(__bot,{x:860,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:40,dead:0,combo:0,label:'',move:'',moveT:0,parryT:0,labelT:0});
+  Object.assign(__bot,{x:860,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:40,dead:0,combo:0,label:'',moveLab:'',moveLabT:0,parryT:0,labelT:0});
   Object.assign(__fighter,{x:800,y:540,vx:0,vy:0,onGround:true,facing:1});
   __fighter.punch.on=false; __fighter.punch.next=0; __fighter.punch.lastEnd=-9; __step(1/60,1);
   window.I = 0;

@@ -6,7 +6,7 @@ const res = await p.evaluate(() => {
   const out = [];
   for (const [dmg, gap] of [[0, 60], [70, 60], [140, 60], [0, 30], [0, 95], [0, 120], [0, 140], [0, 160]]) {
     for (const c of ['KeyA','KeyD','KeyS','KeyW','KeyJ','ShiftLeft','Space']) K(c,0); __tick(1/60); __tick(1/60);
-    Object.assign(__bot,{x:800 + gap,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:dmg,dead:0,combo:0,label:'',move:'',moveT:0,parryT:0});
+    Object.assign(__bot,{x:800 + gap,y:540,vx:0,vy:0,rag:null,onGround:true,stunT:0,hurtT:0,damage:dmg,dead:0,combo:0,label:'',moveLab:'',moveLabT:0,parryT:0});
     Object.assign(__fighter,{x:800,y:540,vx:0,vy:0,onGround:true,facing:1,airJumps:1,landT:0});
     __fighter.punch.on=false; __fighter.punch.next=gap === 60 ? 0 : 2; __fighter.punch.lastEnd=__fighter.time; __tick(1/60);
     let hitAt = -1, landAt = -1, upAt = -1, x0 = 0, xLand = 0, peak = 540, died = false, plFree = -1, hitY = 0;
@@ -15,7 +15,7 @@ const res = await p.evaluate(() => {
       else { if (i === 0) { K('KeyS', 1); K('KeyJ', 1); } if (i === 1) K('KeyJ', 0); }
       __tick(1/60);
       const bo = __bot;
-      if (hitAt < 0 && bo.move === 'spin kick') { hitAt = i; x0 = bo.x; hitY = Math.round(window.__hitPt[1]); K('KeyS', 0); }
+      if (hitAt < 0 && bo.moveLab === 'spin kick') { hitAt = i; x0 = bo.x; hitY = Math.round(window.__hitPt[1]); K('KeyS', 0); }
       if (hitAt >= 0) { peak = Math.min(peak, bo.y); if (landAt < 0 && bo.rag && bo.rag.phase === 'ground') { landAt = i; xLand = bo.x; } if (upAt < 0 && !bo.rag) upAt = i; if (plFree < 0 && !__fighter.punch.on) plFree = i; }
       if (bo.dead > 0) died = true;
     }

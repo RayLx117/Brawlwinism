@@ -316,6 +316,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const FALL = { tl: 0.1, hd: -0.04, fa1: -1.05, fa2: -1.45, ba1: 0.05, ba2: -1.9, fl1: -0.55, fl2: 0.45, bl1: 0.35, bl2: 0.55, ff: 0.2, bf: 0.3, dx: 0, sp: 0 };
 
   // ---------------------------------------------------------------- player
+  const KNOCK_FRICTION = 1300;   // px/s² sliding to a stop when knocked about on the floor
   const RUN = 330, ACC_G = 2600, ACC_A = 1500, FRICTION = 2900, GRAV = 2000, JUMP_V = 885, MAX_FALL = 1250, FAST_FALL = 1400;
   // wall slide: starts slow, speeds up the longer you're off the ground (time on the wall adds up until you land)
   // wall jump: hold toward the wall to jump up it, anything else kicks off it.
@@ -427,7 +428,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         // follow-through: over the head, a touch past upright
         { t: 0.33, tl: -0.22, arm: [-2.85, 0.82], blade: -3.4, stop: true },
       ],
-      pose(ph, tg, t, pt) { return swordKeyPose(this, tg, pt); } },
+      pose(ph, tg, t, pt, f) { return swordKeyPose(f, this, tg, pt); } },
     swordOver: { name: 'overhead slash', limb: 'fa', wind: 0.5, act: 0.09, hold: 0.1, link: 9, end: 0.92, lunge: 190, lungeT: 0.14, lungeAt: 0.45, stun: 0.5, dmg: 2.2, damage: 6, kb: 560, pop: -70, ragdoll: true, tele: true, spin: -8,
       twoHand: true, front: true, sweep: true, bladeDir: -1, recRate: 10,
       keys: [
@@ -443,7 +444,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         { t: 0.55, tl: 0.62, hd: -0.36, dx: 13, fl1: -0.9, fl2: 1.1, bl1: 0.9, bl2: 0.18, ff: 0, bf: 0.6, arm: [4.8, 0.95], blade: 5.05 },
         { t: 0.68, arm: [4.88, 0.92], blade: 5.12, stop: true },
       ],
-      pose(ph, tg, t, pt) { return swordKeyPose(this, tg, pt); } },
+      pose(ph, tg, t, pt, f) { return swordKeyPose(f, this, tg, pt); } },
     // sword neutral air: a one-handed twirl. The lead hand stays in close in front of the chest and the sword spins one full turn
     // round it, top going forward, after a small cock back. Hits all round you (above, in front, behind, below) and knocks them
     // straight away from you, whichever side they're on (radial), with no ragdoll. Short range: the spin is centred on you.
@@ -458,7 +459,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         { t: 0.27, tl: 0.12, arm: [-1.1, 0.48], spin: 5.45 },
         { t: 0.34, arm: [-1.2, 0.5], spin: TAU + 0.15, stop: true },
       ],
-      pose(ph, tg, t, pt) { const r = swordKeyPose(this, tg, pt); if (r > 100) { tg.ba1 = 1.05 - tg.tl; tg.ba2 = -0.45; } return r; } },   // the free arm out behind for balance
+      pose(ph, tg, t, pt, f) { const r = swordKeyPose(f, this, tg, pt); if (r > 100) { tg.ba1 = 1.05 - tg.tl; tg.ba2 = -0.45; } return r; } },   // the free arm out behind for balance
     crouchPoke: { name: 'low kick', limb: 'fl', r: 7, wind: 0.06, act: 0.07, link: 0.22, end: 0.34, lunge: 120, lungeT: 0.08, stun: 0.4, dmg: 0.9, damage: 2, kb: 100, pop: 0, jc: true, next: 1,
       pose(ph, tg) { guardHand(tg, 'fa'); guardHand(tg, 'ba'); tg.fa1 = -0.55; tg.fa2 = -2.0; if (ph === 2) return 18;
         if (ph === 0) { tg.fl1 = -0.5; tg.fl2 = 1.9; tg.ff = 0.2; tg.tl = 0.45; return 40; }
@@ -618,7 +619,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // ragdoll: weak springs pull the limbs toward this loose sprawl while the body tumbles
   const LIMP = { tl: -0.25, hd: -0.35, fa1: 0.7, fa2: -0.6, ba1: 1.5, ba2: -0.35, fl1: -0.6, fl2: 0.8, bl1: 0.35, bl2: 0.45, ff: 0.3, bf: 0.4, dx: 0, sp: 0 };
   const LAUNCH = { tl: -0.55, hd: -0.45, fa1: 0.85, fa2: -0.35, ba1: 1.2, ba2: -0.25 };
-  const pl = {
+  // ---- fighters. Both players are the same kind of object, run by the same code (fighterStep): only where each one's input
+  // packets come from differs (the keyboard / pad for you, botBrain for the practice bot; online, the other player's machine).
+  // side = which loadout and HUD slot is theirs, home = where they drop back in, respawnDelay = how long a KO keeps them out
+  const makeFighter = (o) => ({
     x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, coyote: 0,
     run: 0, time: 0, moveT: 0,
     pose: idlePose(0),
@@ -628,7 +632,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // Shift: + direction = dash, tap = parry, hold = shield (shield and parry share the parry cooldown)
     sh: { down: false, t: 0, mode: null }, dashT: 0, dashDur: 0.15, dashCd: 0, dashDir: 1, dashV: [1, 0], dashCarry: 0, dashBurst: 0, dashAir: false, sinceDash: 9,
     airDashes: 1, airCarry: false, airDashCd: 0, airReadyT: 0, airJumps: 1, flipT: 0, slideT: 0, crouchK: 0, rot: 0, roll: 1, rollAng: 0, parryT: 0, parryCd: 0, readyT: 0, shieldK: 0, parryOk: false, lockT: 0,
-  };
+    // being hit: hit-stun, the flinch, knocked about with no control (knocked), the combo counter and labels over them, KOs
+    stunT: 0, stunMax: 1, hurtT: 0, hurtKind: 0, knocked: false, combo: 0, label: '', labelT: 0, moveLab: '', moveLabT: 0, R: null, box: null, damage: 0, dead: 0, out: false,
+    ai: { react: -1 }, in: { h: new Set(), p: new Set(), stick: [0, 0] }, ...o });
+  const pl = makeFighter({ side: 'pl', home: [GW / 2, 160], respawnDelay: 0, ink: 'liquid' });
   const motes = [];   // ink flecks from landings and punches, kept sparse on purpose
   const drops = [];   // drips that fell off the liquid aura
   const swirls = [];  // ink corkscrews left by air dashes
@@ -685,6 +692,21 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   const mouseHeld = new Set();   // actions held on the mouse buttons (left = punch, right = ability), only in a fight
   const held = (a) => down.has(a) || padHeld.has(a) || mouseHeld.has(a);
+  // ---- input packets. The game itself never reads the keyboard or pad: every fixed step, each fighter is given one packet of what
+  // its player is doing that frame: h = buttons held, p = buttons newly pressed, stick = the analogue stick (rounded, so it's exact
+  // over a network). Yours comes from the devices (deviceInput), the bot's from botBrain, and online the other player's arrives from
+  // their machine. packInput / unpackInput turn a packet into four numbers and back (what goes over the wire, what the rollback
+  // mode keeps as its input history).
+  const GAME_BTNS = ['left', 'right', 'up', 'down', 'jump', 'punch', 'shift', 'snipe', 'ability'];
+  const emptyInput = () => ({ h: new Set(), p: new Set(), stick: [0, 0] });
+  function deviceInput() {
+    const I = emptyInput();
+    for (const a of GAME_BTNS) { if (held(a)) I.h.add(a); if (pressed.has(a)) I.p.add(a); }
+    I.stick = [Math.round(padStick[0] * 100) / 100, Math.round(padStick[1] * 100) / 100];
+    return I;
+  }
+  function packInput(I) { let h = 0, q = 0; GAME_BTNS.forEach((a, i) => { if (I.h.has(a)) h |= 1 << i; if (I.p.has(a)) q |= 1 << i; }); return [h, q, Math.round(I.stick[0] * 100), Math.round(I.stick[1] * 100)]; }
+  function unpackInput(k) { const I = emptyInput(); GAME_BTNS.forEach((a, i) => { if (k[0] >> i & 1) I.h.add(a); if (k[1] >> i & 1) I.p.add(a); }); I.stick = [k[2] / 100, k[3] / 100]; return I; }
   window.addEventListener('blur', () => { down.clear(); mouseHeld.clear(); });
   // keys go to the page as soon as it loads; any click on the page keeps them there
   const grab = () => { try { window.focus(); canvas.focus({ preventScroll: true }); } catch (e) {} };
@@ -960,15 +982,13 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // P (or Back/Select on a controller) switches it to a mode where it parries any punch it sees coming while it isn't stunned.
   const BOT_RGB = [170, 98, 82];   // dull red
   const botStain = stainTexture(BOT_RGB, 23), botHeadStain = stainTexture(BOT_RGB, 29, true);
-  const bot = { x: 860, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: -1, time: 0.9, pose: idlePose(0.9), rot: 0, roll: 1,
-    punch: { on: false }, stunT: 0, stunMax: 1, hurtT: 0, hurtKind: 0, parryT: 0, parryCd: 0, parryCdMax: 3, readyT: 0, shieldK: 0,
-    react: -1, mode: 'dummy', combo: 0, label: '', labelT: 0, R: null, box: null, damage: 0, dead: 0 };
   const BOT_HOME = 860;
+  const bot = makeFighter({ side: 'bot', x: BOT_HOME, facing: -1, time: 0.9, pose: idlePose(0.9), mode: 'dummy', home: [BOT_HOME, 120], respawnDelay: 1.2, ink: 'bot' });
+  const FIGHTERS = [pl, bot];   // player 1 and player 2: always stepped in this order, and hits between them resolve together
+  const foeOf = (f) => f === pl ? bot : pl;
+  const fighterBySide = (side) => side === 'pl' ? pl : bot;
   window.__bot = bot;
   for (const inst of INST) for (const g of inst.rings) { const n2 = g.src.n * 2; g.bcore = new Float32Array(n2); g.bliq = new Float32Array(n2); g.bro = new Float32Array(n2); g.bri = new Float32Array(n2); }
-  function botParry() {
-    bot.parryT = PARRY_WIN; bot.parryOk = false; bot.parryCd = PARRY_CD; bot.parryCdMax = PARRY_CD;
-  }
   // ---- ragdoll: the body goes limp and flies with the hit
   // "Damaged" isn't health: it only goes up, to a max of 100%. The more damaged, the longer a ragdoll lasts
   // (0.2 s undamaged, 1.5 s at max) and the harder kill blows like the uppercut launch you.
@@ -986,10 +1006,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const LAUNCH_GROW = 1.755;   // how much damage adds to knockback (at max damage launches are 1 + this times as strong). Raised 30% from 1.35
   const launchScale = (d, max = MAX_DAMAGE) => 1 + LAUNCH_GROW * Math.pow(Math.min(1, d / max), 1.1);
   function kickJoints(b, amt) { for (const k of KEYS) if (k !== 'dx' && k !== 'sp') b.rag.pv[k] = (b.rag.pv[k] || 0) + (grand() - 0.5) * amt; }
-  function startRagdoll(b, vx, vy, av) {
+  function startRagdoll(b, vx, vy, av) {   // limp: everything they were doing stops
+    Object.assign(b, { dashT: 0, slideT: 0, wallSlide: false, flipT: 0, airCarry: false, lungeT: 0, staggerT: 0, stunT: 0, lockT: 0, parryT: 0, fastFall: false, landT: 0, launched: true, hitShape: null, hurtT: 0, knocked: false });
+    b.punch.on = false; b.punch.queued = false; b.ai.react = -1;
     b.rag = { t: 0, av, pv: {}, phase: 'air', left: ragTime(b.damage, maxDmg(b)), gt: 0, trail: [] };
     kickJoints(b, 16);
-    b.vx = vx; b.vy = vy; b.onGround = false; b.hurtT = 0; b.stunT = 0; b.parryT = 0; b.react = -1;
+    b.vx = vx; b.vy = vy; b.onGround = false;
   }
   const wrapA = (a) => ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
   function ragdollStep(b, dt) {
@@ -1005,7 +1027,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       b.rot = wrapA(b.rot) * (1 - k);
       const st = mixPose(JUMP, FALL, Math.min(1, Math.max(0, (b.vy + 250) / 500)));
       for (const q of KEYS) b.pose[q] += (st[q] - b.pose[q]) * k;
-      if (Math.abs(b.rot) < 0.08) { b.rot = 0; b.rag = null; b.y = Math.min(b.y, PLAT.y); }
+      if (Math.abs(b.rot) < 0.08) { b.rot = 0; b.rag = null; b.y = Math.min(b.y, PLAT.y); b.knocked = true; }   // (still knocked about till they land)
       return;
     }
     if (g.phase === 'getup') {   // roll upright and settle back into stance
@@ -1101,76 +1123,6 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       addMote(ex, ey, Math.cos(a) * v, Math.sin(a) * v, 0.45 + Math.random() * 0.4, 1.2 + Math.random() * 1.8, 250, Math.random() < redK ? RED : undefined);
     }
   }
-  function koBurst(b) {   // knocked off screen
-    const [cx, cy] = b.R ? b.R.centre : [b.x, b.y - 50];
-    blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(b));
-    b.koPos = [Math.max(260, Math.min(GW - 160, cx)), Math.max(190, Math.min(PLAT.y - 60, cy))];
-    b.rag = null; b.dead = 1.2; b.box = null; b.labelT = 0; b.koT = 1.4;
-  }
-  function botRespawn(b) {   // fresh, undamaged, dropped back in from above
-    Object.assign(b, { x: BOT_HOME, y: 120, vx: 0, vy: 0, onGround: false, rot: 0, rag: null, dead: 0, damage: 0, stunT: 0, hurtT: 0, parryT: 0, combo: 0 });
-    b.pose = idlePose(b.time); b.R = rig(b); botInk(b.R);
-  }
-  function botUpdate(dt) {
-    const b = bot;
-    b.time += dt;
-    b.koT = Math.max(0, (b.koT || 0) - dt);
-    if (b.dead > 0) { b.dead -= dt; if (b.dead <= 0) botRespawn(b); else return; }
-    if (b.R && offScreen(b.R.centre[0], b.R.centre[1]) && !anchorSave(b)) { koBurst(b); hudDeath(b); if (roundTakesOut(b)) { b.dead = Infinity; b.out = true; } return; }
-    b.moveT = Math.max(0, (b.moveT || 0) - dt);
-    b.invK = Math.max(0, Math.min(1, (b.invK || 0) + (canBeHit(b) ? -14 : 12) * dt));   // can't-be-hit shimmer: quick in, quicker out
-    b.stunT = Math.max(0, b.stunT - dt); b.hurtT = Math.max(0, b.hurtT - dt); b.parryT = Math.max(0, b.parryT - dt); b.lockT = Math.max(0, (b.lockT || 0) - dt);
-    b.readyT = Math.max(0, b.readyT - dt); b.labelT = Math.max(0, b.labelT - dt);
-    if (b.parryCd > 0 && b.parryT <= 0) { b.parryCd -= dt; if (b.parryCd <= 0) { b.parryCd = 0; b.readyT = 0.3; } }
-    if (b.rag) {
-      ragdollStep(b, dt);
-    } else {
-      // knocked about by hits only
-      if (!b.onGround) b.vy = Math.min(MAX_FALL, b.vy + GRAV * dt);
-      b.x += b.vx * dt; b.y += b.vy * dt;
-      const over = b.x >= PLAT.x0 && b.x <= PLAT.x1;
-      if (b.onGround && !over) b.onGround = false;   // walked (or got knocked) off the edge
-      if (b.y >= PLAT.y && b.y - b.vy * dt <= PLAT.y + 1 && over) {
-        if (!b.onGround) { if (b.vy > 400) splash(b.x, PLAT.y, 5); b.stunT = Math.max(b.stunT, 0.12); }
-        b.y = PLAT.y; b.vy = 0; b.onGround = true;
-      }
-      if (b.onGround) b.vx = b.vx > 0 ? Math.max(0, b.vx - 1300 * dt) : Math.min(0, b.vx + 1300 * dt);
-      else b.vx *= Math.pow(0.4, dt);
-    }
-    if (!b.rag) b.x = Math.min(WALL - 26, b.x);   // a ragdoll bounces off the wall instead (after the rig is built)
-    const free = b.stunT <= 0 && b.onGround && !b.rag;
-    if (free && b.hurtT <= 0) b.facing = pl.x < b.x ? -1 : 1;
-    // parry mode: reacts (0.06 s) to a punch coming at it, but only while it isn't stunned
-    if (b.mode === 'parry') {
-      const P_ = pl.punch, A = P_.A;
-      const threat = P_.on && !P_.hit && P_.t < A.wind + A.act && Math.abs(pl.x - b.x) < 200 && Math.sign(b.x - pl.x) === pl.facing;
-      if (!threat || !free || b.parryCd > 0) b.react = -1;
-      else if (b.react < 0) b.react = 0.06;
-      else { b.react -= dt; if (b.react <= 0) { b.react = -1; botParry(); } }
-    } else b.react = -1;
-    // pose
-    if (!b.rag) {
-      let target = idlePose(b.time);
-      if (!b.onGround) target = mixPose(JUMP, FALL, Math.min(1, Math.max(0, (b.vy + 250) / 500)));
-      if (b.hurtT > 0) {
-        const k = Math.min(1, b.hurtT / 0.12);
-        target = mixPose(target, { ...target, ...(b.hurtKind ? LAUNCH : RECOIL) }, k);
-      } else if (b.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // dazed, guard dropped
-      if (b.parryT > 0) target = parryPose(b, target);
-      const rate = 1 - Math.exp(-(b.hurtT > 0.15 || b.parryT > 0 ? 45 : 18) * dt);
-      for (const k of KEYS) b.pose[k] += (target[k] - b.pose[k]) * rate;
-    }
-    b.R = rig(b);
-    botInk(b.R);
-    if (!b.rag && b.onGround && b.footPad == null) b.footPad = b.box[3] - PLAT.y;
-    // damaged: red goo beads off the body, more often the more damaged
-    const d01 = dmgShare(b);
-    if (d01 > 0 && Math.random() < dt * (0.6 + 5 * d01)) {
-      const inst = INST[(Math.random() * INST.length) | 0], g = inst.rings[0], i = (Math.random() * g.src.n) | 0;
-      if (Math.hypot(g.bro[2 * i] - g.bliq[2 * i], g.bro[2 * i + 1] - g.bliq[2 * i + 1]) > 0.5) addDrop(g.bro[2 * i], g.bro[2 * i + 1], b.vx * 0.4 + (Math.random() - 0.5) * 30, b.vy * 0.3 + 20, 0.8 + Math.random() * 0.6, RED);
-    }
-    if (b.rag && ragdollGround(b)) { b.R = rig(b); botInk(b.R); }
-  }
   // the bot's outline: same liquid-ink rings as the player, rippling but without the lagging slosh
   // height of a world point along the body's own up axis (so the red rises feet-to-head even mid-tumble)
   function bodyFrame(r) {
@@ -1216,7 +1168,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         }
       }
     }
-    bot.box = [x0, y0, x1, y1];
+    bot.inkBox = [x0, y0, x1, y1];
     if (calib) { bot.hMin = hMin; bot.hMax = hMax; }
   }
 
@@ -1225,115 +1177,117 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const CROUCH_V = 115, MAX_MOM = 760, MOM_GAIN = 120, MOM_DECAY_G = 230, MOM_DECAY_A = 80, SLIDE_DECAY = 330;
   // Dashes feed momentum: each one leaves you a bit faster than you went in (up to MAX_MOM),
   // and speed above a normal run only bleeds off slowly while you keep going the same way.
-  function dash(dx, dy) {
-    if (pl.dashCd > 0 || (!pl.onGround && pl.airDashCd > 0)) { const B = pl.buf; B.dash = 0.14; B.dx = dx; B.dy = dy; return; }   // too soon: remember it and fire when ready
-    pl.buf.dash = 0;
-    const air = !pl.onGround;
-    if (air) { if (pl.airDashes <= 0) return; pl.airDashes--; pl.airDashCd = AIR_DASH_CD; }
+  function dash(f, dx, dy) {
+    if (f.dashCd > 0 || (!f.onGround && f.airDashCd > 0)) { const B = f.buf; B.dash = 0.14; B.dx = dx; B.dy = dy; return; }   // too soon: remember it and fire when ready
+    f.buf.dash = 0;
+    const air = !f.onGround;
+    if (air) { if (f.airDashes <= 0) return; f.airDashes--; f.airDashCd = AIR_DASH_CD; }
     const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-    const along = Math.max(0, pl.vx * dx + (air ? pl.vy * dy * 0.4 : 0));
-    pl.dashCarry = Math.min(MAX_MOM, Math.max(RUN, along) + MOM_GAIN);
-    pl.dashBurst = pl.dashCarry + (air ? 330 : 380);
-    pl.dashV = [dx, dy]; pl.dashAir = air; pl.dashDur = air ? AIR_DASH_T : DASH_T; pl.dashT = pl.dashDur;
-    pl.dashCd = 0.28; pl.sinceDash = 0; pl.flipT = 0; pl.slideT = 0;
-    if (Math.abs(dx) > 0.2) { pl.dashDir = Math.sign(dx); pl.facing = pl.dashDir; }
-    pl.moveT = Math.max(pl.moveT, 0.6);           // come out of it already sprinting
-    pl.punch.on = false; pl.punch.queued = false; pl.punch.next = 0; pl.lungeT = 0;   // dashing starts the combo over
+    const along = Math.max(0, f.vx * dx + (air ? f.vy * dy * 0.4 : 0));
+    f.dashCarry = Math.min(MAX_MOM, Math.max(RUN, along) + MOM_GAIN);
+    f.dashBurst = f.dashCarry + (air ? 330 : 380);
+    f.dashV = [dx, dy]; f.dashAir = air; f.dashDur = air ? AIR_DASH_T : DASH_T; f.dashT = f.dashDur;
+    f.dashCd = 0.28; f.sinceDash = 0; f.flipT = 0; f.slideT = 0;
+    if (Math.abs(dx) > 0.2) { f.dashDir = Math.sign(dx); f.facing = f.dashDir; }
+    f.moveT = Math.max(f.moveT, 0.6);           // come out of it already sprinting
+    f.punch.on = false; f.punch.queued = false; f.punch.next = 0; f.lungeT = 0;   // dashing starts the combo over
     if (air) {   // ink swirl wraps the dash, with a splash ring where it starts
-      const [scx, scy] = R0 ? R0.centre : [pl.x, pl.y - 60];
-      swirls.push({ x0: scx, y0: scy, dx, dy, t: 0, dur: pl.dashDur, life: pl.dashDur, len: 0, spin: 0 });
+      const [scx, scy] = f.R ? f.R.centre : [f.x, f.y - 60];
+      swirls.push({ x0: scx, y0: scy, dx, dy, t: 0, dur: f.dashDur, life: f.dashDur, len: 0, spin: 0 });
       if (swirls.length > 3) swirls.shift();
       for (let i = 0; i < 10; i++) {
         const a = (i / 10) * Math.PI * 2;
         addMote(scx + Math.cos(a) * 14, scy + Math.sin(a) * 14, Math.cos(a) * (180 + Math.random() * 120) - dx * 120, Math.sin(a) * (180 + Math.random() * 120) - dy * 120, 0.3 + Math.random() * 0.15, 0.9 + Math.random() * 0.8, 250);
       }
     }
-    for (let i = 0; i < 5; i++) addMote(pl.x - dx * 10, pl.y - 30 - dy * 10 + (Math.random() - 0.5) * 50, -dx * (200 + Math.random() * 180), -dy * (200 + Math.random() * 180) + (Math.random() - 0.5) * 60, 0.25 + Math.random() * 0.15, 0.8 + Math.random(), 60);
+    for (let i = 0; i < 5; i++) addMote(f.x - dx * 10, f.y - 30 - dy * 10 + (Math.random() - 0.5) * 50, -dx * (200 + Math.random() * 180), -dy * (200 + Math.random() * 180) + (Math.random() - 0.5) * 60, 0.25 + Math.random() * 0.15, 0.8 + Math.random(), 60);
   }
-  function aimDir(dirX) {   // 8-way from keys / d-pad, or the analogue stick when it is pushed
-    if (Math.hypot(padStick[0], padStick[1]) > 0.35) return padStick;
-    return [dirX, (held('down') ? 1 : 0) - (held('up') ? 1 : 0)];
+  function aimDir(f, dirX) {   // 8-way from keys / d-pad, or the analogue stick when it is pushed (from the fighter's input packet)
+    const I = f.in;
+    if (Math.hypot(I.stick[0], I.stick[1]) > 0.35) return I.stick;
+    return [dirX, (I.h.has('down') ? 1 : 0) - (I.h.has('up') ? 1 : 0)];
   }
-  function parry() {
+  function parry(f) {
     // a parry cuts off any attack, like a dash does: one in wind-up or mid-swing stops and never lands, and the combo starts over.
     // A channel (No Scope's shot) is NOT cancelled: it carries on and keeps its animation, while the parry (window, white flash) runs
-    pl.punch.on = false; pl.punch.queued = false; pl.punch.next = 0; pl.lungeT = 0; pl.buf.punch = 0; pl.hitShape = null;
-    pl.parryT = PARRY_WIN; pl.parryOk = false; pl.parryCd = PARRY_CD; pl.parryCdMax = PARRY_CD;
+    f.punch.on = false; f.punch.queued = false; f.punch.next = 0; f.lungeT = 0; f.buf.punch = 0; f.hitShape = null;
+    f.parryT = PARRY_WIN; f.parryOk = false; f.parryCd = PARRY_CD; f.parryCdMax = PARRY_CD;
   }
   // which move comes out: air = by direction held; ground = slide / dash / crouch starters, else the string
   // jab > cross > finisher, where the finisher depends on what's held (down = spin kick, sideways = sucker punch)
-  function pickMove(chain) {
-    const P_ = pl.punch, dir = (held('right') ? 1 : 0) - (held('left') ? 1 : 0), dn = held('down'), up = held('up');
-    const ready = (k) => pl.time >= ((pl.moveReady || {})[k] || 0);   // per-move cooldowns (A.cd): not ready yet = nothing comes out (the press stays buffered)
-    if (!pl.onGround) {
-      if (pl.wpn && !dn && !up && !dir) { if (!ready('swordNair')) return null; P_.next = 0; return MOVES.swordNair; }   // holding a sword: neutral air is the sword spin
+  function pickMove(f, chain) {
+    const held = (a) => f.in.h.has(a);
+    const P_ = f.punch, dir = (held('right') ? 1 : 0) - (held('left') ? 1 : 0), dn = held('down'), up = held('up');
+    const ready = (k) => f.time >= ((f.moveReady || {})[k] || 0);   // per-move cooldowns (A.cd): not ready yet = nothing comes out (the press stays buffered)
+    if (!f.onGround) {
+      if (f.wpn && !dn && !up && !dir) { if (!ready('swordNair')) return null; P_.next = 0; return MOVES.swordNair; }   // holding a sword: neutral air is the sword spin
       P_.next = 0;
       if (dn && !up) return MOVES.dair;
       if (up) return MOVES.uair;
-      if (dir) { pl.facing = dir; return MOVES.fair; }
+      if (dir) { f.facing = dir; return MOVES.fair; }
       return MOVES.nair;
     }
-    if (pl.slideT > 0) { P_.next = 0; return MOVES.slideKick; }
-    if (!chain && pl.time - P_.lastEnd > COMBO_GAP) P_.next = 0;   // too slow: back to the start of the string
+    if (f.slideT > 0) { P_.next = 0; return MOVES.slideKick; }
+    if (!chain && f.time - P_.lastEnd > COMBO_GAP) P_.next = 0;   // too slow: back to the start of the string
     const idx = P_.next;
     if (idx === 0) {
-      if ((pl.dashT > 0 || pl.sinceDash < 0.12) && pl.wpn) { if (!ready('swordDash')) return null; P_.next = 0; return MOVES.swordDash; }
+      if ((f.dashT > 0 || f.sinceDash < 0.12) && f.wpn) { if (!ready('swordDash')) return null; P_.next = 0; return MOVES.swordDash; }
       P_.next = 1;
-      if (pl.dashT > 0 || pl.sinceDash < 0.12) return MOVES.dashPunch;
-      if (pl.crouchK > 0.5 && dn) return MOVES.crouchPoke;
-      return pl.wpn ? MOVES.swordRise : MOVES.jab;
+      if (f.dashT > 0 || f.sinceDash < 0.12) return MOVES.dashPunch;
+      if (f.crouchK > 0.5 && dn) return MOVES.crouchPoke;
+      return f.wpn ? MOVES.swordRise : MOVES.jab;
     }
-    if (idx === 1 && pl.wpn) { P_.next = 0; if (dir) pl.facing = dir; return MOVES.swordOver; }   // a sword's string is two slashes
+    if (idx === 1 && f.wpn) { P_.next = 0; if (dir) f.facing = dir; return MOVES.swordOver; }   // a sword's string is two slashes
     if (idx === 1) { P_.next = 2; return MOVES.cross; }
     P_.next = 0;
     if (dn) return MOVES.spinKick;
-    if (dir) { pl.facing = dir; return MOVES.sucker; }
+    if (dir) { f.facing = dir; return MOVES.sucker; }
     return MOVES.uppercut;
   }
-  function startPunch(chain) {
-    const P_ = pl.punch;
-    P_.ci = !pl.onGround ? 0 : chain ? P_.next : (pl.time - P_.lastEnd > COMBO_GAP ? 0 : P_.next);   // place in the string (for the combo labels)
-    const A = pickMove(chain);
+  function startPunch(f, chain) {
+    const P_ = f.punch;
+    P_.ci = !f.onGround ? 0 : chain ? P_.next : (f.time - P_.lastEnd > COMBO_GAP ? 0 : P_.next);   // place in the string (for the combo labels)
+    const A = pickMove(f, chain);
     if (!A) return false;   // that move is still cooling down
     P_.A = A; P_.arm = A.limb[1] === 'a' ? A.limb[0] : '';
     P_.on = true; P_.t = 0; P_.queued = false; P_.flecked = false; P_.hit = false; P_.ghosted = false; P_.lunged = false; P_.hopped = false; P_.floated = false; P_.trail = [];
     // a keyed sword swing only ever moves the sword for its own animation: anything else that starts clears what it left behind,
     // and a sword attack that isn't a keyed swing starts with the sword back to normal (along the forearm, edge as drawn, full length)
     P_.keyBlade = P_.keyTwist = undefined;
-    if (!A.keys && pl.wpn) { pl.swordTwist = 1; pl.swordFS = 1; pl.swordW = 0; pl.swordKeyed = false; }
-    P_.track = A.keys ? swordTrack(pl, A) : null;
-    if (A.slide) pl.slideT = Math.max(pl.slideT, 0.38);
-    if (A.key === 'dashPunch') pl.dashT = 0;   // the dash turns into the punch, keeping its speed
-    if (A.key === 'dair') { pl.fastFall = false; pl.vy = Math.min(pl.vy, 80); }   // the stomp hangs a beat before it drops
+    if (!A.keys && f.wpn) { f.swordTwist = 1; f.swordFS = 1; f.swordW = 0; f.swordKeyed = false; }
+    P_.track = A.keys ? swordTrack(f, A) : null;
+    if (A.slide) f.slideT = Math.max(f.slideT, 0.38);
+    if (A.key === 'dashPunch') f.dashT = 0;   // the dash turns into the punch, keeping its speed
+    if (A.key === 'dair') { f.fastFall = false; f.vy = Math.min(f.vy, 80); }   // the stomp hangs a beat before it drops
   }
   // a punch connects (or meets a parry)
-  function landHit(A, fx, fy) {
-    const b = bot, P_ = pl.punch;
+  function landHit(att, tgt, A, fx, fy) {   // att's attack lands on tgt (or meets a parry)
+    const b = tgt, P_ = att.punch;
     window.__hitPt = [fx, fy];   // test hook: where the last hit connected
     P_.hit = true;
-    if (b.parryT > 0 && pl.wpn && pl.wpn.has.guardbreak && pl.time >= (pl.gbT || 0)) {   // Guard Breaker: straight through the parry
-      b.parryT = 0; pl.gbT = pl.time + 5; procLabel('Guard Breaker', [fx, fy]);
+    if (b.parryT > 0 && att.wpn && att.wpn.has.guardbreak && att.time >= (att.gbT || 0)) {   // Guard Breaker: straight through the parry
+      b.parryT = 0; att.gbT = att.time + 5; procLabel('Guard Breaker', [fx, fy]);
     }
     if (b.parryT > 0) {   // parried: the attacker is knocked off balance
-      if (b.wpn && b.wpn.has.mirror) { const back = pl.wpn ? pl.wpn.dmg : A.damage; addDmg(pl, back); procLabel('Mirror', [fx, fy]); }
+      if (b.wpn && b.wpn.has.mirror) { const back = att.wpn ? att.wpn.dmg : A.damage; addDmg(att, back); procLabel('Mirror', [fx, fy]); }
       b.parryOkT = b.time;
       // a successful parry: the attacker is stunned for 1.5 s, and the parry recharges at once
-      pl.staggerT = PARRY_STUN; pl.vx = -pl.facing * 220; pl.lungeT = 0;
+      att.staggerT = PARRY_STUN; att.vx = -att.facing * 220; att.lungeT = 0;
       b.parryOk = true; b.parryCd = 0; b.readyT = 0.3;
-      P_.on = false; P_.queued = false; P_.next = 0; P_.lastEnd = pl.time;
+      P_.on = false; P_.queued = false; P_.next = 0; P_.lastEnd = att.time;
       b.label = 'parried'; b.labelT = 1.1; b.combo = 0;
-      for (let i = 0; i < 8; i++) { const a = Math.PI + (Math.random() - 0.5) * 2.2; addMote(fx, fy, Math.cos(a) * pl.facing * (200 + Math.random() * 160), Math.sin(a) * 200, 0.3, 0.8 + Math.random() * 0.7, 200); }
+      for (let i = 0; i < 8; i++) { const a = Math.PI + (Math.random() - 0.5) * 2.2; addMote(fx, fy, Math.cos(a) * att.facing * (200 + Math.random() * 160), Math.sin(a) * 200, 0.3, 0.8 + Math.random() * 0.7, 200); }
       return;
     }
-    pl.lungeT = 0; pl.vx *= A.keep ?? (A.air ? 0.7 : 0.3);   // contact soaks up the lunge, so you don't carry on through them (a slide kick slides on under them)
+    att.lungeT = 0; att.vx *= A.keep ?? (A.air ? 0.7 : 0.3);   // contact soaks up the lunge, so you don't carry on through them (a slide kick slides on under them)
     const wasStunned = b.stunT > 0 || !b.onGround || !!b.rag;
     b.combo = wasStunned ? b.combo + 1 : 1;
     if (b.combo >= 2) { b.label = b.combo + ' hit combo'; b.labelT = 1.4; }
     else if (P_.ci > 0) { b.label = 'not a true combo'; b.labelT = 1.4; }
-    b.move = A.name; b.moveT = 1.4;
+    b.moveLab = A.name; b.moveLabT = 1.4;
     const ls = 1 + (launchScale(b.damage, maxDmg(b)) - 1) * (A.lsK ?? 1);   // knockback uses the damage they had going in (lsK: how much damage grows it)
-    const kd = A.limbs || A.radial ? (Math.sign(b.x - pl.x) || pl.facing) : pl.facing;   // two-sided moves knock them away from you
-    const wh = pl.wpn ? wpnHit(pl, 'bot', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 }, dmg = wh.dmg;   // holding a weapon: its damage, through its modifiers
+    const kd = A.limbs || A.radial ? (Math.sign(b.x - att.x) || att.facing) : att.facing;   // two-sided moves knock them away from you
+    const wh = att.wpn ? wpnHit(att, b.side, A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 }, dmg = wh.dmg;   // holding a weapon: its damage, through its modifiers
     addDmg(b, dmg);
     if (showDmg) {   // older numbers still showing step up out of the way, so a string reads as a little stack
       const step = (A.ragdoll ? 34 : 24 + Math.min(12, dmg) * 1.2) * 1.15 + 6;   // roughly the new number's height
@@ -1342,11 +1296,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     if (A.ragdoll) { startRagdoll(b, kd * A.kb * ls * wh.kb, -A.pop * ls * wh.kb, (A.spin ?? -7.5) * (A.spin > 0 ? 1 : 1)); if (A.ragT) b.rag.left = A.ragT(b.damage); if (A.down) b.rag.down = true; shakeT = 0.22; }
     else {
-      b.stunT = A.stun + wh.stun; b.stunMax = b.stunT; b.hurtT = 0.24; b.hurtKind = A.pop > 200 ? 1 : 0;
+      b.stunT = A.stun + wh.stun; b.stunMax = b.stunT; b.hurtT = 0.24; b.hurtKind = A.pop > 200 ? 1 : 0; b.knocked = true;
+      b.punch.on = false; b.punch.queued = false; b.dashT = 0; b.slideT = 0; b.lungeT = 0;   // a hit stops whatever they were doing
       b.vx = A.keepVx ? b.vx : kd * A.kb * wh.kb * (1 + 0.4 * (ls - 1));   // keepVx: no sideways push, they keep whatever momentum they had
-      if (A.radial && b.R && R0) {   // radial: straight away from you, whichever side they're on (on the floor, a downward hit just shoves them along it)
-        let rx = b.R.centre[0] - R0.centre[0], ry = b.R.centre[1] - R0.centre[1]; const rl = Math.hypot(rx, ry) || 1; rx /= rl; ry /= rl;
-        if (b.onGround && ry > 0) { ry = 0; rx = Math.sign(rx) || pl.facing; }
+      if (A.radial && b.R && att.R) {   // radial: straight away from you, whichever side they're on (on the floor, a downward hit just shoves them along it)
+        let rx = b.R.centre[0] - att.R.centre[0], ry = b.R.centre[1] - att.R.centre[1]; const rl = Math.hypot(rx, ry) || 1; rx /= rl; ry /= rl;
+        if (b.onGround && ry > 0) { ry = 0; rx = Math.sign(rx) || att.facing; }
         const v = A.kb * wh.kb * (1 + 0.4 * (ls - 1)); b.vx = rx * v; b.vy = ry * v; if (ry < -0.05) b.onGround = false;
       } else if (A.pop) { b.vy = -A.pop * (A.fixedPop ? 1 : 1 + 0.3 * (ls - 1)); b.onGround = false; }   // popped up: juggle them (fixedPop: the same height at any damage)
     }
@@ -1361,9 +1316,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // Wheel of Fate) happen here too. kind: 'bot' or 'dg' (who was hit).
   const echoes = [], phantoms = [], inkPools = [], wpnWaves = [], procs = [];
   const FATE = ['keen', 'heavy', 'lifesteal', 'executioner', 'momentum', 'skyborne', 'bleed', 'dazing', 'echo', 'rending', 'splash', 'inkpool', 'thunderclap'];
-  const tgtOf = (kind) => kind === 'bot' ? bot : dg;
+  const tgtOf = (kind) => kind === 'dg' ? dg : fighterBySide(kind);   // a target by name: a fighter's side, or 'dg'
   function addToTarget(kind, d, pt, num = true) {   // damage straight onto a target (no launch), with ink and a number
-    if (kind === 'bot') { if (bot.dead > 0) return; addDmg(bot, d); }
+    if (kind !== 'dg') { const t = tgtOf(kind); if (t.dead > 0) return; addDmg(t, d); }
     else { if (!dg) return; d = dgTake(d); addDmg(dg, d); dg.shudder = 0.1; }
     for (let i = 0; i < 5; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 260, -120 - Math.random() * 200, 0.7 + Math.random() * 0.6, Math.random() < 0.4 ? RED : undefined);
     if (num && showDmg) { for (const n of dmgNums) n.y -= 26; dmgNums.push({ x: pt[0] + 30, y: pt[1] + 6, v: d, kill: false, dir: 1, t: 0 }); }
@@ -1390,15 +1345,16 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (has.bleed) tgt.bleedT = 3;
     att.hits = (att.hits || 0) + 1;
     if (has.echo && att.hits % 3 === 0) echoes.push({ t: 0.13, kind, dmg, pt: pt.slice() });
-    if (has.splash) splashOthers(kind, pt);
+    if (has.splash) splashOthers(att, kind, pt);
     if (A.ragdoll && has.inkpool) { const x = Math.max(PLAT.x0 + 40, Math.min(WALL - 40, tgt.x)); inkPools.push({ x, t: 4, r: 80 }); }
-    if (A.ragdoll && has.thunderclap) { shakeT = Math.max(shakeT, 0.2); for (const d of [-1, 1]) wpnWaves.push({ x: att.x + d * 30, dir: d, t: 0, life: 0.5, hit: {} }); }
+    if (A.ragdoll && has.thunderclap) { shakeT = Math.max(shakeT, 0.2); for (const d of [-1, 1]) wpnWaves.push({ x: att.x + d * 30, dir: d, t: 0, life: 0.5, hit: {}, by: att.side }); }
     return { dmg, kb: (1 + heavy / 100) * (A.ragdoll && has.rending ? 1.25 : 1), stun: has.dazing ? 0.15 : 0 };
   }
-  function splashOthers(kind, pt) {   // ink sprayed off the hit: 3% to anyone else close by
+  function splashOthers(att, kind, pt) {   // ink sprayed off the hit: 3% to anyone else close by (the attacker's other enemies)
     for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; addDrop(pt[0], pt[1], Math.cos(a) * 380, Math.sin(a) * 300 - 80, 0.7 + Math.random() * 0.8); }
-    if (kind !== 'dg' && dg && dgCanBeHit() && Math.hypot(dg.R.centre[0] - pt[0], dg.R.centre[1] - pt[1]) < 230) addToTarget('dg', 3, dg.R.centre);
-    if (kind !== 'bot' && bot.R && canBeHit(bot) && Math.hypot(bot.R.centre[0] - pt[0], bot.R.centre[1] - pt[1]) < 170) addToTarget('bot', 3, bot.R.centre);
+    if (kind !== 'dg' && dg && dg.owner !== att && dgCanBeHit() && Math.hypot(dg.R.centre[0] - pt[0], dg.R.centre[1] - pt[1]) < 230) addToTarget('dg', 3, dg.R.centre);
+    const E = foeOf(att);
+    if (kind !== E.side && E.R && canBeHit(E) && Math.hypot(E.R.centre[0] - pt[0], E.R.centre[1] - pt[1]) < 170) addToTarget(E.side, 3, E.R.centre);
   }
   // Anchor: the first time a launch would carry them off the screen this round, they stop dead in the air instead
   function anchorSave(f) {
@@ -1406,8 +1362,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     f.anchorUsed = true;
     f.x = Math.max(70, Math.min(GW - 70, f.x)); f.y = Math.max(140, Math.min(GH - 30, f.y)); f.vx = f.vy = 0; f.rot = 0;
     if (f.rag) f.rag = null;
-    if (f === pl) { pl.launched = false; pl.onGround = false; R0 = rig(); pl.R = R0; } else { bot.R = rig(bot); }
-    const c = (f === pl ? R0 : bot.R).centre; procLabel('Anchor', c);
+    f.launched = false; f.onGround = false; f.R = rig(f); if (f === pl) R0 = f.R;
+    const c = f.R.centre; procLabel('Anchor', c);
     for (let i = 0; i < 20; i++) { const a = Math.random() * TAU; addDrop(c[0], c[1], Math.cos(a) * 320, Math.sin(a) * 320, 0.8 + Math.random()); }
     shakeT = Math.max(shakeT, 0.15);
     return true;
@@ -1421,12 +1377,13 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         p.done = true;
         const test = (hs) => { for (const c of p.chains) for (let j = 0; j < c.length - 1; j++) { const [ax, ay] = c[j], [bx, by] = c[j + 1]; for (let q = 0; q <= 6; q++) { const x = ax + (bx - ax) * q / 6, y = ay + (by - ay) * q / 6; if (hurtHit(hs, x, y, p.r)) return [x, y]; } } return null; };
         let pt;
-        if (bot.R && canBeHit(bot) && (pt = test(hurtShapes(bot.R)))) addToTarget('bot', p.dmg / 2, pt);
-        if (dg && dgCanBeHit() && (pt = test(dgHurtShapes(dg.R)))) addToTarget('dg', p.dmg / 2, pt);
+        const E = foeOf(fighterBySide(p.by));
+        if (E.R && canBeHit(E) && (pt = test(hurtShapes(E.R)))) addToTarget(E.side, p.dmg / 2, pt);
+        if (dg && dg.owner !== fighterBySide(p.by) && dgCanBeHit() && (pt = test(dgHurtShapes(dg.R)))) addToTarget('dg', p.dmg / 2, pt);
       }
       if (p.t < -0.22) phantoms.splice(i, 1);
     }
-    for (const f of [bot, dg]) if (f && f.bleedT > 0) {   // Bleeding Ink: +1% a second
+    for (const f of [...FIGHTERS, dg]) if (f && f.bleedT > 0) {   // Bleeding Ink: +1% a second
       f.bleedT -= dt; addDmg(f, dt * (f === dg ? DG.take : 1));
       const c = f === dg ? f.R && f.R.centre : f.R && f.R.centre;
       if (c && Math.random() < dt * 8) addDrop(c[0] + (Math.random() - 0.5) * 30, c[1], (Math.random() - 0.5) * 40, 30, 0.6 + Math.random() * 0.5, RED);
@@ -1435,8 +1392,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (let i = wpnWaves.length - 1; i >= 0; i--) {   // Thunderclap: crests racing along the floor; 4% and a pop to anyone on the ground they pass
       const w = wpnWaves[i]; w.t += dt; w.x += w.dir * 1050 * dt;
       if (Math.random() < dt * 40) addMote(w.x, PLAT.y - 4, w.dir * 120 + (Math.random() - 0.5) * 80, -160 - Math.random() * 200, 0.35, 0.9 + Math.random(), 700);
-      if (!w.hit.bot && bot.R && canBeHit(bot) && bot.onGround && Math.abs(bot.x - w.x) < 30) { w.hit.bot = 1; addToTarget('bot', 4, [bot.x, PLAT.y - 30]); Object.assign(bot, { stunT: 0.35, stunMax: 0.35, hurtT: 0.24, hurtKind: 1, vy: -320, onGround: false }); }
-      if (!w.hit.dg && dg && dgCanBeHit() && dg.y >= PLAT.y - 2 && Math.abs(dg.x - w.x) < 60) { w.hit.dg = 1; addToTarget('dg', 4, [dg.x, PLAT.y - 40]); }
+      const E = foeOf(fighterBySide(w.by));
+      if (!w.hit.f && E.R && canBeHit(E) && E.onGround && Math.abs(E.x - w.x) < 30) { w.hit.f = 1; addToTarget(E.side, 4, [E.x, PLAT.y - 30]); Object.assign(E, { stunT: 0.35, stunMax: 0.35, hurtT: 0.24, hurtKind: 1, vy: -320, onGround: false, knocked: true }); }
+      if (!w.hit.dg && dg && dg.owner !== fighterBySide(w.by) && dgCanBeHit() && dg.y >= PLAT.y - 2 && Math.abs(dg.x - w.x) < 60) { w.hit.dg = 1; addToTarget('dg', 4, [dg.x, PLAT.y - 40]); }
       if (w.t > w.life || w.x < PLAT.x0 || w.x > WALL) wpnWaves.splice(i, 1);
     }
     for (let i = procs.length - 1; i >= 0; i--) { procs[i].t += dt; if (procs[i].t > 1.1) procs.splice(i, 1); }
@@ -1529,9 +1487,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
   // the enemy it would shoot: whoever the holder is fighting, while they're ragdolled (the bot, or the Divine General)
   function noScopeTarget(f) {
-    if (f !== pl) return null;
-    if (dg && dg.owner !== pl && dg.state === 'rag' && dg.R) return { kind: 'dg', c: dg.R.centre, f: dg };
-    if (bot.rag && !(bot.dead > 0) && !bot.out && bot.R) return { kind: 'bot', c: bot.R.centre, f: bot };
+    const E = foeOf(f);
+    if (dg && dg.owner !== f && dg.state === 'rag' && dg.R) return { kind: 'dg', c: dg.R.centre, f: dg };
+    if (E.rag && !(E.dead > 0) && !E.out && E.R) return { kind: E.side, c: E.R.centre, f: E };
     return null;
   }
   const sniping = (f) => !!(f.snipe && !f.snipe.wait);   // No Scope's rifle is out (its animation has priority over a parry's pose)
@@ -1546,7 +1504,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   // the target, and where on them it aims: the middle of the torso
   const snipeTargetOf = (kind) => kind === 'dg' ? (dg && dg.R ? { f: dg, c: apply(dg.R.torso, 2, -35), shapes: () => dgHurtShapes(dg.R) } : null)
-    : (bot.R && !(bot.dead > 0) && !bot.out ? { f: bot, c: apply(bot.R.torso, 0.5, -14), shapes: () => hurtShapes(bot.R) } : null);
+    : ((E) => E.R && !(E.dead > 0) && !E.out ? { f: E, c: apply(E.R.torso, 0.5, -14), shapes: () => hurtShapes(E.R) } : null)(fighterBySide(kind));
   // the rifle's frame. During the whip it lies along the lead forearm; once shouldered it sits on the aim line from the shoulder
   // (rifleHold), with the hands placed on it. Returns the grip (hx, hy), the barrel direction (ux, uy), its 'down' side (px, py)
   // and the muzzle (mx, my)
@@ -1613,8 +1571,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   // the pose at time pt: each value on a smooth curve through the keys (Hermite; zero speed at stops, the start and the end).
   // Sets the body, solves the lead arm to the grip, and leaves the blade's angle for the wrist. Past the last key: back to the guard
-  function swordKeyPose(A, tg, pt) {
-    const P_ = pl.punch, tr = P_.track;
+  function swordKeyPose(f, A, tg, pt) {
+    const P_ = f.punch, tr = P_.track;
     if (!tr || pt > tr[tr.length - 1].t) { P_.keyBlade = P_.keyTwist = undefined; return A.recRate || 12; }
     let i = 0; while (i < tr.length - 2 && pt >= tr[i + 1].t) i++;
     const a = tr[i], b = tr[i + 1], h = b.t - a.t, u = Math.max(0, Math.min(1, (pt - a.t) / h)), u2 = u * u, u3 = u2 * u;
@@ -1623,8 +1581,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const q of SWORD_KEYS) tg[q] = val(k => k[q]);
     let dir = val(k => k.arm[0]), ext = val(k => k.arm[1]), blade = val(k => k.blade);
     tg.sp = 0;
-    const Rp = rig({ ...pl, pose: { ...pl.pose, ...tg } }), [sx, sy] = apply(Rp.torso, 1, -21), reach = (LEN.upperArm + 19) * S * ext;
-    [tg.fa1, tg.fa2] = armIKn(pl, tg.tl, sx, sy, sx + pl.facing * -Math.sin(dir) * reach, sy + Math.cos(dir) * reach);
+    const Rp = rig({ ...f, pose: { ...f.pose, ...tg } }), [sx, sy] = apply(Rp.torso, 1, -21), reach = (LEN.upperArm + 19) * S * ext;
+    [tg.fa1, tg.fa2] = armIKn(f, tg.tl, sx, sy, sx + f.facing * -Math.sin(dir) * reach, sy + Math.cos(dir) * reach);
     P_.keyBlade = blade; P_.keyTwist = Math.max(-1, Math.min(1, val(k => k.twist)));
     return 1e4;   // placed exactly: the curve is the motion
   }
@@ -1636,7 +1594,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     S_.t += dt;
     const A = NOSCOPE, T_ = snipeTargetOf(S_.kind);
     if (T_ && !S_.fired) { S_.at = T_.c.slice(); f.facing = Math.sign(S_.at[0] - f.x) || f.facing; }   // tracking their torso right up to the shot, turning to face them
-    const Rg = f === pl ? R0 : f.R;
+    const Rg = f.R;
     if (!S_.fired && S_.t >= A.anim && Rg) {   // the shot, straight down the barrel
       S_.fired = true;
       const fr = rifleFrame(Rg, f), [ax, ay] = S_.at, sc = A.scale;
@@ -1665,7 +1623,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
           for (let i = 0; i < 16; i++) addDrop(hit[0], hit[1], dir * (200 + Math.random() * 400), -100 - Math.random() * 300, 0.8 + Math.random() * 1.2, Math.random() < 0.5 ? RED : undefined);
           const ls = launchScale(T.damage || 0, maxDmg(T));
           // the launch is added to how they're already flying, so a shot never slows a fast ragdoll down
-          if (S_.kind === 'bot') { startRagdoll(bot, (bot.rag ? bot.vx : 0) + dir * A.kb * ls, Math.min(bot.rag ? bot.vy : 0, 0) - A.pop * ls, dir * A.spin); bot.combo = 0; }
+          if (S_.kind !== 'dg') { const B_ = tgtOf(S_.kind); startRagdoll(B_, (B_.rag ? B_.vx : 0) + dir * A.kb * ls, Math.min(B_.rag ? B_.vy : 0, 0) - A.pop * ls, dir * A.spin); B_.combo = 0; }
           else if (dg.state === 'rag') { dg.vx += dir * A.kb * ls * 1.6; dg.vy = Math.min(dg.vy, 0) - A.pop * ls; dg.rag.left = Math.max(dg.rag.left, ragTime(dg.damage, DG.max)); dg.rag.ground = false; dg.rag.av = -dir * 3; }
           procLabel('No Scope', hit);
           const ex = exit || hit;   // ink blown out of the exit wound, along the line of the shot
@@ -1775,46 +1733,47 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return [over, oy, ox];
   }
 
-  function update(dt) {
-    pollPad();
-    pl.time += dt; shakeT = Math.max(0, shakeT - dt);
-    pl.staggerT = Math.max(0, pl.staggerT - dt); pl.lungeT = Math.max(0, pl.lungeT - dt); pl.stunT = Math.max(0, (pl.stunT || 0) - dt);
-    const B = pl.buf; B.jump = Math.max(0, B.jump - dt); B.punch = Math.max(0, B.punch - dt); B.dash = Math.max(0, B.dash - dt);
-    if (pressed.has('pause')) { openMenu(); pressed.clear(); }
-    if (pressed.has('boxes')) showBoxes = !showBoxes;
-    if (pl.out || pl.rag) {   // launched (limp, no control) or sitting the round out: only the world moves
-      if (pressed.has('botmode')) setBotParry(bot.mode !== 'parry');
-      plRagStep(dt); pl.hitShape = null; worldStep(dt); return;
+  // ---- one fighter's step: everything a fighter does in a frame, from its input packet (f.in). Both players run exactly this.
+  // Hits aren't applied here: each step only finds what its attack is touching (f.hitTest); resolveHits then applies everyone's
+  // together, after both have moved
+  function fighterStep(f, dt) {
+    const foe = foeOf(f), I = f.in, pressed = I.p, held = (a) => I.h.has(a);   // this frame's packet (a locked fighter drops its presses)
+    if (f.dead > 0) { f.dead -= dt; f.hitShape = null; f.hitTest = null; if (f.dead > 0 || f.out) return; respawnFighter(f); }   // knocked out: waiting to drop back in
+    f.hitTest = null;
+    f.time += dt; f.hurtT = Math.max(0, (f.hurtT || 0) - dt);
+    f.staggerT = Math.max(0, f.staggerT - dt); f.lungeT = Math.max(0, f.lungeT - dt); f.stunT = Math.max(0, (f.stunT || 0) - dt);
+    const B = f.buf; B.jump = Math.max(0, B.jump - dt); B.punch = Math.max(0, B.punch - dt); B.dash = Math.max(0, B.dash - dt);
+    if (f.out || f.rag) {   // launched (limp, no control) or sitting the round out: only the world moves
+        ragStep(f, dt); f.hitShape = null; return;
     }
     // stunned by a parry, hit-stunned, mid-parry, or stuck after a missed parry: no inputs
-    const locked = pl.staggerT > 0 || pl.stunT > 0 || pl.lockT > 0 || pl.parryT > 0;
+    const locked = f.staggerT > 0 || f.stunT > 0 || f.lockT > 0 || f.parryT > 0;
     if (locked) { for (const a of ['left', 'right', 'up', 'down', 'jump', 'punch', 'shift']) pressed.delete(a); B.jump = B.punch = B.dash = 0; }
-    if (pressed.has('botmode')) setBotParry(bot.mode !== 'parry');
     const dir0 = locked ? 0 : (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
 
     // shift: dash (ground: left/right, air: any of 8 ways) / tap = parry / hold = shield
-    const sh = pl.sh;
-    const wasDashing = pl.dashT > 0;
-    pl.dashCd = Math.max(0, pl.dashCd - dt); pl.dashT = Math.max(0, pl.dashT - dt);
-    pl.lockT = Math.max(0, pl.lockT - dt);
-    if (pl.parryT > 0) { pl.parryT = Math.max(0, pl.parryT - dt); if (pl.parryT <= 0 && !pl.parryOk) pl.lockT = PARRY_MISS_LOCK; }   // whiffed: stuck standing a moment
-    pl.readyT = Math.max(0, pl.readyT - dt); pl.sinceDash += dt;
-    if (B.dash > 0 && pl.dashCd <= 0 && (pl.onGround ? !B.dy : pl.airDashes > 0 && pl.airDashCd <= 0)) { dash(B.dx, B.dy); if (pl.sh.down) { pl.sh.mode = 'used'; pl.sh.dashed = true; } }
-    if (pl.parryCd > 0 && pl.parryT <= 0) { pl.parryCd -= dt; if (pl.parryCd <= 0) { pl.parryCd = 0; pl.readyT = 0.3; } }
-    if (pl.airDashCd > 0) { pl.airDashCd -= dt; if (pl.airDashCd <= 0) { pl.airDashCd = 0; pl.airReadyT = 0.3; } }
-    pl.airReadyT = Math.max(0, pl.airReadyT - dt);
+    const sh = f.sh;
+    const wasDashing = f.dashT > 0;
+    f.dashCd = Math.max(0, f.dashCd - dt); f.dashT = Math.max(0, f.dashT - dt);
+    f.lockT = Math.max(0, f.lockT - dt);
+    if (f.parryT > 0) { f.parryT = Math.max(0, f.parryT - dt); if (f.parryT <= 0 && !f.parryOk) f.lockT = PARRY_MISS_LOCK; }   // whiffed: stuck standing a moment
+    f.readyT = Math.max(0, f.readyT - dt); f.sinceDash += dt;
+    if (B.dash > 0 && f.dashCd <= 0 && (f.onGround ? !B.dy : f.airDashes > 0 && f.airDashCd <= 0)) { dash(f, B.dx, B.dy); if (f.sh.down) { f.sh.mode = 'used'; f.sh.dashed = true; } }
+    if (f.parryCd > 0 && f.parryT <= 0) { f.parryCd -= dt; if (f.parryCd <= 0) { f.parryCd = 0; f.readyT = 0.3; } }
+    if (f.airDashCd > 0) { f.airDashCd -= dt; if (f.airDashCd <= 0) { f.airDashCd = 0; f.airReadyT = 0.3; } }
+    f.airReadyT = Math.max(0, f.airReadyT - dt);
     const tryDash = (fresh) => {
-      if (pl.onGround) { const d = fresh ? (pressed.has('right') ? 1 : 0) - (pressed.has('left') ? 1 : 0) : dir0; if (d) { dash(d, 0); return true; } return false; }
+      if (f.onGround) { const d = fresh ? (pressed.has('right') ? 1 : 0) - (pressed.has('left') ? 1 : 0) : dir0; if (d) { dash(f, d, 0); return true; } return false; }
       const fr = fresh && !['left', 'right', 'up', 'down'].some(a => pressed.has(a));
       if (fr) return false;
-      const [ax, ay] = aimDir(dir0);
+      const [ax, ay] = aimDir(f, dir0);
       if (Math.hypot(ax, ay) < 0.1) return false;
-      dash(ax, ay); return true;
+      dash(f, ax, ay); return true;
     };
     if (pressed.has('shift')) {
       sh.down = true; sh.t = 0; sh.mode = 'pending';
       if (tryDash(false)) { sh.mode = 'used'; sh.dashed = true; }
-      else { sh.dashed = false; sh.mode = 'used'; if (pl.parryCd <= 0) parry(); }   // no direction held: parry comes out instantly
+      else { sh.dashed = false; sh.mode = 'used'; if (f.parryCd <= 0) parry(f); }   // no direction held: parry comes out instantly
     }
     if (sh.down) {
       sh.t += dt;
@@ -1822,285 +1781,291 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     const shielding = false;   // shield removed: Shift is parry + dash only
     // dash ending: keep the momentum it built
-    if (wasDashing && pl.dashT <= 0) {
-      const [dx, dy] = pl.dashV;
-      pl.vx = Math.abs(dx) > 0.1 ? dx * pl.dashCarry : pl.vx * 0.5;
-      if (pl.dashAir) { pl.vy = dy * pl.dashCarry * 0.6; pl.airCarry = Math.abs(dx) > 0.1; }   // air dash: keep flying that way
+    if (wasDashing && f.dashT <= 0) {
+      const [dx, dy] = f.dashV;
+      f.vx = Math.abs(dx) > 0.1 ? dx * f.dashCarry : f.vx * 0.5;
+      if (f.dashAir) { f.vy = dy * f.dashCarry * 0.6; f.airCarry = Math.abs(dx) > 0.1; }   // air dash: keep flying that way
     }
     // slide: press down during a ground dash (or right after it) and ride the speed along the floor
-    if (pl.onGround && held('down') && pl.slideT <= 0 && (pl.dashT > 0 || pl.sinceDash < 0.12) && Math.abs(pl.vx) > 200) {
-      if (pl.dashT > 0) { pl.vx = pl.dashV[0] ? Math.sign(pl.dashV[0]) * Math.max(Math.abs(pl.vx), pl.dashCarry + 120) : pl.vx; pl.dashT = 0; }
-      pl.slideT = 0.7;
+    if (f.onGround && held('down') && f.slideT <= 0 && (f.dashT > 0 || f.sinceDash < 0.12) && Math.abs(f.vx) > 200) {
+      if (f.dashT > 0) { f.vx = f.dashV[0] ? Math.sign(f.dashV[0]) * Math.max(Math.abs(f.vx), f.dashCarry + 120) : f.vx; f.dashT = 0; }
+      f.slideT = 0.7;
     }
     // ...or press down while running near full speed
-    if (pl.onGround && pressed.has('down') && pl.slideT <= 0 && pl.dashT <= 0 && Math.abs(pl.vx) >= RUN * 0.8) {
-      pl.vx = Math.sign(pl.vx) * (Math.abs(pl.vx) + 130); pl.slideT = 0.7;
+    if (f.onGround && pressed.has('down') && f.slideT <= 0 && f.dashT <= 0 && Math.abs(f.vx) >= RUN * 0.8) {
+      f.vx = Math.sign(f.vx) * (Math.abs(f.vx) + 130); f.slideT = 0.7;
     }
-    if (pl.slideT > 0) {
-      pl.slideT -= dt;
-      if (!pl.onGround || Math.abs(pl.vx) < 140 || !held('down') && pl.slideT < 0.45) pl.slideT = 0;
-      if (Math.random() < dt * 30) addMote(pl.x + pl.facing * 14, PLAT.y - 3, pl.vx * 0.3 + (Math.random() - 0.5) * 40, -60 - Math.random() * 80, 0.25, 0.6 + Math.random() * 0.6, 900);
+    if (f.slideT > 0) {
+      f.slideT -= dt;
+      if (!f.onGround || Math.abs(f.vx) < 140 || !held('down') && f.slideT < 0.45) f.slideT = 0;
+      if (Math.random() < dt * 30) addMote(f.x + f.facing * 14, PLAT.y - 3, f.vx * 0.3 + (Math.random() - 0.5) * 40, -60 - Math.random() * 80, 0.25, 0.6 + Math.random() * 0.6, 900);
     }
-    pl.slideK = (pl.slideK || 0) + ((pl.slideT > 0 ? 1 : 0) - (pl.slideK || 0)) * (1 - Math.exp(-22 * dt));
+    f.slideK = (f.slideK || 0) + ((f.slideT > 0 ? 1 : 0) - (f.slideK || 0)) * (1 - Math.exp(-22 * dt));
     // crouch: down while standing (not sliding)
-    const crouching = pl.onGround && held('down') && pl.slideT <= 0 && pl.dashT <= 0 && !shielding && Math.abs(pl.vx) < 200;
-    pl.crouchK += ((crouching ? 1 : 0) - pl.crouchK) * (1 - Math.exp(-18 * dt));
+    const crouching = f.onGround && held('down') && f.slideT <= 0 && f.dashT <= 0 && !shielding && Math.abs(f.vx) < 200;
+    f.crouchK += ((crouching ? 1 : 0) - f.crouchK) * (1 - Math.exp(-18 * dt));
 
     // punch
     // No Scope: X with the mark up whips the rifle out at once, instead of attacking (and cutting short any attack under way)
-    if (pressed.has('snipe') && noScopeFire(pl)) { pl.punch.on = false; pl.punch.queued = false; pl.lungeT = 0; pl.snipe.wait = false; pl.pose.fa1 = NOSCOPE_BACK; pl.pose.fa2 = -0.05; }
-    if (pl.snipe && !pl.snipe.wait) { pressed.delete('punch'); B.punch = 0; }   // the rifle is out: no attacks   // No Scope: X attacks as normal and, while the mark is up, also fires the shot (an extra hit on a combo)
+    if (pressed.has('snipe') && noScopeFire(f)) { f.punch.on = false; f.punch.queued = false; f.lungeT = 0; f.snipe.wait = false; f.pose.fa1 = NOSCOPE_BACK; f.pose.fa2 = -0.05; }
+    if (f.snipe && !f.snipe.wait) { pressed.delete('punch'); B.punch = 0; }   // the rifle is out: no attacks   // No Scope: X attacks as normal and, while the mark is up, also fires the shot (an extra hit on a combo)
     if (pressed.has('punch')) B.punch = 0.16;
-    if (B.punch > 0 && !shielding && pl.staggerT <= 0 && pl.landT <= 0 && !(pl.dashT > 0 && pl.dashAir)) {
-      if (!pl.punch.on) { if (startPunch() !== false) B.punch = 0; }
-      else if (pl.punch.t > pl.punch.A.wind * 0.5) { pl.punch.queued = true; B.punch = 0; }
+    if (B.punch > 0 && !shielding && f.staggerT <= 0 && f.landT <= 0 && !(f.dashT > 0 && f.dashAir)) {
+      if (!f.punch.on) { if (startPunch(f) !== false) B.punch = 0; }
+      else if (f.punch.t > f.punch.A.wind * 0.5) { f.punch.queued = true; B.punch = 0; }
     }
-    pl.landT = Math.max(0, pl.landT - dt);
-    if (pl.punch.on && pl.punch.A.cd) (pl.moveReady || (pl.moveReady = {}))[pl.punch.A.key] = pl.time + pl.punch.A.cd;   // a move with a cooldown: ready again cd after it last ran (however it ended)
-    if (pl.punch.on) {
-      const P_ = pl.punch, A = P_.A, W = pl.wpn;
+    f.landT = Math.max(0, f.landT - dt);
+    if (f.punch.on && f.punch.A.cd) (f.moveReady || (f.moveReady = {}))[f.punch.A.key] = f.time + f.punch.A.cd;   // a move with a cooldown: ready again cd after it last ran (however it ended)
+    if (f.punch.on) {
+      const P_ = f.punch, A = P_.A, W = f.wpn;
       P_.t += dt * (W && P_.t < A.wind ? 1 / Math.max(0.4, 1 - W.quick / 100) : 1);   // Quick: the wind-up runs faster (a curse slows it)
-      if (A.float && !P_.floated && P_.t >= A.wind - 0.01) { P_.floated = true; A.float(pl); pl.fastFall = false; }   // aerials drift a little toward their direction
+      if (A.float && !P_.floated && P_.t >= A.wind - 0.01) { P_.floated = true; A.float(f); f.fastFall = false; }   // aerials drift a little toward their direction
       if (!P_.lunged && P_.t >= (A.lungeAt ?? A.wind * 0.55)) {   // step into it
-        P_.lunged = true; pl.lungeT = A.lungeT; pl.lungeV = A.lunge * (pl.onGround ? 1 : 0.5);
+        P_.lunged = true; f.lungeT = A.lungeT; f.lungeV = A.lunge * (f.onGround ? 1 : 0.5);
       }
       if (A.hop && !P_.hopped && P_.t >= A.wind - 0.02) {   // the uppercut drives up off the floor: feet leave the ground
         P_.hopped = true;
-        if (pl.onGround) { pl.vy = -A.hop; pl.onGround = false; pl.coyote = 0; splash(pl.x, PLAT.y, 3); }
+        if (f.onGround) { f.vy = -A.hop; f.onGround = false; f.coyote = 0; splash(f.x, PLAT.y, 3); }
       }
-      if (P_.queued && !A.air && P_.t >= A.link) startPunch(true);   // chain straight into the next hit
+      if (P_.queued && !A.air && P_.t >= A.link) startPunch(f, true);   // chain straight into the next hit
       else if (P_.t >= (W && !P_.hit ? A.wind + A.act + (A.end - A.wind - A.act) * Math.max(0.2, 1 - W.steady / 100) : A.end)) {   // Steady: less recovery after a miss
-        P_.on = false; P_.lastEnd = pl.time;
-        if (P_.queued) startPunch();
+        P_.on = false; P_.lastEnd = f.time;
+        if (P_.queued) startPunch(f);
       }
     }
 
     // horizontal
-    const acc = pl.onGround ? ACC_G : ACC_A;
-    const dir = (pl.punch.on && !pl.punch.A.air && pl.onGround) || (pl.snipe && !pl.snipe.wait && pl.onGround) ? 0 : dir0;   // (kneeling for No Scope: planted too)   // ground attacks plant you: only their lunge moves you
+    const acc = f.onGround ? ACC_G : ACC_A;
+    const dir = (f.punch.on && !f.punch.A.air && f.onGround) || (f.snipe && !f.snipe.wait && f.onGround) ? 0 : dir0;   // (kneeling for No Scope: planted too)   // ground attacks plant you: only their lunge moves you
+    if (dir) f.knocked = false;   // steering again
     // a few walking steps first, then it opens up into the sprint
-    pl.moveT = dir && pl.onGround ? pl.moveT + dt : dir ? pl.moveT : Math.max(0, pl.moveT - 3 * dt);
-    const sprint = Math.min(1, Math.max(0, (pl.moveT - 0.16) / 0.42));
-    pl.sprint = sprint;
-    const top = RUN * (pl.punch.on && pl.onGround ? 0.45 : pl.onGround ? 0.5 + 0.5 * sprint : 1) * (pl.wpn ? 1 + pl.wpn.light / 100 : 1) * (pl.onGround && inPool(pl.x, pl.y) ? 0.6 : 1);
+    f.moveT = dir && f.onGround ? f.moveT + dt : dir ? f.moveT : Math.max(0, f.moveT - 3 * dt);
+    const sprint = Math.min(1, Math.max(0, (f.moveT - 0.16) / 0.42));
+    f.sprint = sprint;
+    const top = RUN * (f.punch.on && f.onGround ? 0.45 : f.onGround ? 0.5 + 0.5 * sprint : 1) * (f.wpn ? 1 + f.wpn.light / 100 : 1) * (f.onGround && inPool(f.x, f.y) ? 0.6 : 1);
     const toward = (v, target, rate) => v > target ? Math.max(target, v - rate) : Math.min(target, v + rate);
-    if (pl.dashT > 0) {
-      const sp = pl.dashCarry + (pl.dashBurst - pl.dashCarry) * (pl.dashT / pl.dashDur);   // burst easing into the carried speed
-      const [dx, dy] = pl.dashV;
-      pl.vx = Math.abs(dx) > 0.1 ? dx * sp : pl.vx * Math.pow(0.05, dt);
-      if (pl.dashAir) pl.vy = dy * sp;
-    } else if (pl.lockT > 0 || pl.parryT > 0) {   // parrying / missed parry: planted
-      pl.vx = pl.onGround ? 0 : toward(pl.vx, 0, 900 * dt);
-    } else if (pl.staggerT > 0 || pl.stunT > 0) {
-      pl.vx = toward(pl.vx, 0, FRICTION * 0.5 * dt);
-    } else if (pl.lungeT > 0) {
-      pl.vx = pl.facing * Math.max(pl.vx * pl.facing, pl.lungeV);
-    } else if (pl.slideT > 0) {
-      pl.vx = Math.sign(pl.vx) * Math.max(0, Math.abs(pl.vx) - SLIDE_DECAY * dt);
-    } else if (pl.crouchK > 0.5) {   // crouch-walk: slow, low steps
-      pl.vx = toward(pl.vx, dir * CROUCH_V, (Math.abs(pl.vx) > CROUCH_V ? FRICTION : ACC_G * 0.6) * dt);
-      if (dir && !pl.punch.on) pl.facing = dir;
+    if (f.dashT > 0) {
+      const sp = f.dashCarry + (f.dashBurst - f.dashCarry) * (f.dashT / f.dashDur);   // burst easing into the carried speed
+      const [dx, dy] = f.dashV;
+      f.vx = Math.abs(dx) > 0.1 ? dx * sp : f.vx * Math.pow(0.05, dt);
+      if (f.dashAir) f.vy = dy * sp;
+    } else if (f.lockT > 0 || f.parryT > 0) {   // parrying / missed parry: planted
+      f.vx = f.onGround ? 0 : toward(f.vx, 0, 900 * dt);
+    } else if (f.staggerT > 0) {
+      f.vx = toward(f.vx, 0, FRICTION * 0.5 * dt);
+    } else if (f.stunT > 0 || (f.knocked && !dir)) {   // hit: knocked about with no control, sliding to a stop / drifting through the air
+      f.vx = f.onGround ? toward(f.vx, 0, KNOCK_FRICTION * dt) : f.vx * Math.pow(0.4, dt);
+    } else if (f.lungeT > 0) {
+      f.vx = f.facing * Math.max(f.vx * f.facing, f.lungeV);
+    } else if (f.slideT > 0) {
+      f.vx = Math.sign(f.vx) * Math.max(0, Math.abs(f.vx) - SLIDE_DECAY * dt);
+    } else if (f.crouchK > 0.5) {   // crouch-walk: slow, low steps
+      f.vx = toward(f.vx, dir * CROUCH_V, (Math.abs(f.vx) > CROUCH_V ? FRICTION : ACC_G * 0.6) * dt);
+      if (dir && !f.punch.on) f.facing = dir;
     } else if (dir) {
-      const sp = pl.vx * dir;
-      if (sp < 0) pl.airCarry = false;   // strafing back against it breaks the carry
-      if (sp > top) pl.vx = dir * Math.max(top, sp - (pl.onGround ? MOM_DECAY_G : pl.airCarry ? AIR_CARRY_DRAG : MOM_DECAY_A) * dt);   // momentum bleeds off slowly
-      else pl.vx = dir * Math.min(top, sp + acc * dt * (sp < 0 ? 1.6 : 1));
-      if (!pl.punch.on) pl.facing = dir;
-    } else if (pl.onGround) {
-      pl.vx = toward(pl.vx, 0, (Math.abs(pl.vx) > RUN ? FRICTION * 0.6 : FRICTION) * dt);
-    } else if (pl.airCarry) {
-      pl.vx = toward(pl.vx, 0, AIR_CARRY_DRAG * dt);   // no input after an air dash: you sail on
+      const sp = f.vx * dir;
+      if (sp < 0) f.airCarry = false;   // strafing back against it breaks the carry
+      if (sp > top) f.vx = dir * Math.max(top, sp - (f.onGround ? MOM_DECAY_G : f.airCarry ? AIR_CARRY_DRAG : MOM_DECAY_A) * dt);   // momentum bleeds off slowly
+      else f.vx = dir * Math.min(top, sp + acc * dt * (sp < 0 ? 1.6 : 1));
+      if (!f.punch.on) f.facing = dir;
+    } else if (f.onGround) {
+      f.vx = toward(f.vx, 0, (Math.abs(f.vx) > RUN ? FRICTION * 0.6 : FRICTION) * dt);
+    } else if (f.airCarry) {
+      f.vx = toward(f.vx, 0, AIR_CARRY_DRAG * dt);   // no input after an air dash: you sail on
     } else {
-      pl.vx = toward(pl.vx, 0, (Math.abs(pl.vx) > RUN ? MOM_DECAY_A * 2 : 500) * dt);
+      f.vx = toward(f.vx, 0, (Math.abs(f.vx) > RUN ? MOM_DECAY_A * 2 : 500) * dt);
     }
     // a faint ink wake while carrying extra speed
-    if (Math.abs(pl.vx) > RUN * 1.15 && Math.random() < dt * 14) addMote(pl.x - Math.sign(pl.vx) * 16, pl.y - 20 - Math.random() * 70, -pl.vx * 0.25, (Math.random() - 0.5) * 30, 0.3, 0.6 + Math.random() * 0.7, 20);
+    if (Math.abs(f.vx) > RUN * 1.15 && Math.random() < dt * 14) addMote(f.x - Math.sign(f.vx) * 16, f.y - 20 - Math.random() * 70, -f.vx * 0.25, (Math.random() - 0.5) * 30, 0.3, 0.6 + Math.random() * 0.7, 20);
 
     // vertical
-    pl.coyote = pl.onGround ? 0.08 : Math.max(0, pl.coyote - dt);
-    if (pressed.has('jump') && !(sh.down && !pl.onGround && pressed.has('up'))) B.jump = 0.13;   // pressed just before landing still jumps
-    const atkHold = pl.punch.on && !pl.punch.A.air && !(pl.punch.A.jc && pl.punch.hit && pl.punch.t >= pl.punch.A.wind + pl.punch.A.act);
-    pl.wallCoyote = !pl.onGround && pl.wallTouch && pl.staggerT <= 0 ? WALL_SLIDE.grip : Math.max(0, (pl.wallCoyote || 0) - dt);
+    f.coyote = f.onGround ? 0.08 : Math.max(0, f.coyote - dt);
+    if (pressed.has('jump') && !(sh.down && !f.onGround && pressed.has('up'))) B.jump = 0.13;   // pressed just before landing still jumps
+    const atkHold = f.punch.on && !f.punch.A.air && !(f.punch.A.jc && f.punch.hit && f.punch.t >= f.punch.A.wind + f.punch.A.act);
+    f.wallCoyote = !f.onGround && f.wallTouch && f.staggerT <= 0 ? WALL_SLIDE.grip : Math.max(0, (f.wallCoyote || 0) - dt);
     // slid too long without landing: the wall won't give you a jump any more (not even the double jump while you're on it)
-    pl.wallLocked = WALL_SLIDE.v0 + WALL_SLIDE.acc * (pl.wallT || 0) >= WALL_SLIDE.lock;
-    const wallNoJump = pl.wallLocked && !pl.onGround && pl.wallCoyote > 0;
+    f.wallLocked = WALL_SLIDE.v0 + WALL_SLIDE.acc * (f.wallT || 0) >= WALL_SLIDE.lock;
+    const wallNoJump = f.wallLocked && !f.onGround && f.wallCoyote > 0;
     if (wallNoJump && B.jump > 0) B.jump = 0;
-    if (B.jump > 0 && !atkHold && pl.landT <= 0 && !(pl.dashT > 0 && pl.dashAir) && (pl.crouchK < 0.5 || pl.slideT > 0) && (pl.onGround || pl.coyote > 0 || pl.wallCoyote > 0 || pl.airJumps > 0)) {
+    if (B.jump > 0 && !atkHold && f.landT <= 0 && !(f.dashT > 0 && f.dashAir) && (f.crouchK < 0.5 || f.slideT > 0) && (f.onGround || f.coyote > 0 || f.wallCoyote > 0 || f.airJumps > 0)) {
       B.jump = 0;
-      if (pl.punch.on && !pl.punch.A.air) { const P_ = pl.punch; P_.on = false; P_.queued = false; P_.next = 0; P_.lastEnd = pl.time; }   // jump-cancel: the ground attack's recovery is gone, you're free in the air
-      if (pl.dashT > 0) { pl.dashT = 0; pl.vx = Math.sign(pl.vx) * pl.dashCarry; }   // dash-jump keeps the carried speed
-      if (!pl.onGround && pl.coyote <= 0 && pl.wallCoyote > 0) {   // wall jump: toward the wall climbs it, anything else kicks off
+      if (f.punch.on && !f.punch.A.air) { const P_ = f.punch; P_.on = false; P_.queued = false; P_.next = 0; P_.lastEnd = f.time; }   // jump-cancel: the ground attack's recovery is gone, you're free in the air
+      if (f.dashT > 0) { f.dashT = 0; f.vx = Math.sign(f.vx) * f.dashCarry; }   // dash-jump keeps the carried speed
+      if (!f.onGround && f.coyote <= 0 && f.wallCoyote > 0) {   // wall jump: toward the wall climbs it, anything else kicks off
         const climb = held('right');
-        pl.vy = -WALL_JUMP.v; pl.vx = -(climb ? WALL_JUMP.upVx : WALL_JUMP.offVx); pl.facing = -1;
-        pl.wallCoyote = 0; pl.wallSlide = false; pl.airCarry = false; pl.fastFall = false; pl.flipT = 0;
-        if (pl.punch.on) { pl.punch.on = false; pl.punch.queued = false; pl.punch.lastEnd = pl.time; }
-        const [hx, hy] = pl.wallPt || [WALL, pl.y - 40];   // ink kicked off the wall where the foot pushed
+        f.vy = -WALL_JUMP.v; f.vx = -(climb ? WALL_JUMP.upVx : WALL_JUMP.offVx); f.facing = -1;
+        f.wallCoyote = 0; f.wallSlide = false; f.airCarry = false; f.fastFall = false; f.flipT = 0;
+        if (f.punch.on) { f.punch.on = false; f.punch.queued = false; f.punch.lastEnd = f.time; }
+        const [hx, hy] = f.wallPt || [WALL, f.y - 40];   // ink kicked off the wall where the foot pushed
         for (let i = 0; i < 6; i++) addMote(hx - 2, hy + (Math.random() - 0.5) * 30, -(140 + Math.random() * 200), (Math.random() - 0.6) * 220, 0.3 + Math.random() * 0.2, 0.8 + Math.random() * 1.1, 600);
         for (let i = 0; i < 3; i++) addDrop(hx - 3, hy + (Math.random() - 0.5) * 20, -(120 + Math.random() * 160), -60 - Math.random() * 160, 0.7 + Math.random() * 0.5);
-      } else if (pl.onGround || pl.coyote > 0) {
-        pl.vy = -JUMP_V; pl.onGround = false; pl.coyote = 0; pl.slideT = 0;   // slide-jumps keep their speed
-      } else if (pl.airJumps > 0) {
-        pl.airJumps--; pl.vy = -JUMP_V * 0.9; pl.flipT = FLIP_T;              // double jump: somersault
-        for (let i = 0; i < 4; i++) addMote(pl.x + (Math.random() - 0.5) * 20, pl.y, (Math.random() - 0.5) * 120, 120 + Math.random() * 80, 0.3, 0.8 + Math.random() * 0.8, 300);
+      } else if (f.onGround || f.coyote > 0) {
+        f.vy = -JUMP_V; f.onGround = false; f.coyote = 0; f.slideT = 0;   // slide-jumps keep their speed
+      } else if (f.airJumps > 0) {
+        f.airJumps--; f.vy = -JUMP_V * 0.9; f.flipT = FLIP_T;              // double jump: somersault
+        for (let i = 0; i < 4; i++) addMote(f.x + (Math.random() - 0.5) * 20, f.y, (Math.random() - 0.5) * 120, 120 + Math.random() * 80, 0.3, 0.8 + Math.random() * 0.8, 300);
       }
     }
-    if (!held('jump') && pl.vy < -300 && pl.flipT <= 0 && pl.dashT <= 0 && !pl.launched && !(pl.stunT > 0) && !(pl.punch.on && pl.punch.A.hop)) pl.vy = -300;   // short hop when the key is released early
+    if (!held('jump') && f.vy < -300 && f.flipT <= 0 && f.dashT <= 0 && !f.launched && !f.knocked && !(f.stunT > 0) && !(f.punch.on && f.punch.A.hop)) f.vy = -300;   // short hop when the key is released early
     // fast fall: down in the air kicks in as soon as you're near the top of the jump or coming down,
     // even if it was pressed earlier or together with left/right
-    if (!pl.onGround && !pl.fastFall && !(pl.stunT > 0) && held('down') && !sh.down && pl.dashT <= 0 && pl.vy > -260 && !(pl.punch.on && pl.punch.A.key === 'dair')) { pl.fastFall = true; pl.vy = Math.max(pl.vy, 780); pl.flipT = 0; }
-    if (pl.fastFall && Math.random() < dt * 30) addMote(pl.x + (Math.random() - 0.5) * 30, pl.y - 40 - Math.random() * 60, 0, -pl.vy * 0.35, 0.18, 0.6 + Math.random() * 0.5, 0);
-    let gk = pl.fastFall ? 1.3 : 1;
-    if (pl.punch.on && pl.punch.A.air) { const A = pl.punch.A, t = pl.punch.t; gk *= t < A.wind ? (A.gravW ?? 1) : t < A.wind + A.act ? (A.gravK ?? 1) : 1; }   // aerials hang a moment
-    if (!pl.onGround && !(pl.dashT > 0 && pl.dashAir)) pl.vy = Math.min(pl.fastFall ? FAST_FALL : MAX_FALL, pl.vy + GRAV * gk * dt);
-    pl.flipT = Math.max(0, pl.flipT - dt);
+    if (!f.onGround && !f.fastFall && !(f.stunT > 0) && held('down') && !sh.down && f.dashT <= 0 && f.vy > -260 && !(f.punch.on && f.punch.A.key === 'dair')) { f.fastFall = true; f.vy = Math.max(f.vy, 780); f.flipT = 0; }
+    if (f.fastFall && Math.random() < dt * 30) addMote(f.x + (Math.random() - 0.5) * 30, f.y - 40 - Math.random() * 60, 0, -f.vy * 0.35, 0.18, 0.6 + Math.random() * 0.5, 0);
+    let gk = f.fastFall ? 1.3 : 1;
+    if (f.punch.on && f.punch.A.air) { const A = f.punch.A, t = f.punch.t; gk *= t < A.wind ? (A.gravW ?? 1) : t < A.wind + A.act ? (A.gravK ?? 1) : 1; }   // aerials hang a moment
+    if (!f.onGround && !(f.dashT > 0 && f.dashAir)) f.vy = Math.min(f.fastFall ? FAST_FALL : MAX_FALL, f.vy + GRAV * gk * dt);
+    f.flipT = Math.max(0, f.flipT - dt);
     // wall slide: airborne, falling, against the wall and not pushing away from it (or attacking, dashing, fast falling)
-    pl.wallSlide = !pl.onGround && pl.wallTouch && pl.vy >= 0 && !held('left') && !pl.fastFall && pl.dashT <= 0 && !pl.punch.on && pl.staggerT <= 0 && pl.lockT <= 0 && pl.parryT <= 0;
-    if (pl.wallSlide) {
-      pl.wallT = (pl.wallT || 0) + dt;
-      const vmax = Math.min(WALL_SLIDE.max, WALL_SLIDE.v0 + WALL_SLIDE.acc * pl.wallT);
-      if (pl.vy > vmax) pl.vy = Math.max(vmax, pl.vy - WALL_SLIDE.brake * dt);   // a fast fall onto the wall is caught over a moment, not stopped dead
-      pl.vx = 60; pl.facing = 1; pl.airCarry = false; pl.flipT = 0;   // pressed up against the wall, facing it
-      pl.airJumps = 1; if (pl.airDashCd <= 0) pl.airDashes = 1;   // the wall gives back the double jump, and the air dash once it's off cooldown
+    f.wallSlide = !f.onGround && f.wallTouch && f.vy >= 0 && !held('left') && !f.fastFall && f.dashT <= 0 && !f.punch.on && f.staggerT <= 0 && f.lockT <= 0 && f.parryT <= 0;
+    if (f.wallSlide) {
+      f.wallT = (f.wallT || 0) + dt;
+      const vmax = Math.min(WALL_SLIDE.max, WALL_SLIDE.v0 + WALL_SLIDE.acc * f.wallT);
+      if (f.vy > vmax) f.vy = Math.max(vmax, f.vy - WALL_SLIDE.brake * dt);   // a fast fall onto the wall is caught over a moment, not stopped dead
+      f.vx = 60; f.facing = 1; f.airCarry = false; f.flipT = 0;   // pressed up against the wall, facing it
+      f.airJumps = 1; if (f.airDashCd <= 0) f.airDashes = 1;   // the wall gives back the double jump, and the air dash once it's off cooldown
       // ink smeared off where the hands and feet drag, more of it the faster you go
-      const [wx, wy] = pl.wallPt || [WALL, pl.y - 40];
-      if (Math.random() < dt * (6 + pl.vy * 0.05)) addMote(wx - 2, wy + (Math.random() - 0.5) * 16, -(20 + Math.random() * 50), -pl.vy * 0.15, 0.3 + Math.random() * 0.2, 0.6 + Math.random() * 0.8, 500);
+      const [wx, wy] = f.wallPt || [WALL, f.y - 40];
+      if (Math.random() < dt * (6 + f.vy * 0.05)) addMote(wx - 2, wy + (Math.random() - 0.5) * 16, -(20 + Math.random() * 50), -f.vy * 0.15, 0.3 + Math.random() * 0.2, 0.6 + Math.random() * 0.8, 500);
       // friction sparks off the hands and feet: start yellow at warn speed, turn red by the lock, stay red after it
       const sk = (vmax - WALL_SLIDE.warn) / (WALL_SLIDE.lock - WALL_SLIDE.warn);
-      if (sk > 0 && R0) {
+      if (sk > 0 && f.R) {
         const c = Math.min(1, sk), rate = 14 + 40 * c;
         for (const L of ['fa', 'ba', 'fl']) if (Math.random() < dt * rate / 3) {
-          const [px, py] = limbChain(R0, L)[0];
-          const a = -Math.PI / 2 - 0.35 - Math.random() * 0.9, sp = 160 + Math.random() * 200 + pl.vy * 0.2;   // thrown up and back off the wall
+          const [px, py] = limbChain(f.R, L)[0];
+          const a = -Math.PI / 2 - 0.35 - Math.random() * 0.9, sp = 160 + Math.random() * 200 + f.vy * 0.2;   // thrown up and back off the wall
           addSpark(Math.min(px, wallXAt(py) - 2), py, Math.cos(a) * sp, Math.sin(a) * sp, 0.14 + Math.random() * 0.14, c);
         }
       }
     }
 
-    const prevY = pl.y;
-    pl.x += pl.vx * dt;
-    pl.y += pl.vy * dt;
-    if (pl.x > WALL - 6) { pl.x = WALL - 6; if (pl.vx > 0) pl.vx = 0; }   // hard stop; the body outline is kept out of the wall after the rig is built
+    const prevY = f.y;
+    f.x += f.vx * dt;
+    f.y += f.vy * dt;
+    if (f.x > WALL - 6) { f.x = WALL - 6; if (f.vx > 0) f.vx = 0; }   // hard stop; the body outline is kept out of the wall after the rig is built
 
-    const over = pl.x >= PLAT.x0 && pl.x <= PLAT.x1;
-    if (!pl.onGround && pl.vy >= 0 && prevY <= PLAT.y && pl.y >= PLAT.y && over) {
-      if (pl.vy > 500) splash(pl.x, PLAT.y, 4 + Math.round(pl.vy / 400));
-      pl.y = PLAT.y; pl.vy = 0; pl.onGround = true; pl.flipT = 0; pl.airCarry = false;
-      if (pl.punch.on && pl.punch.A.air) { pl.landT = pl.punch.A.landLag || 0.08; pl.punch.on = false; pl.punch.queued = false; pl.punch.lastEnd = pl.time; }
-      if (pl.dashT > 0 && pl.dashAir) { pl.dashAir = false; pl.dashV = [Math.sign(pl.vx) || pl.facing, 0]; }   // a downward air dash turns into a ground dash
+    const over = f.x >= PLAT.x0 && f.x <= PLAT.x1;
+    if (!f.onGround && f.vy >= 0 && prevY <= PLAT.y && f.y >= PLAT.y && over) {
+      if (f.vy > 500) splash(f.x, PLAT.y, 4 + Math.round(f.vy / 400));
+      f.y = PLAT.y; f.vy = 0; f.onGround = true; f.flipT = 0; f.airCarry = false;
+      if (f.knocked) f.stunT = Math.max(f.stunT, 0.12);   // knocked down onto the floor: a beat before they can act
+      if (f.punch.on && f.punch.A.air) { f.landT = f.punch.A.landLag || 0.08; f.punch.on = false; f.punch.queued = false; f.punch.lastEnd = f.time; }
+      if (f.dashT > 0 && f.dashAir) { f.dashAir = false; f.dashV = [Math.sign(f.vx) || f.facing, 0]; }   // a downward air dash turns into a ground dash
     }
-    if (pl.onGround || pl.vy < -100 || pl.dashT > 0) pl.fastFall = false;
-    if (pl.onGround) { pl.airJumps = 1; if (pl.dashT <= 0 || !pl.dashAir) pl.airDashes = 1; pl.wallT = 0; pl.wallSlide = false; }   // the ground resets the slide speed
-    if (pl.onGround && !over) pl.onGround = false;
-    if (pl.onGround) pl.launched = false;
-    if (offScreen(pl.x, pl.y - 50) && !anchorSave(pl)) { plKO(); if (pl.out) { worldStep(dt); return; } }
+    if (f.onGround || f.vy < -100 || f.dashT > 0) f.fastFall = false;
+    if (f.onGround) { f.airJumps = 1; if (f.dashT <= 0 || !f.dashAir) f.airDashes = 1; f.wallT = 0; f.wallSlide = false; }   // the ground resets the slide speed
+    if (f.onGround && !over) f.onGround = false;
+    if (f.onGround) f.launched = false;
+    if (f.knocked && f.onGround && Math.abs(f.vx) < 1 && !(f.stunT > 0)) f.knocked = false;
+    if (offScreen(f.x, f.y - 50) && !anchorSave(f)) { koFighter(f); if (f.out || f.dead > 0) return; }
 
     // animation target
-    pl.run += Math.abs(pl.vx) * dt * (0.055 + 0.022 * pl.sprint);   // the legs turn over faster than the body travels
+    f.run += Math.abs(f.vx) * dt * (0.055 + 0.022 * f.sprint);   // the legs turn over faster than the body travels
     let target;
-    if (!pl.onGround) {
-      target = mixPose(JUMP, FALL, Math.min(1, Math.max(0, (pl.vy + 250) / 500)));
+    if (!f.onGround) {
+      target = mixPose(JUMP, FALL, Math.min(1, Math.max(0, (f.vy + 250) / 500)));
     } else {
-      const k = Math.min(1, Math.abs(pl.vx) / 90);
-      target = mixPose(idlePose(pl.time), mixPose(walkPose(pl.run), sprintPose(pl.run), pl.sprint), k);
-      if (pl.crouchK > 0.01) {
-        const cw = Math.min(1, Math.abs(pl.vx) / CROUCH_V);
-        target = mixPose(target, mixPose(idlePose(pl.time, 1), { ...walkPose(pl.run * 1.6), tl: 0.55, hd: -0.38 }, 0.28 * cw), pl.crouchK);
+      const k = Math.min(1, Math.abs(f.vx) / 90);
+      target = mixPose(idlePose(f.time), mixPose(walkPose(f.run), sprintPose(f.run), f.sprint), k);
+      if (f.crouchK > 0.01) {
+        const cw = Math.min(1, Math.abs(f.vx) / CROUCH_V);
+        target = mixPose(target, mixPose(idlePose(f.time, 1), { ...walkPose(f.run * 1.6), tl: 0.55, hd: -0.38 }, 0.28 * cw), f.crouchK);
       }
     }
-    if (pl.slideT > 0) target = SLIDE;
-    if (pl.fastFall && !pl.onGround) target = FASTFALL;
-    if (pl.wallSlide) {   // the faster the slide, the more the trailing foot digs in and the head ducks
-      const k = Math.min(1, pl.vy / 600);
+    if (f.slideT > 0) target = SLIDE;
+    if (f.fastFall && !f.onGround) target = FASTFALL;
+    if (f.wallSlide) {   // the faster the slide, the more the trailing foot digs in and the head ducks
+      const k = Math.min(1, f.vy / 600);
       target = { ...WALLSLIDE, hd: WALLSLIDE.hd + 0.25 * k, tl: WALLSLIDE.tl + 0.08 * k };
     }
-    if (pl.flipT > 0) target = mixPose(target, TUCK, Math.sin(Math.PI * Math.min(1, (1 - pl.flipT / FLIP_T) * 1.15)));
-    if (pl.parryT > 0) target = parryPose(pl, target);   // parry: arms thrown out into an X
-    else if (pl.lockT > 0) target = { ...target, ...XGUARD, tl: 0.02, hd: 0.2 };   // missed: arms still up, stuck
-    if (pl.dashT > 0 && pl.dashAir) target = AIRDASH;
-    else if (pl.dashT > 0) target = { ...sprintPose(1.2), tl: 0.85, hd: -0.55, fa1: 1.0, fa2: -0.05, ba1: 1.15, ba2: -0.05, fl1: -0.9, fl2: 1.5, bl1: 0.75, bl2: 0.9, ff: 0.3, bf: 0.6 };
-    if (pl.staggerT > 0) target = parryStunPose(pl, target);   // parried: flinch, then slouch and sway
-    else if (pl.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
-    if (pl.landT > 0) target = mixPose(target, idlePose(pl.time, 0.8), Math.min(1, pl.landT / 0.06));   // landing squat
-    if (pl.wpn) target = swordHold(pl, target);   // holding a sword: the arms take its stance
-    target = snipePose(pl, target);   // No Scope: the rifle whipped out and aimed (over a parry's pose: the shot animation has priority)
+    if (f.flipT > 0) target = mixPose(target, TUCK, Math.sin(Math.PI * Math.min(1, (1 - f.flipT / FLIP_T) * 1.15)));
+    if (f.parryT > 0) target = parryPose(f, target);   // parry: arms thrown out into an X
+    else if (f.lockT > 0) target = { ...target, ...XGUARD, tl: 0.02, hd: 0.2 };   // missed: arms still up, stuck
+    if (f.dashT > 0 && f.dashAir) target = AIRDASH;
+    else if (f.dashT > 0) target = { ...sprintPose(1.2), tl: 0.85, hd: -0.55, fa1: 1.0, fa2: -0.05, ba1: 1.15, ba2: -0.05, fl1: -0.9, fl2: 1.5, bl1: 0.75, bl2: 0.9, ff: 0.3, bf: 0.6 };
+    if (f.staggerT > 0) target = parryStunPose(f, target);   // parried: flinch, then slouch and sway
+    else if (f.hurtT > 0) target = mixPose(target, { ...target, ...(f.hurtKind ? LAUNCH : RECOIL) }, Math.min(1, f.hurtT / 0.12));   // just hit: a flinch
+    else if (f.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
+    if (f.landT > 0) target = mixPose(target, idlePose(f.time, 0.8), Math.min(1, f.landT / 0.06));   // landing squat
+    if (f.wpn) target = swordHold(f, target);   // holding a sword: the arms take its stance
+    target = snipePose(f, target);   // No Scope: the rifle whipped out and aimed (over a parry's pose: the shot animation has priority)
     let atkRate = 0, atkPh = -1;
-    if (pl.punch.on) {
-      const P_ = pl.punch, A = P_.A, t = P_.t;
+    if (f.punch.on) {
+      const P_ = f.punch, A = P_.A, t = P_.t;
       atkPh = t < A.wind ? 0 : t < A.wind + A.act + (A.hold ?? 0.07) ? 1 : 2;
       target = { ...target };
-      atkRate = A.pose(atkPh, target, pl.time, t);
+      atkRate = A.pose(atkPh, target, f.time, t, f);
     }
-    if (atkPh !== 0 && atkPh !== 1 && !(pl.snipe && !pl.snipe.wait)) for (const k of ['fa1', 'ba1', 'fl1', 'bl1']) {   // unwind over-the-top swings so recovery takes the short way back (not while No Scope's rifle whips over the head)
-      if (pl.pose[k] > Math.PI + 0.3) pl.pose[k] -= TAU; else if (pl.pose[k] < -Math.PI - 0.3) pl.pose[k] += TAU;
+    if (atkPh !== 0 && atkPh !== 1 && !(f.snipe && !f.snipe.wait)) for (const k of ['fa1', 'ba1', 'fl1', 'bl1']) {   // unwind over-the-top swings so recovery takes the short way back (not while No Scope's rifle whips over the head)
+      if (f.pose[k] > Math.PI + 0.3) f.pose[k] -= TAU; else if (f.pose[k] < -Math.PI - 0.3) f.pose[k] += TAU;
     }
-    const base = 1 - Math.exp(-(20 + 25 * pl.sprint) * dt), quick = 1 - Math.exp(-atkRate * dt);
-    const snap = pl.parryT > 0 && !sniping(pl) ? 1 - Math.exp(-75 * dt) : 0;   // the parry X snaps up instantly, chest and all (not over No Scope's rifle)
-    const own = (k) => { const L = pl.punch.A.limb; return k.startsWith(L) || k === (L[1] === 'l' ? L[0] + 'f' : '') || k === 'tl' || k === 'hd' || k === 'dx' || k === 'sp'; };
-    pl.prevPose = { ...pl.pose };
+    const base = 1 - Math.exp(-(f.hurtT > 0.15 ? 45 : 20 + 25 * f.sprint) * dt), quick = 1 - Math.exp(-atkRate * dt);
+    const snap = f.parryT > 0 && !sniping(f) ? 1 - Math.exp(-75 * dt) : 0;   // the parry X snaps up instantly, chest and all (not over No Scope's rifle)
+    const own = (k) => { const L = f.punch.A.limb; return k.startsWith(L) || k === (L[1] === 'l' ? L[0] + 'f' : '') || k === 'tl' || k === 'hd' || k === 'dx' || k === 'sp'; };
+    f.prevPose = { ...f.pose };
     for (const k of KEYS) {
       // wind-up and strike drive the whole body at the move's speed; the recovery eases the attacking limb back slowly
       const rate = snap && ((k[0] === 'f' || k[0] === 'b') && k[1] === 'a' || k === 'tl' || k === 'hd' || k === 'dx' || k === 'sp') ? snap
         : atkRate && (atkPh < 2 || own(k)) ? quick : base;
-      pl.pose[k] += (target[k] - pl.pose[k]) * rate;
+      f.pose[k] += (target[k] - f.pose[k]) * rate;
     }
 
     // body rotation: somersault on the double jump, line up with an air dash and roll through it
-    if (pl.flipT > 0) {
-      const e = 1 - pl.flipT / FLIP_T;
-      pl.rot = Math.PI * 2 * (1 - Math.pow(1 - e, 2.2));
-    } else if (pl.dashT > 0 && pl.dashAir) {
-      const [dx, dy] = pl.dashV, aim = Math.atan2(dy, Math.abs(dx) > 0.1 ? dx * pl.facing : 0.0001) + Math.PI / 2;
-      pl.rot += (aim - pl.rot) * (1 - Math.exp(-40 * dt));
+    if (f.flipT > 0) {
+      const e = 1 - f.flipT / FLIP_T;
+      f.rot = Math.PI * 2 * (1 - Math.pow(1 - e, 2.2));
+    } else if (f.dashT > 0 && f.dashAir) {
+      const [dx, dy] = f.dashV, aim = Math.atan2(dy, Math.abs(dx) > 0.1 ? dx * f.facing : 0.0001) + Math.PI / 2;
+      f.rot += (aim - f.rot) * (1 - Math.exp(-40 * dt));
     } else {
-      pl.rot = ((pl.rot + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;   // unwrap, then settle upright
-      pl.rot *= Math.exp(-14 * dt); if (Math.abs(pl.rot) < 0.002) pl.rot = 0;
+      f.rot = ((f.rot + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;   // unwrap, then settle upright
+      f.rot *= Math.exp(-14 * dt); if (Math.abs(f.rot) < 0.002) f.rot = 0;
     }
-    pl.roll = 1;
+    f.roll = 1;
     // kicks that stretch the rear leg (A.stretchAt): shortened as it swings round past the body, past full length on the strike
     {
-      const P_ = pl.punch, A = P_.on ? P_.A : null, want = A && A.stretchAt ? A.stretchAt(P_.t) : 1, cur = pl.bStretch || 1;
-      pl.bStretch = cur + (want - cur) * (1 - Math.exp(-(want > cur ? 30 : 14) * dt));
+      const P_ = f.punch, A = P_.on ? P_.A : null, want = A && A.stretchAt ? A.stretchAt(P_.t) : 1, cur = f.bStretch || 1;
+      f.bStretch = cur + (want - cur) * (1 - Math.exp(-(want > cur ? 30 : 14) * dt));
     }
 
-    pl.prevSwordW = pl.swordW || 0; pl.prevSwordFS = pl.swordFS || 1;
-    if (pl.wpn) {   // the wrist turns the sword toward its stance angle (ABS: in the body frame; REL: against the forearm)
-      const P_ = pl.punch, keyed = P_.on && P_.A.keys && P_.keyBlade !== undefined;
-      if (keyed) { pl.swordW = P_.keyBlade - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2); pl.swordTwist = P_.keyTwist; pl.swordKeyed = true; }   // a keyed swing: the wrist turns the blade exactly where the swing has it
+    f.prevSwordW = f.swordW || 0; f.prevSwordFS = f.swordFS || 1;
+    if (f.wpn) {   // the wrist turns the sword toward its stance angle (ABS: in the body frame; REL: against the forearm)
+      const P_ = f.punch, keyed = P_.on && P_.A.keys && P_.keyBlade !== undefined;
+      if (keyed) { f.swordW = P_.keyBlade - (f.pose.tl + f.pose.fa1 + f.pose.fa2); f.swordTwist = P_.keyTwist; f.swordKeyed = true; }   // a keyed swing: the wrist turns the blade exactly where the swing has it
       else {
-        if (pl.swordKeyed && !(P_.on && P_.A.keys)) { pl.swordKeyed = false; pl.swordResetT = 0.14; }   // the swing was cut short (dash, jump, parry, a hit) or just ended: the sword goes straight back to normal
-        pl.swordResetT = Math.max(0, (pl.swordResetT || 0) - dt);
-        const fast = pl.swordResetT > 0, H = pl.swordAim || { rel: 0 }, w = H.abs !== undefined ? H.abs - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2) : H.rel;
-        pl.swordW = (pl.swordW || 0) + wrapA(w - (pl.swordW || 0)) * (1 - Math.exp(-(fast ? 45 : H.rate || 18) * dt));
-        pl.swordTwist = (pl.swordTwist ?? 1) + (1 - (pl.swordTwist ?? 1)) * (1 - Math.exp(-(fast ? 50 : 16) * dt));   // turned back over, edge down
+        if (f.swordKeyed && !(P_.on && P_.A.keys)) { f.swordKeyed = false; f.swordResetT = 0.14; }   // the swing was cut short (dash, jump, parry, a hit) or just ended: the sword goes straight back to normal
+        f.swordResetT = Math.max(0, (f.swordResetT || 0) - dt);
+        const fast = f.swordResetT > 0, H = f.swordAim || { rel: 0 }, w = H.abs !== undefined ? H.abs - (f.pose.tl + f.pose.fa1 + f.pose.fa2) : H.rel;
+        f.swordW = (f.swordW || 0) + wrapA(w - (f.swordW || 0)) * (1 - Math.exp(-(fast ? 45 : H.rate || 18) * dt));
+        f.swordTwist = (f.swordTwist ?? 1) + (1 - (f.swordTwist ?? 1)) * (1 - Math.exp(-(fast ? 50 : 16) * dt));   // turned back over, edge down
       }
-      pl.swordTurn = (pl.swordTurn || 0) + ((pl.swordTurnTo || 0) - (pl.swordTurn || 0)) * (1 - Math.exp(-30 * dt));
+      f.swordTurn = (f.swordTurn || 0) + ((f.swordTurnTo || 0) - (f.swordTurn || 0)) * (1 - Math.exp(-30 * dt));
       const Rp = rig();
       // swinging low beside you on the ground, the blade turns across your body: it's drawn foreshortened just enough that the
       // tip skims along over the floor instead of cutting into it
-      pl.swordFS = 1;
-      if (P_.on && P_.A.keys && pl.x > PLAT.x0 && pl.x < PLAT.x1 && pl.y <= PLAT.y + 1) {   // (on the floor, or low over it)
-        const m = swordMat(Rp.fa.lo, pl.swordW, SWORD_HOLD.scale, 0, 1, pl.swordTwist), fy = apply(m, 0, 19)[1], ty = swordTip(Rp, pl.wpn, pl.swordW, 1, pl.swordTwist)[1], lim = PLAT.y - 5;
-        if (ty > lim && ty > fy + 1) pl.swordFS = Math.max(0.12, (lim - fy) / (ty - fy));
+      f.swordFS = 1;
+      if (P_.on && P_.A.keys && f.x > PLAT.x0 && f.x < PLAT.x1 && f.y <= PLAT.y + 1) {   // (on the floor, or low over it)
+        const m = swordMat(Rp.fa.lo, f.swordW, SWORD_HOLD.scale, 0, 1, f.swordTwist), fy = apply(m, 0, 19)[1], ty = swordTip(Rp, f.wpn, f.swordW, 1, f.swordTwist)[1], lim = PLAT.y - 5;
+        if (ty > lim && ty > fy + 1) f.swordFS = Math.max(0.12, (lim - fy) / (ty - fy));
       }
       if (P_.on && P_.A.twoHand) {   // two-handed: the off hand on the grip just behind the lead hand, its arm solved to reach it
-        const [gx, gy] = apply(swordMat(Rp.fa.lo, pl.swordW, SWORD_HOLD.scale, 0, pl.swordFS, pl.swordTwist), SWORD_GRIP2[0], SWORD_GRIP2[1]), [sx, sy] = apply(Rp.torso, 1, -21);
-        [pl.pose.ba1, pl.pose.ba2] = armIKn(pl, pl.pose.tl, sx, sy, gx, gy);
+        const [gx, gy] = apply(swordMat(Rp.fa.lo, f.swordW, SWORD_HOLD.scale, 0, f.swordFS, f.swordTwist), SWORD_GRIP2[0], SWORD_GRIP2[1]), [sx, sy] = apply(Rp.torso, 1, -21);
+        [f.pose.ba1, f.pose.ba2] = armIKn(f, f.pose.tl, sx, sy, gx, gy);
       }
     }
-    R0 = rig();
-    swordShed(pl, R0, dt);
+    f.R = rig(f); f.box = rigBox(f.R); if (f.onGround && f.footPad == null) f.footPad = f.box[3] - PLAT.y;
+    swordShed(f, f.R, dt);
     // the wall is solid for the whole body: no fist, foot or head pokes into it. Push back out by however far the outline goes in.
     {
-      const [ov, my, wx] = wallOverlap(R0, !pl.onGround), over = ov + 2;
-      const glue = over > 0 || pl.wallSlide;   // sliding: stay glued to the wall while the pose settles
-      if (glue) { pl.x -= over; if (pl.vx > 0) pl.vx = 0; R0 = rig(); }
-      pl.wallTouch = glue || over > -3; pl.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
+      const [ov, my, wx] = wallOverlap(f.R, !f.onGround), over = ov + 2;
+      const glue = over > 0 || f.wallSlide;   // sliding: stay glued to the wall while the pose settles
+      if (glue) { f.x -= over; if (f.vx > 0) f.vx = 0; f.R = rig(f); }
+      f.wallTouch = glue || over > -3; f.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
     }
-    swingTrailStep(pl, R0, dt);   // the weapon's swing trail
-    if (pl.punch.on) {
-      const P_ = pl.punch, A = P_.A, ch = A.limb === 'fa' && pl.wpn ? [swordTip(R0, pl.wpn, pl.swordW, pl.swordFS || 1, pl.swordTwist ?? 1), ...limbChain(R0, 'fa')] : limbChain(R0, A.limb), [fx, fy] = ch[0], rr = A.r || HIT_R;
-      const chains = (A.limbs || [A.limb]).map(L => L === A.limb ? ch : limbChain(R0, L)).map(c => A.tip ? c.slice(0, A.tip) : c);   // tip: only the foot and shin hit
-      pl.fist = [fx, fy];
+    swingTrailStep(f, f.R, dt);   // the weapon's swing trail
+    if (f.punch.on) {
+      const P_ = f.punch, A = P_.A, ch = A.limb === 'fa' && f.wpn ? [swordTip(f.R, f.wpn, f.swordW, f.swordFS || 1, f.swordTwist ?? 1), ...limbChain(f.R, 'fa')] : limbChain(f.R, A.limb), [fx, fy] = ch[0], rr = A.r || HIT_R;
+      const chains = (A.limbs || [A.limb]).map(L => L === A.limb ? ch : limbChain(f.R, L)).map(c => A.tip ? c.slice(0, A.tip) : c);   // tip: only the foot and shin hit
+      f.fist = [fx, fy];
       // telegraph: kill blows draw ink in toward the striking fist or foot while they wind up
       if (A.tele && P_.t < A.wind && Math.random() < dt * 55) {
         const a = Math.random() * TAU, d = 26 + Math.random() * 16;
@@ -2108,48 +2073,104 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       }
       if (!P_.flecked && P_.t > A.wind + 0.02) {
         P_.flecked = true;
-        for (let i = 0; i < 3; i++) addMote(fx, fy, pl.facing * (160 + Math.random() * 120) * (A.up ? 0.4 : 1), (A.up ? -200 : 0) + (Math.random() - 0.6) * 90, 0.3 + Math.random() * 0.2, 1 + Math.random() * 1.2);
+        for (let i = 0; i < 3; i++) addMote(fx, fy, f.facing * (160 + Math.random() * 120) * (A.up ? 0.4 : 1), (A.up ? -200 : 0) + (Math.random() - 0.6) * 90, 0.3 + Math.random() * 0.2, 1 + Math.random() * 1.2);
       }
       // swoosh: the path of the fist / foot through the strike
       if (P_.t > A.wind - 0.04 && P_.t < A.wind + A.act + 0.05) {   // kept relative to the body so it rides along
-        if (P_.trail.length && pl.prevPose) for (const k of [0.25, 0.5, 0.75]) {   // fast swings move a long way in one frame: fill in the arc between
-          const mid = rig({ ...pl, pose: lerpPoseA(pl.prevPose, pl.pose, k) }), [mx, my] = limbChain(mid, A.limb)[0];
-          P_.trail.push([mx - pl.x, my - pl.y]);
+        if (P_.trail.length && f.prevPose) for (const k of [0.25, 0.5, 0.75]) {   // fast swings move a long way in one frame: fill in the arc between
+          const mid = rig({ ...f, pose: lerpPoseA(f.prevPose, f.pose, k) }), [mx, my] = limbChain(mid, A.limb)[0];
+          P_.trail.push([mx - f.x, my - f.y]);
         }
-        const [tx, ty] = pl.wpn && A.limb === 'fa' ? limbChain(R0, 'fa')[0] : [fx, fy];   // the swoosh follows the fist (with a sword, not its tip)
-        P_.trail.push([tx - pl.x, ty - pl.y]); while (P_.trail.length > 24) P_.trail.shift();
+        const [tx, ty] = f.wpn && A.limb === 'fa' ? limbChain(f.R, 'fa')[0] : [fx, fy];   // the swoosh follows the fist (with a sword, not its tip)
+        P_.trail.push([tx - f.x, ty - f.y]); while (P_.trail.length > 24) P_.trail.shift();
       }
       // hit frames: a capsule (radius r) along the whole limb, tip first, live only during the hit frames
       const active = P_.t >= A.wind && P_.t < A.wind + A.act;
-      pl.hitShape = active ? chains.map(c => ({ pts: c, r: rr, kill: !!A.ragdoll })) : null;
-      if (active && pl.wpn && pl.wpn.has.phantom && !P_.ghosted) { P_.ghosted = true; phantoms.push({ t: 0.3 + A.act / 2, chains: chains.map(c => c.map(p => p.slice())), r: rr, dmg: pl.wpn.dmg }); }   // Phantom: the same swing again in 0.3 s
+      f.hitShape = active ? chains.map(c => ({ pts: c, r: rr, kill: !!A.ragdoll })) : null;
+      if (active && f.wpn && f.wpn.has.phantom && !P_.ghosted) { P_.ghosted = true; phantoms.push({ t: 0.3 + A.act / 2, chains: chains.map(c => c.map(p => p.slice())), r: rr, dmg: f.wpn.dmg }); }   // Phantom: the same swing again in 0.3 s
       // a fast blade swing (A.sweep) is also tested where it was between the last frame and this one, so it can't skip past them
-      const tested = active && A.sweep && pl.prevPose && pl.wpn ? [0.34, 0.67].map(k => { const Rm = rig({ ...pl, pose: lerpPoseA(pl.prevPose, pl.pose, k) }); return [swordTip(Rm, pl.wpn, pl.prevSwordW + wrapA(pl.swordW - pl.prevSwordW) * k, pl.prevSwordFS + ((pl.swordFS || 1) - pl.prevSwordFS) * k, pl.swordTwist ?? 1), ...limbChain(Rm, 'fa')]; }).concat(chains) : chains;
-      const inFront = (qx) => !A.front || (qx - pl.x) * pl.facing > -6;   // front-only moves don't catch anyone behind you
-      const tryHit = (hs, onHit) => {
-        for (const c of tested) for (let s_ = 0; s_ < c.length - 1; s_++) {
-          const [ax, ay] = c[s_], [bx, by] = c[s_ + 1], n = Math.max(2, Math.ceil(Math.hypot(bx - ax, by - ay) / 3));
-          for (let i = 0; i <= n; i++) {
-            const qx = ax + (bx - ax) * i / n, qy = ay + (by - ay) * i / n;
-            if (inFront(qx) && hurtHit(hs, qx, qy, rr)) { onHit(qx, qy); return; }
-          }
-        }
-      };
-      if (!P_.hit && active && bot.R && canBeHit(bot)) tryHit(hurtShapes(bot.R), (qx, qy) => landHit(A, qx, qy));   // no hitting a ragdoll
-      if (!P_.hit && active && dgCanBeHit()) tryHit(dgHurtShapes(dg.R), (qx, qy) => dgTakeHit(A, qx, qy));   // the Divine General, when he's fighting you
+      const tested = active && A.sweep && f.prevPose && f.wpn ? [0.34, 0.67].map(k => { const Rm = rig({ ...f, pose: lerpPoseA(f.prevPose, f.pose, k) }); return [swordTip(Rm, f.wpn, f.prevSwordW + wrapA(f.swordW - f.prevSwordW) * k, f.prevSwordFS + ((f.swordFS || 1) - f.prevSwordFS) * k, f.swordTwist ?? 1), ...limbChain(Rm, 'fa')]; }).concat(chains) : chains;
+      if (!P_.hit && active) f.hitTest = { A, chains: tested, r: rr, front: !!A.front };   // resolveHits finds who it touches
     }
-    if (!pl.punch.on) pl.hitShape = null;
+    if (!f.punch.on) f.hitShape = null;
+  }
+  // hits: everyone's attack is checked against where everyone is this frame, and only then applied, so neither player's attacks
+  // land first (a trade is a trade, whoever is player 1: no host advantage online)
+  function hitPointOn(f, H, hs) {
+    for (const c of H.chains) for (let s_ = 0; s_ < c.length - 1; s_++) {
+      const [ax, ay] = c[s_], [bx, by] = c[s_ + 1], n = Math.max(2, Math.ceil(Math.hypot(bx - ax, by - ay) / 3));
+      for (let i = 0; i <= n; i++) {
+        const qx = ax + (bx - ax) * i / n, qy = ay + (by - ay) * i / n;
+        if ((!H.front || (qx - f.x) * f.facing > -6) && hurtHit(hs, qx, qy, H.r)) return [qx, qy];   // front-only moves don't catch anyone behind
+      }
+    }
+    return null;
+  }
+  function resolveHits() {
+    const hits = [];
+    for (const f of FIGHTERS) {
+      const H = f.hitTest; f.hitTest = null; if (!H || !f.punch.on || f.punch.hit) continue;
+      const E = foeOf(f); let pt = E.R && canBeHit(E) ? hitPointOn(f, H, hurtShapes(E.R)) : null;   // (no hitting a ragdoll)
+      if (pt) { hits.push([f, E, H.A, pt]); continue; }
+      if (dgCanBeHit() && dg.owner !== f) { pt = hitPointOn(f, H, dgHurtShapes(dg.R)); if (pt) hits.push([f, 'dg', H.A, pt]); }   // the Divine General, when he's fighting you
+    }
+    for (const [f, t, A, pt] of hits) t === 'dg' ? dgTakeHit(f, A, pt[0], pt[1]) : landHit(f, t, A, pt[0], pt[1]);
+  }
+  // ---- one fixed game step. update reads the devices and the bot into this frame's input packets; simFrame is the game itself:
+  // given the same state and the same packets it always does exactly the same thing (what rollback netcode is built on)
+  function update(dt) {
+    pollPad();
+    if (pressed.has('pause')) { openMenu(); pressed.clear(); }
+    if (pressed.has('boxes')) showBoxes = !showBoxes;
+    if (pressed.has('botmode')) setBotParry(bot.mode !== 'parry');
+    const inputs = [deviceInput(), botBrain(bot, dt)];
+    pressed.clear();
+    simFrame(inputs, dt);
+  }
+  function simFrame(inputs, dt) {
+    shakeT = Math.max(0, shakeT - dt);
+    FIGHTERS.forEach((f, i) => { f.in = inputs[i]; });
+    for (const f of FIGHTERS) fighterStep(f, dt);
+    resolveHits();
+    R0 = pl.R;
     worldStep(dt);
+  }
+  // the practice bot "presses buttons": every frame it makes an input packet, the way a player would. Dummy: stands still, turning
+  // to face you with a one-frame tap. Parry mode: reacts (0.06 s) to an attack coming at it by pressing Shift with no direction
+  function botBrain(b, dt) {
+    const I = emptyInput(), E = foeOf(b), ai = b.ai, press = (a) => { I.h.add(a); I.p.add(a); };
+    if (b.mode === 'parry') {
+      const P_ = E.punch, A = P_.A, ok = b.stunT <= 0 && b.onGround && !b.rag;
+      const threat = P_.on && !P_.hit && P_.t < A.wind + A.act && Math.abs(E.x - b.x) < 200 && Math.sign(b.x - E.x) === E.facing;
+      if (!threat || !ok || b.parryCd > 0) ai.react = -1;
+      else if (ai.react < 0) ai.react = 0.06;
+      else { ai.react -= dt; if (ai.react <= 0) { ai.react = -1; press('shift'); return I; } }
+    } else ai.react = -1;
+    const free = b.stunT <= 0 && b.hurtT <= 0 && b.onGround && !b.rag && !(b.dead > 0) && b.staggerT <= 0 && b.lockT <= 0 && b.parryT <= 0 && !b.punch.on;
+    if (free) { const want = E.x < b.x ? -1 : 1; if (want !== b.facing) press(want > 0 ? 'right' : 'left'); }
+    return I;
+  }
+  // drawing-only upkeep for a fighter: labels and the KO tag fading, the can't-be-hit shimmer, the bot's ink outline and the red goo
+  // beading off it when it's damaged
+  function fighterCosmetics(f, dt) {
+    f.labelT = Math.max(0, (f.labelT || 0) - dt); f.moveLabT = Math.max(0, (f.moveLabT || 0) - dt); f.koT = Math.max(0, (f.koT || 0) - dt);
+    f.invK = Math.max(0, Math.min(1, (f.invK || 0) + (canBeHit(f) ? -14 : 12) * dt));   // can't-be-hit shimmer: quick in, quicker out
+    if (f.ink !== 'bot' || !f.R || f.dead > 0) return;
+    botInk(f.R);
+    const d01 = dmgShare(f);
+    if (d01 > 0 && Math.random() < dt * (0.6 + 5 * d01)) {
+      const inst = INST[(Math.random() * INST.length) | 0], g = inst.rings[0], k = (Math.random() * g.src.n) | 0;
+      if (Math.hypot(g.bro[2 * k] - g.bliq[2 * k], g.bro[2 * k + 1] - g.bliq[2 * k + 1]) > 0.5) addDrop(g.bro[2 * k], g.bro[2 * k + 1], f.vx * 0.4 + (Math.random() - 0.5) * 30, f.vy * 0.3 + 20, 0.8 + Math.random() * 0.6, RED);
+    }
   }
   // everything that moves whether or not the player is in control: the bot, the Divine General, the round, ink
   function worldStep(dt) {
-    stepCardCds(pl, dt); stepCardCds(bot, dt);   // card cooldowns run on, ragdolled or not
-    botUpdate(dt);
+    for (const f of FIGHTERS) stepCardCds(f, dt);   // card cooldowns run on, ragdolled or not
     dgUpdate(dt);
     wpnWorldStep(dt);
-    noScopeStep(pl, dt);
+    for (const f of FIGHTERS) noScopeStep(f, dt);
     roundUpdate(dt);
-    for (const [f, R] of [[pl, R0], [bot, bot.R]]) { const e = PARRY_WIN - f.parryT; parrySparks(f, R, dt, e >= 0.05 && e - dt < 0.05); }   // big burst once the arms are crossed
+    for (const f of FIGHTERS) { const R = f.R, e = PARRY_WIN - f.parryT; parrySparks(f, R, dt, e >= 0.05 && e - dt < 0.05); }   // big burst once the arms are crossed
     stepSparks(dt);
     for (let i = motes.length - 1; i >= 0; i--) {
       const p = motes[i];
@@ -2176,8 +2197,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     for (let i = dmgNums.length - 1; i >= 0; i--) if ((dmgNums[i].t += dt) > DMG_NUM_LIFE) dmgNums.splice(i, 1);
     dripsUpdate(dt);
-    auraUpdate(R0, dt);
-    pressed.clear();
+    auraUpdate(pl.R, dt);
+    for (const f of FIGHTERS) fighterCosmetics(f, dt);
   }
 
   // ---------------------------------------------------------------- drawing
@@ -2802,9 +2823,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!b.R || !b.box || b.dead > 0) return;
     const a = Math.min(1, b.labelT / 0.3), hx = (b.box[0] + b.box[2]) / 2, hy = Math.min(b.box[1], PLAT.y - 120) - 14;   // above the body, wherever it's tumbling
     setM(ID);
-    if (b.moveT > 0 && b.move) {   // practice aid: which move just landed
-      ctx.textAlign = 'center'; ctx.font = 'italic 600 14px Georgia, serif'; ctx.fillStyle = `rgba(21,18,15,${0.7 * Math.min(1, b.moveT / 0.3)})`;
-      ctx.fillText(b.move, hx, hy + (b.labelT > 0 ? -50 : -20));
+    if (b.moveLabT > 0 && b.moveLab) {   // practice aid: which move just landed
+      ctx.textAlign = 'center'; ctx.font = 'italic 600 14px Georgia, serif'; ctx.fillStyle = `rgba(21,18,15,${0.7 * Math.min(1, b.moveLabT / 0.3)})`;
+      ctx.fillText(b.moveLab, hx, hy + (b.labelT > 0 ? -50 : -20));
     }
     if (b.labelT <= 0) return;
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
@@ -3325,9 +3346,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // who he's fighting: the fighter that doesn't hold his card, while they're in play
   function dgEnemy() {
     if (!dg) return null;
-    const E = dg.owner === pl ? bot : pl;
-    if (E === pl) return pl.out ? null : { f: pl, x: pl.x, y: pl.y, onGround: pl.onGround, open: !pl.rag, shapes: () => hurtShapes(R0) };
-    return bot.dead > 0 || !bot.R ? null : { f: bot, x: bot.x, y: bot.y, onGround: bot.onGround, open: canBeHit(bot), shapes: () => hurtShapes(bot.R) };
+    const E = foeOf(dg.owner);
+    return E.out || E.dead > 0 || !E.R ? null : { f: E, x: E.x, y: E.y, onGround: E.onGround, open: canBeHit(E), shapes: () => hurtShapes(E.R) };
   }
   function spawnDG(owner) {
     dg = { owner, x: owner.x, y: -520, vx: 0, vy: 0, facing: owner === pl ? 1 : -1, pose: { ...dgIdle(0), ...DG_AIR }, time: 0, t: 0, rot: 0,
@@ -3369,17 +3389,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     addDmg(f, AD);
     if (A.stun) {   // popped straight up and hit-stunned, like a regular hit (not a ragdoll)
       const vx = dir * A.kb * (1 + 0.4 * (ls - 1)), vy = -A.pop * (1 + 0.3 * (ls - 1));
-      if (f === pl) {
-        Object.assign(pl, { stunT: A.stun, vx, vy, onGround: false, dashT: 0, slideT: 0, lungeT: 0, wallSlide: false, fastFall: false, landT: 0 });
-        pl.punch.on = false; pl.punch.queued = false;
-      } else Object.assign(bot, { stunT: A.stun, stunMax: A.stun, hurtT: 0.24, hurtKind: 1, vx, vy, onGround: false });
+      Object.assign(f, { stunT: A.stun, stunMax: A.stun, hurtT: 0.24, hurtKind: 1, vx, vy, onGround: false, knocked: true, dashT: 0, slideT: 0, lungeT: 0, wallSlide: false, fastFall: false, landT: 0 });
+      f.punch.on = false; f.punch.queued = false;
       shakeT = Math.max(shakeT, 0.18);
       if (showDmg) { for (const n of dmgNums) n.y -= 40; dmgNums.push({ x: pt[0] + dir * 30, y: pt[1] + 6, v: AD, kill: false, dir, t: 0 }); }
       for (let i = 0; i < 8; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 220, -200 - Math.random() * 300, 0.8 + Math.random(), Math.random() < Math.min(1, dmgShare(f) * 1.5) ? RED : undefined);
       return true;
     }
-    if (f === pl) plRagdoll(dir * A.kb * ls, -A.pop * ls, -8 * dir);
-    else { startRagdoll(bot, dir * A.kb * ls, -A.pop * ls, -8); bot.combo = 0; }
+    startRagdoll(f, dir * A.kb * ls, -A.pop * ls, -8 * dir); f.combo = 0;
     shakeT = 0.22;
     if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + dir * 34, y: pt[1] + 6, v: AD, kill: true, dir, t: 0 }); }
     const red = Math.min(1, dmgShare(f) * 1.5);
@@ -3398,7 +3415,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
 
   // ---- the pierce: crown, lunge, skewer, fling
-  const dgRigOf = (f) => f === pl ? R0 : f.R;
+  const dgRigOf = (f) => f.R;
   const dgShoulder = (g) => g.R ? apply(g.R.fa.up, 0, 0) : [g.x + g.facing * 60, g.y - 250];
   // can the skewer point reach the target's middle from here, after the lunge? (measured from his body line, so it holds whichever way he faces)
   function dgPierceReach(g, E) {
@@ -3462,7 +3479,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const a = g.atk, A = a.A, T1 = A.tele, TL = T1 - A.lock, J = T1 + A.gap;
     a.t += dt;
     if (!a.f && E) a.f = E.f;
-    const R = a.f && dgRigOf(a.f), gone = !R || (a.f === pl && pl.out) || (a.f === bot && bot.dead > 0);
+    const R = a.f && dgRigOf(a.f), gone = !R || a.f.out || a.f.dead > 0;
     if (a.t < TL || !a.T) {   // honing in: he tracks them, turning to face them
       if (!gone) { a.T = R.centre.slice(); a.head = R.head.slice(); }
       if (!a.T) { g.state = 'idle'; g.gapT = 0.3; return { pose: {}, rate: 10 }; }
@@ -3551,7 +3568,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     a.t += dt;
     if (!a.f && E) a.f = E.f;
     const R = a.f && dgRigOf(a.f);
-    if (!R || (a.f === pl && pl.out) || (a.f === bot && bot.dead > 0)) { g.state = 'idle'; g.gapT = 0.4; return { pose: {}, rate: 8 }; }
+    if (!R || a.f.out || a.f.dead > 0) { g.state = 'idle'; g.gapT = 0.4; return { pose: {}, rate: 8 }; }
     if (a.t < T1 || !a.T) a.T = R.centre.slice();   // tracks them through the wind-up, then commits
     const f = (g.facing = a.t < T1 ? Math.sign(a.T[0] - g.x) || g.facing : g.facing);
     const m = dgAim(g, a.T);
@@ -3587,7 +3604,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     g.pose.fa1 = w - g.pose.tl; g.pose.fa2 = 0;   // the jab arrives straight: the arm is out along the aim, with no wind-round left in it
     const AD = dgDmg(A.dmg);
     addDmg(f, AD);
-    if (f === pl) plRagdoll(0, 0, 0); else { startRagdoll(bot, 0, 0, 0); bot.combo = 0; }
+    startRagdoll(f, 0, 0, 0); f.combo = 0;
     g.pin = { f }; a.pin0 = a.t; a.w0 = w; a.tl0 = g.pose.tl;
     shakeT = 0.24;
     if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + g.facing * 34, y: pt[1] + 6, v: AD, kill: true, dir: g.facing, t: 0 }); }
@@ -3598,12 +3615,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // hold the skewered fighter's middle on the blade (runs after everything has moved this frame)
   function dgHoldPin(g) {
     const f = g.pin.f;
-    if (!f.rag || (f === pl && pl.out) || (f === bot && bot.dead > 0)) { g.pin = null; return; }
+    if (!f.rag || f.out || f.dead > 0) { g.pin = null; return; }
     const [bx, by] = apply(g.R.fa.lo, 7.6, 92), [cx, cy] = dgRigOf(f).centre;
     f.x += bx - cx; f.y += by - cy; f.vx = f.vy = 0; f.onGround = false;
     if (f.x > PLAT.x0 && f.x < PLAT.x1) f.y = Math.min(f.y, PLAT.y - 2);   // a low stab can't drag them through the floor
     Object.assign(f.rag, { av: 0, phase: 'air', left: Math.max(f.rag.left, 0.3) });
-    if (f === pl) { R0 = rig(); pl.R = R0; pl.box = rigBox(R0); } else { bot.R = rig(bot); botInk(bot.R); }
+    f.R = rig(f); f.box = rigBox(f.R); if (f === pl) R0 = f.R;
     if (Math.random() < 0.3) addDrop(bx, by, (Math.random() - 0.5) * 60, 20, 0.7 + Math.random() * 0.6, RED);
   }
   // let go: thrown off the blade down into the ground in front of him (or just dropped, if he's interrupted). Their ragdoll timer
@@ -3613,14 +3630,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!f.rag) return;
     const ls = launchScale(f.damage || 0, maxDmg(f)), A = DG_ATK.pierce;
     const vx = slam ? g.facing * A.kb * ls : 0, vy = slam ? A.down * ls : 0, av = slam ? g.facing * 14 : 0;
-    if (f === pl) plRagdoll(vx, vy, av); else { startRagdoll(bot, vx, vy, av); bot.combo = 0; }
+    startRagdoll(f, vx, vy, av); f.combo = 0;
     if (slam) g.slamWatch = { f, t: 0 };
   }
   // the thrown fighter hitting the floor: impact damage, a crown of ink thrown up off the platform, crests running out both ways,
   // a heavy jolt, and they rebound up off it, the throw's momentum still carrying them on, spinning
   function dgSlamWatch(g, dt) {
     const w = g.slamWatch, f = w.f; w.t += dt;
-    if (!f.rag || w.t > 1.2 || (f === pl && pl.out)) { g.slamWatch = null; return; }
+    if (!f.rag || w.t > 1.2 || f.out || f.dead > 0) { g.slamWatch = null; return; }
     const over = f.x > PLAT.x0 && f.x < PLAT.x1;
     if (!over || !f.box || f.box[3] < PLAT.y - 4) return;
     g.slamWatch = null;
@@ -3643,10 +3660,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
 
   // the fighter's punch lands on him
-  function dgTakeHit(A, fx, fy) {
-    const g = dg, P_ = pl.punch, kd = A.limbs ? (Math.sign(g.x - pl.x) || pl.facing) : pl.facing;
-    P_.hit = true; pl.lungeT = 0; pl.vx *= 0.3;
-    const wh = pl.wpn ? wpnHit(pl, 'dg', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 };
+  function dgTakeHit(att, A, fx, fy) {
+    const g = dg, P_ = att.punch, kd = A.limbs ? (Math.sign(g.x - att.x) || att.facing) : att.facing;
+    P_.hit = true; att.lungeT = 0; att.vx *= 0.3;
+    const wh = att.wpn ? wpnHit(att, 'dg', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 };
     const before = g.damage, take = dgTake(wh.dmg);
     g.damage = Math.min(DG.max, g.damage + take);
     g.shudder = 0.14;
@@ -3670,7 +3687,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (dg.pin) dgUnpin(dg, false);
     dg = null; dgWaves.length = 0;
     round.msg = 'Divine General falls'; round.msgT = 2.2;
-    if (owner === pl) plReturn(); else { botRespawn(bot); bot.out = false; }   // his owner drops back into the round
+    respawnFighter(owner);   // his owner drops back into the round
   }
   // which attacks work from where the target is; he picks one of them at random, never the one he just did
   function dgOptions(g, E) {
@@ -3768,8 +3785,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         } else shakeT = Math.max(shakeT, 0.12);
         if (A.key === 'drop') {   // lands on his owner and sends them off the map
           const o = g.owner; g.hudT0 = g.time;   // his portrait flies in now and knocks his owner's out of its slot
-          if (o === pl) { pl.out = false; plRagdoll(-1250, -1850, 9); pl.rag.left = 4; }
-          else if (bot.dead <= 0) { startRagdoll(bot, -1250, -1850, 9); bot.rag.left = 4; }
+          if (o.out || !(o.dead > 0)) { o.out = false; o.dead = 0; startRagdoll(o, -1250, -1850, 9); o.rag.left = 4; }
           g.wheelTo += TAU;   // the wheel spins a full turn as he rises
           round.msg = 'Divine General'; round.msgT = 1.8;
         }
@@ -4113,15 +4129,21 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     round.endT = 0; round.started = true;
     dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
     for (const l of [echoes, phantoms, inkPools, wpnWaves, procs]) l.length = 0;
-    pl.wpn = weaponStats(LOADOUT.pl.weapon && LOADOUT.pl.weaponSpec); bot.wpn = weaponStats(LOADOUT.bot.weapon && LOADOUT.bot.weaponSpec);   // the weapons each side holds this round
-    pl.noScope = hasNoScope('pl'); clearCardCds(pl); clearCardCds(bot); pl.snipe = null; noScopeFx.length = 0;
+    for (const f of FIGHTERS) {   // each side's cards for this round: its weapon, its passives
+      const L = LOADOUT[f.side]; f.wpn = weaponStats(L.weapon && L.weaponSpec); f.noScope = hasNoScope(f.side); clearCardCds(f); f.snipe = null;
+    }
+    noScopeFx.length = 0;
     for (const f of [pl, bot]) Object.assign(f, { anchorUsed: false, lastHitT: -99, parryOkT: -99, hits: 0, gbT: 0, bleedT: 0 });
-    Object.assign(pl, { x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, rag: null, out: false, launched: false, damage: 0, rot: 0, roll: 1,
-      staggerT: 0, stunT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
-      wallT: 0, wallSlide: false, wallTouch: false, fastFall: false, landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0, moveReady: {} });
-    pl.punch.on = false; pl.punch.queued = false; pl.pose = idlePose(pl.time); auraReady = false; forming.length = 0;
-    R0 = rig(); auraUpdate(R0, 0);
-    botRespawn(bot); Object.assign(bot, { y: PLAT.y, onGround: true, out: false, facing: -1 }); bot.R = rig(bot); botInk(bot.R);
+    for (const f of FIGHTERS) {
+      Object.assign(f, { vx: 0, vy: 0, onGround: true, rag: null, out: false, dead: 0, launched: false, damage: 0, rot: 0, roll: 1, staggerT: 0, stunT: 0, hurtT: 0, knocked: false,
+        lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false, wallT: 0, wallSlide: false, wallTouch: false, fastFall: false,
+        landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, hitTest: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0, moveReady: {}, combo: 0 });
+      f.punch.on = false; f.punch.queued = false; f.ai.react = -1; f.pose = idlePose(f.time);
+    }
+    Object.assign(pl, { x: GW / 2, y: PLAT.y, facing: 1 }); Object.assign(bot, { x: BOT_HOME, y: PLAT.y, facing: -1 });
+    auraReady = false; forming.length = 0;
+    for (const f of FIGHTERS) { f.R = rig(f); f.box = rigBox(f.R); }
+    R0 = pl.R; auraUpdate(R0, 0); botInk(bot.R);
     const own = LOADOUT.pl.companion === 'divineGeneral' ? pl : LOADOUT.bot.companion === 'divineGeneral' ? bot : null;
     if (own) spawnDG(own);
   }
@@ -4135,36 +4157,35 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.restore();
   }
 
-  // ---------------------------------------------------------------- the player can be launched now (by him): same ragdoll as the bot
-  function plRagdoll(vx, vy, av) {
-    Object.assign(pl, { dashT: 0, slideT: 0, wallSlide: false, flipT: 0, airCarry: false, lungeT: 0, staggerT: 0, stunT: 0, lockT: 0, parryT: 0, fastFall: false, landT: 0, launched: true, hitShape: null });
-    pl.punch.on = false; pl.punch.queued = false;
-    pl.R = R0; startRagdoll(pl, vx, vy, av);
+  // ---------------------------------------------------------------- ragdolls, knockouts and respawns (every fighter alike)
+  function ragStep(f, dt) {   // a ragdolled fighter's step: the limp body flies and bounces; off the screen is a KO
+    if (f.out) return;
+    ragdollStep(f, dt);
+    f.R = rig(f); f.box = rigBox(f.R);
+    if (f.rag && ragdollGround(f)) { f.R = rig(f); f.box = rigBox(f.R); }
+    if (offScreen(f.R.centre[0], f.R.centre[1]) && !anchorSave(f)) koFighter(f);
+  }
+  function koFighter(f) {   // off the screen: an ink blast from that edge, then out of the round, or back in after respawnDelay
+    const [cx, cy] = f.R ? f.R.centre : [f.x, f.y - 50];
+    blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(f)); hudDeath(f);
+    f.koPos = [Math.max(260, Math.min(GW - 160, cx)), Math.max(190, Math.min(PLAT.y - 60, cy))]; f.koT = 1.4; f.labelT = 0;
+    f.rag = null; f.box = null; f.hitShape = null; f.vx = f.vy = 0;
+    if (roundTakesOut(f)) { f.out = true; f.dead = Infinity; return; }
+    f.dead = f.respawnDelay; if (!(f.dead > 0)) respawnFighter(f);
+  }
+  function respawnFighter(f) {   // fresh, undamaged, dropped back in from above its home spot
+    Object.assign(f, { x: f.home[0], y: f.home[1], vx: 0, vy: 0, onGround: false, dashT: 0, slideT: 0, flipT: 0, rot: 0, roll: 1, wallT: 0, wallSlide: false, wallTouch: false,
+      staggerT: 0, lungeT: 0, airCarry: false, rag: null, out: false, dead: 0, launched: false, damage: 0, stunT: 0, hurtT: 0, parryT: 0, combo: 0, knocked: false });
+    f.punch.on = false;
+    if (f.ink !== 'liquid') f.pose = idlePose(f.time);
+    f.R = rig(f); f.box = rigBox(f.R);
+    if (f.ink === 'liquid') { auraReady = false; forming.length = 0; } else botInk(f.R);
   }
   function rigBox(R) {
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     for (const inst of INST) { const m = inst.get(R); for (const g of inst.rings) { const s = g.src;
       for (let i = 0; i < s.n; i += 2) { const x = m[0] * s.x[i] + m[2] * s.y[i] + m[4], y = m[1] * s.x[i] + m[3] * s.y[i] + m[5]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } } }
     return [x0 - 2.5, y0 - 2.5, x1 + 2.5, y1 + 2.5];
-  }
-  function plRagStep(dt) {
-    if (pl.out) return;
-    pl.R = R0;
-    ragdollStep(pl, dt);
-    R0 = rig(); pl.R = R0; pl.box = rigBox(R0);
-    if (pl.rag && ragdollGround(pl)) { R0 = rig(); pl.R = R0; pl.box = rigBox(R0); }
-    if (offScreen(R0.centre[0], R0.centre[1]) && !anchorSave(pl)) plKO();
-  }
-  function plKO() {
-    const [cx, cy] = R0 ? R0.centre : [pl.x, pl.y - 50];
-    blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(pl)); hudDeath(pl);
-    if (roundTakesOut(pl)) { pl.out = true; pl.rag = null; pl.vx = pl.vy = 0; return; }
-    plReturn();
-  }
-  function plReturn() {   // dropped back in from above, fresh
-    Object.assign(pl, { staggerT: 0, lungeT: 0, airCarry: false, x: GW / 2, y: 160, vx: 0, vy: 0, onGround: false, dashT: 0, slideT: 0, flipT: 0, rot: 0, roll: 1,
-      wallT: 0, wallSlide: false, wallTouch: false, rag: null, out: false, launched: false, damage: 0 });
-    pl.punch.on = false; auraReady = false; forming.length = 0;
   }
 
   // ---------------------------------------------------------------- pause menu (Esc / Start): practice switches + a controls pop-up
@@ -5348,7 +5369,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
 
   // ---------------------------------------------------------------- loop
-  R0 = rig(); auraUpdate(R0, 0); bot.R = rig(bot); botInk(bot.R);
+  for (const f of FIGHTERS) { f.R = rig(f); f.box = rigBox(f.R); }
+  R0 = pl.R; auraUpdate(R0, 0); botInk(bot.R);
   // The simulation runs at a fixed 60 Hz, apart from drawing: each display frame runs as many whole 1/60 s steps as the real time
   // that's passed calls for (at most MAX_CATCHUP, so a stall doesn't snowball), then draws once. Every step is the same size, so the
   // same inputs always give the same game (what rollback netcode needs). Menus and the home screen aren't the game: they keep real
