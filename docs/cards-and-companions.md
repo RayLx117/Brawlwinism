@@ -185,6 +185,10 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 - He dies only by leaving the screen.
 - At 500%, red goo drips off him. Red rises up his border with damage (scaled to 500%), and at 500% his HUD portrait number turns fully red and pulses.
 - **His damage scales with his owner's weapon** (Ray's request): every hit he lands, on all his attacks (the pierce's slam too), adds 125% of the owner's weapon damage per hit (`DG.wpnScale`). A 24% sword adds +30% to each hit. His card shows it as DMG: 9–15% (+125% and a small sword).
+- **Adaptive kit** (Ray: he's Ancient, so he should be almost impossible unless you play perfectly):
+  - **Armour:** no single hit does more than 20% to him, after his 60% intake (`DG.hitCap`, in `dgTake`). This covers every source: hits, direct damage and Mirror.
+  - **Regen:** every 7 s he heals 20% damage (`DG.regen`). His wheel snaps a full turn backwards, a soft green shimmer sweeps down his body from head to feet (0.55 s), and green motes rise off him. The 7 s runs on real time, so his speed-up never shortens it. With no damage, the cycle just goes round.
+  - **Adapting speed-up:** +10% speed for each full 100% damage he carries: 100–199% is +10%, 200–299% is +20%, and so on to +50% at 500% (`DG.speedStep`, `dgSpeed`). Everything he does runs on the faster clock: wind-ups, attacks, recoveries, walking, his pose easing and idle animation. Healing back below a step slows him back down. Ragdoll flight stays at normal speed.
 
 **Attacks (`DG_ATK`).** Each one shows a red watercolour zone that fills toward the moment it hits, hatched with red brush lines and outlined in heavier red in the last 0.1 s. Every hit launches, and the launch grows with the target's damage, except the Quake, which pops you up and hit-stuns you instead.
 

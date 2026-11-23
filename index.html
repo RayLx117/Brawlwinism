@@ -1271,7 +1271,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const tgtOf = (kind) => kind === 'bot' ? bot : dg;
   function addToTarget(kind, d, pt, num = true) {   // damage straight onto a target (no launch), with ink and a number
     if (kind === 'bot') { if (bot.dead > 0) return; addDmg(bot, d); }
-    else { if (!dg) return; d = Math.round(d * DG.take * 10) / 10; addDmg(dg, d); dg.shudder = 0.1; }
+    else { if (!dg) return; d = dgTake(d); addDmg(dg, d); dg.shudder = 0.1; }
     for (let i = 0; i < 5; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 260, -120 - Math.random() * 200, 0.7 + Math.random() * 0.6, Math.random() < 0.4 ? RED : undefined);
     if (num && showDmg) { for (const n of dmgNums) n.y -= 26; dmgNums.push({ x: pt[0] + 30, y: pt[1] + 6, v: d, kill: false, dir: 1, t: 0 }); }
   }
@@ -2906,6 +2906,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const DG = {
     S: 2.0,          // rig units -> game px (he's about 3x a fighter's height)
     take: 0.6,       // share of a hit's damage % he actually takes
+    hitCap: 20,      // adaptive armour: he never takes more than this much damage % from one hit (after take)
+    regen: { cd: 7, heal: 20, anim: 0.55 },   // every 7 s (real time, not sped up) he recovers 20% damage: the wheel snaps backwards, a green shimmer runs down him
+    speedStep: 0.1,  // adapting: +10% speed (every timer, move and animation) per full 100% damage he's carrying, so +50% at 500%. Drops back if he heals below a step
     max: 500,        // his damage % tops out here (fighters stop at MAX_DAMAGE)
     weak: 500,       // from this damage %, kill blows ragdoll him
     wpnScale: 1.25,  // his hits scale with his owner's weapon: every hit adds 125% of the weapon's damage per hit (Ray); no weapon = +0
@@ -3141,6 +3144,18 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   // his hits grow with his owner's weapon: every hit he lands (the pierce's slam too) adds DG.wpnScale × the weapon's damage per hit
   const dgWpnBonus = () => { const W = dg && dg.owner && dg.owner.wpn; return W ? W.dmg * DG.wpnScale : 0; };
+  const dgTake = (d) => Math.min(DG.hitCap, Math.round(d * DG.take * 10) / 10);   // what one hit actually does to him: his share, capped by his armour
+  const dgSpeed = (g) => 1 + DG.speedStep * Math.min(5, Math.floor((g.damage + 1e-6) / 100));   // his adapting speed-up for the damage he carries
+  // his regen: every DG.regen.cd seconds of real time he heals DG.regen.heal damage %, with the wheel snapping back and a green shimmer
+  function dgRegenStep(g, dt) {
+    g.regenT = (g.regenT || 0) + dt; if (g.regenFx !== undefined) g.regenFx += dt;
+    if (g.regenT < DG.regen.cd) return;
+    g.regenT -= DG.regen.cd;
+    if (g.damage <= 0) return;   // nothing to heal: the cycle just goes round
+    g.damage = Math.max(0, Math.round((g.damage - DG.regen.heal) * 10) / 10);
+    g.regenFx = 0; g.wheelTo -= TAU;   // the wheel spins a full turn backwards, snapping round
+    if (g.R) { const [cx, cy] = g.R.centre; for (let i = 0; i < 14; i++) addMote(cx + (Math.random() - 0.5) * 140, cy + (Math.random() - 0.5) * 220, (Math.random() - 0.5) * 60, -80 - Math.random() * 120, 0.6, 1 + Math.random() * 1.4, -60, '92,168,92'); }
+  }
   const dgDmg = (base) => Math.round((base + dgWpnBonus()) * 10) / 10;
   // a strike connects with a fighter: every one of his hits is a launch that grows with their damage
   function dgHitFighter(E, A, pt) {
@@ -3174,7 +3189,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgParried(f, pt, A) {
     if (!(f.parryT > 0)) return false;
     f.parryOk = true; f.parryCd = 0; f.readyT = 0.3; f.parryOkT = f.time;
-    if (A && f.wpn && f.wpn.has.mirror) { dg.damage = Math.min(DG.max, dg.damage + Math.round(dgDmg(A.dmg) * DG.take * 10) / 10); dg.shudder = 0.14; procLabel('Mirror', pt); }
+    if (A && f.wpn && f.wpn.has.mirror) { dg.damage = Math.min(DG.max, dg.damage + dgTake(dgDmg(A.dmg))); dg.shudder = 0.14; procLabel('Mirror', pt); }
     for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; addSpark(pt[0], pt[1], Math.cos(a) * 320, Math.sin(a) * 320 - 120, 0.2 + Math.random() * 0.15); }
     dg.label = 'parried, unshaken'; dg.labelT = 1.1;
     return true;
@@ -3430,7 +3445,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const g = dg, P_ = pl.punch, kd = A.limbs ? (Math.sign(g.x - pl.x) || pl.facing) : pl.facing;
     P_.hit = true; pl.lungeT = 0; pl.vx *= 0.3;
     const wh = pl.wpn ? wpnHit(pl, 'dg', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 };
-    const before = g.damage, take = Math.round(wh.dmg * DG.take * 10) / 10;
+    const before = g.damage, take = dgTake(wh.dmg);
     g.damage = Math.min(DG.max, g.damage + take);
     g.shudder = 0.14;
     if (showDmg) { for (const n of dmgNums) n.y -= 34; dmgNums.push({ x: fx + kd * 34, y: fy + 6, v: take, kill: !!A.ragdoll, dir: kd, t: 0 }); }
@@ -3472,8 +3487,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const dgClampX = (x) => Math.max(PLAT.x0 + 70, Math.min(WALL - 80, x));
   function dgUpdate(dt) {
     const g = dg; if (!g) return;
+    dgRegenStep(g, dt);   // on the real clock: the speed-up doesn't touch it
+    if (g.state !== 'rag') dt *= dgSpeed(g);   // adapting: everything he does runs faster (a ragdoll still flies at normal speed)
     g.time += dt; g.shudder = Math.max(0, g.shudder - dt); g.labelT = Math.max(0, g.labelT - dt); g.leapCd = Math.max(0, g.leapCd - dt);
-    g.wheelRot += (g.wheelTo - g.wheelRot) * (1 - Math.exp(-12 * dt));
+    const snap = g.regenFx !== undefined && g.regenFx < DG.regen.anim;   // the regen's backwards spin: snappier than the usual turn
+    g.wheelRot += (g.wheelTo - g.wheelRot) * (1 - Math.exp(-(snap ? 22 : 12) * dt));
     const E = dgEnemy();
     let target = dgIdle(g.time), rate = 10;
     if (g.state === 'idle' || g.state === 'walk') {
@@ -3731,6 +3749,17 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         ctx.strokeStyle = 'rgba(236,228,211,0.55)'; ctx.lineWidth = 1.2; ctx.lineCap = 'round'; ctx.stroke(DGP.blade.thin);
       }
       if (p === DGP.torso) { setM(m); ctx.fillStyle = inkAt(m); ctx.fill(DGP.necklace); }
+    }
+    if (g.regenFx !== undefined && g.regenFx < DG.regen.anim) {   // regen: a band of green shimmer runs down his silhouette, head to feet
+      const e = g.regenFx / DG.regen.anim, top = Math.min(R_.wheel[1], apply(R_.head, 0, -60)[1]) - 30, bot = g.y + 10, yc = top + (bot - top) * (e * (2 - e));
+      const fade = Math.min(1, (1 - e) * 4);
+      for (const [hh, al] of [[150, 0.1], [96, 0.14], [56, 0.2], [24, 0.3]]) {   // soft edges: nested bands, densest in the middle
+        ctx.save(); setM(ID); ctx.beginPath(); ctx.rect(-200, yc - hh / 2, GW + 400, hh); ctx.clip();
+        ctx.globalAlpha = al * fade; ctx.fillStyle = 'rgb(104,186,104)';
+        for (const [p2, m] of layers) { setM(m); ctx.fill(p2.fill); }
+        setM(R_.fa.lo); ctx.fill(DGP.blade.fill);
+        ctx.restore();
+      }
     }
     // strike trail: a heavy dry-brush swoosh along the backhand's fist path
     const a = g.atk;
