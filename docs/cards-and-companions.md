@@ -237,3 +237,16 @@ Every card's cooldown goes through one set of functions, so anything that change
 - Each fighter keeps `f.cds = { [cardId]: { t, max } }`; the HUD draws each one as a badge round the portrait (see `hud-and-feedback.md`).
 - No Scope uses it (`'noScope'`, 10 s). New abilities and cards must too.
 
+## The card layout (full card)
+
+Ray's standard card, shown full size in the top right of Select Cards / Bot's Cards whenever a card is focused (`cardFull`, placed by `CARD_FULL`). The same layout is meant for the cards in the regular game modes.
+
+- **Top:** the title, centred, italic, with a brush underline. The card's type (Weapon, Companion, Passive...) sits small in the top-right corner.
+- **Banner:** the card's art (`cardArt`) over its rarity wash, in a brushed ink box. It gives up height when the stat sheet is long, such as a weapon with many modifiers.
+- **Stat sheet:** rows with a bold label and the value, a faint brush rule under each: **CD:** and **DMG:** (— when a card has none). An equipped weapon adds **MODS:**, listed under its label in smaller text. The values come live from the game (`cardStats`): No Scope from `NOSCOPE`, a weapon from its rarity's damage range or the rolled copy, the Divine General from his attack table.
+- **Description:** one brief line in the card's `desc`, centred:
+  - No Scope: "Press ‘Attack’ to Snipe Rag-dolled Targets" (Ray's wording).
+  - Divine General: "With this treasure, I summon..." (Ray's wording).
+  - Sword: "A Blade in the Lead Hand Carries its Hits Further".
+- **Foot:** the rarity, centred, in its colour. Ancient cards keep the pulsing gold glow and gold inner line.
+

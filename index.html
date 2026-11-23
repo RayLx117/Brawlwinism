@@ -4272,13 +4272,15 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return st;
   }
   window.__weapons = { WEAPON_RARITY, WEAPONS, MODS, MOD_CHANCE, rollWeapon, weaponStats };   // test hook
+  // the cards. desc: the one-line description on the card (Ray's wording style: what to press / what it does). The stat rows come
+  // from cardStats, read live from each card's own numbers so they never drift from the game
   const CARDS = [
     { id: 'noScope', name: 'No Scope', type: 'passive', rarity: 'uncommon', art: 'noScope',
-      text: 'When an enemy is ragdolled, a red crosshair marks them. Press X to whip out a sniper and shoot them (X takes priority over attacking while the mark is up): 20% damage and a fresh launch at half a kill blow’s knockback. It can hit ragdolls. 10 s cooldown.' },
+      desc: 'Press ‘Attack’ to Snipe Rag-dolled Targets' },
     { id: 'sword', name: 'Sword', type: 'weapon', rarity: 'common', art: 'sword', weapon: 'sword',
-      text: 'A straight blade held in the lead hand: it carries that arm’s hits further. Its rarity, damage and modifiers are rolled per copy.' },
+      desc: 'A Blade in the Lead Hand Carries its Hits Further' },
     { id: 'divineGeneral', name: 'Divine General', type: 'companion', rarity: 'ancient', art: 'divineGeneral',
-      text: 'At the start of the round he drops in and knocks you off the map. You aren’t out: your opponent has to beat him 1v1. Huge, very tanky, can’t be stunned; only a kill blow once he’s worn down sends him flying.' },
+      desc: 'With this treasure, I summon...' },
   ];
   const newLoadout = () => ({ weapon: null, weaponSpec: null, companion: null, airDash: null, parry: null, ability: null, passives: [] });   // card ids (weaponSpec: the rolled weapon)
   const LOADOUT = { pl: newLoadout(), bot: newLoadout() };   // yours (Select Cards) and the bot's (Bot's Cards)
@@ -4294,6 +4296,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const SLOT = { x: 140, y: 124, w: 96, h: 110, gap: 22, y2: 272 };   // y2: the passives row
   const GAL = { x: 140, y: 456, w: 80, h: 104, gap: 14, cols: 11, rows: 2 };
   const TAB_Y = 432, DIV_Y = 398;
+  const CARD_FULL = { x: 770, y: 92, w: 212, h: 296 };   // the full card preview, top right of the card screen
   const galleryCards = () => CARD_TABS[cards.tab].key === 'all' ? CARDS : CARDS.filter(c => c.type === CARD_TABS[cards.tab].key);
   const cardById = (id) => CARDS.find(c => c.id === id);
   const tabOf = (type) => CARD_TABS.findIndex(t => t.key === type);
@@ -4404,6 +4407,75 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.fill(brushPath([[x + SLOT.w / 2 - lw / 2, y + 30], [x + SLOT.w / 2, y + 31], [x + SLOT.w / 2 + lw / 2 + 2, y + 29]], 2.2, 0.05, 0.55, 0.3, seed + 7));
     if (!c) { ctx.font = 'italic 500 14px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.4)'; ctx.fillText('empty', x + SLOT.w / 2, y + SLOT.h / 2 + 22); }
     if (f) focusTick(x - 14, y + SLOT.h / 2, seed + 8);
+  }
+  // a card's stat sheet rows: [label, value]. '—' where a card has none
+  function cardStats(c) {
+    const ws = c.type === 'weapon' && equipped.weapon === c.id && equipped.weaponSpec;
+    if (c.id === 'noScope') return [['CD:', NOSCOPE.cd + ' s'], ['DMG:', NOSCOPE.dmg + '%']];
+    if (c.type === 'weapon') {
+      if (ws) { const st = weaponStats(ws); return [['CD:', '—'], ['DMG:', st.dmg + '% per hit'], ...(ws.mods.length ? [['MODS:', ws.mods.map(modLabel).join(', ')]] : [])]; }
+      const r = WEAPON_RARITY[c.rarity] || WEAPON_RARITY.common; return [['CD:', '—'], ['DMG:', r.dmg[0] + '–' + r.dmg[1] + '% per hit']];
+    }
+    if (c.id === 'divineGeneral') { const d = Object.values(DG_ATK).map(a => a.dmg).filter(v => v > 0); return [['CD:', '—'], ['DMG:', Math.min(...d) + '–' + Math.max(...d) + '%']]; }
+    return [['CD:', '—'], ['DMG:', '—']];
+  }
+  // the full card (the preview on the card screen): the title at the top, a banner of the card's art, then a stat sheet (CD, DMG)
+  // and the one-line description; rarity and type along the foot. Inked like the small cards: rarity wash, brush frame, gold for Ancient
+  function cardFull(c, x, y, w, h, seed) {
+    const ra = RARITIES[c.rarity] || RARITIES.common, t = performance.now() / 1000, cx = x + w / 2;
+    if (ra.gold) { const p = 0.5 + 0.5 * Math.sin(t * 3.2); for (const [wd, al] of [[26, 0.07], [16, 0.1], [8, 0.16]]) { ctx.strokeStyle = `rgba(255,214,80,${al * (0.55 + 0.9 * p)})`; ctx.lineWidth = wd + 6 * p; ctx.lineJoin = 'round'; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); } }
+    cardFrame(x, y, w, h, seed, false, false);
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - 4); ctx.clip();
+    ctx.globalAlpha = 0.16; ctx.fillStyle = ra.stain; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;   // the whole card faintly in its rarity
+    ctx.restore();
+    // title, sized to fit, with a short brush underline
+    let fs = 26; ctx.font = `italic 700 ${fs}px Georgia, serif`;
+    while (ctx.measureText(c.name).width > w - 28 && fs > 14) { fs--; ctx.font = `italic 700 ${fs}px Georgia, serif`; }
+    const tw = ctx.measureText(c.name).width;
+    ctx.textAlign = 'center'; ctx.fillStyle = INK; ctx.fillText(c.name, cx, y + 40);
+    ctx.fill(brushPath([[cx - tw / 2 - 2, y + 47], [cx, y + 48], [cx + tw / 2 + 4, y + 46]], 3, 0.05, 0.55, 0.3, seed + 1));
+    // the card's type, small in the top right corner
+    ctx.font = 'italic 700 12px Georgia, serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(21,18,15,0.6)';
+    ctx.fillText((CARD_TYPES.find(q => q.key === c.type) || { label: c.type }).label.replace(/s$/, ''), x + w - 11, y + 17);
+    // measure the stat sheet and the description first, so the banner gives up height when there's a lot to list (a weapon's mods)
+    const rows = cardStats(c).map(([k, v]) => {
+      ctx.font = 'italic 700 17px Georgia, serif'; const kw = Math.max(54, ctx.measureText(k).width + 10);
+      const long = k === 'MODS:';   // a list: it runs under its label, smaller, across the card
+      ctx.font = long ? 'italic 600 13px Georgia, serif' : 'italic 600 16px Georgia, serif';
+      const lines = long ? wrapText(v, w - 32) : wrapText(v, w - 32 - kw).slice(0, 2);
+      return { k, kw, long, lines, hgt: 26 + (long ? lines.length * 15 : (lines.length - 1) * 18) };
+    });
+    ctx.font = 'italic 500 15px Georgia, serif'; const dl = wrapText(c.desc || '', w - 26).slice(0, 3);
+    const below = 27 + rows.reduce((q, r) => q + r.hgt, 0) + dl.length * 17 + 24;
+    const bx = x + 12, by = y + 57, bw = w - 24, bh = Math.round(Math.max(54, Math.min(h * 0.3, h - 57 - below)));
+    // the banner: the card's art over its rarity wash, in a brushed ink box
+    ctx.save(); ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    ctx.fillStyle = PAPER; ctx.fillRect(bx, by, bw, bh);
+    ctx.globalAlpha = ra.gold ? 0.34 : 0.45; ctx.fillStyle = ra.stain; ctx.fillRect(bx, by, bw, bh); ctx.globalAlpha = 1;
+    const fit = { noScope: [0, 1, Math.min(bw, bh * 1.6)], sword: [0.06, 1, bh * 1.45], divineGeneral: [-0.14, 1, bh * 1.35] }[c.art] || [0, 1, bh];   // each art fitted to the banner: [shift, height share, size]
+    cardArt(c, cx, by + bh * fit[0], bh * fit[1], fit[2], t); setM(ID);
+    ctx.restore();
+    ctx.fillStyle = INK;
+    [[[bx - 2, by], [bx + bw + 2, by + 1]], [[bx + bw, by - 2], [bx + bw - 1, by + bh + 2]], [[bx + bw + 2, by + bh], [bx - 2, by + bh - 1]], [[bx, by + bh + 2], [bx + 1, by - 2]]]
+      .forEach(([u, v], i) => ctx.fill(brushPath([u, [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2], v], 2.6, 0.05, 0.35, 0.4, seed + 10 + i)));
+    if (ra.gold) { ctx.strokeStyle = 'rgba(150,112,40,0.8)'; ctx.lineWidth = 0.9; ctx.strokeRect(bx + 4.5, by + 4.5, bw - 9, bh - 9); }
+    // the stat sheet: label, value, a faint brush rule under each row
+    let ry = by + bh + 27; ctx.textAlign = 'left';
+    rows.forEach((r, i) => {
+      ctx.font = 'italic 700 17px Georgia, serif'; ctx.fillStyle = INK; ctx.fillText(r.k, x + 16, ry);
+      ctx.fillStyle = 'rgba(21,18,15,0.8)';
+      if (r.long) { ctx.font = 'italic 600 13px Georgia, serif'; r.lines.forEach((l, j) => ctx.fillText(l, x + 16, ry + 17 + j * 15)); }
+      else { ctx.font = 'italic 600 16px Georgia, serif'; r.lines.forEach((l, j) => ctx.fillText(l, x + 16 + r.kw, ry + j * 18)); }
+      const rb = ry + r.hgt - 26;
+      ctx.fillStyle = 'rgba(21,18,15,0.3)'; ctx.fill(brushPath([[x + 14, rb + 8], [cx, rb + 9], [x + w - 14, rb + 7]], 1.3, 0.05, 0.4, 0.3, seed + 20 + i));
+      ry += r.hgt;
+    });
+    // the description
+    ctx.font = 'italic 500 15px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.78)'; ctx.textAlign = 'center';
+    dl.forEach((l, j) => ctx.fillText(l, cx, ry + j * 17));
+    // the foot: the rarity, centred, in its colour
+    ctx.font = 'italic 700 13px Georgia, serif'; ctx.fillStyle = ra.css; ctx.textAlign = 'center';
+    ctx.fillText(ra.label, cx, y + h - 13);
   }
   // a card's art (its icon), centred on cx across the art area from y0, ch tall, at size s (the card's smaller side). Shared by the
   // card faces and the cooldown badges round the HUD portraits
@@ -4650,23 +4722,17 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     else if (cards.row === R_PASS) { card = cardById(equipped.passives[cards.col]); head = card ? card.name : 'Add a passive'; if (!card) body = ['Pick a passive card to add it.', 'A new slot opens after each one.']; }
     else if (cards.row === R_TABS) { head = CARD_TABS[cards.tab].label; body = [g.length + (g.length === 1 ? ' card' : ' cards')]; }
     else { card = g[cards.col]; if (card) head = card.name; }
-    ctx.textAlign = 'left'; ctx.font = 'italic 700 22px Georgia, serif'; ctx.fillStyle = INK; ctx.fillText(head, dx, dy);
-    let ly = dy + 28;
-    if (card) {   // type and rarity, then the card's text
+    if (card) {   // the full card
       card = shownCard(card);
-      const ra = RARITIES[card.rarity] || RARITIES.common;
-      ctx.font = 'italic 700 16px Georgia, serif'; ctx.fillStyle = ra.css;
-      ctx.fillText(ra.label, dx, ly);
-      const rw = ctx.measureText(ra.label).width;
-      ctx.fillStyle = 'rgba(21,18,15,0.6)'; ctx.font = 'italic 500 16px Georgia, serif';
-      ctx.fillText('  ·  ' + (CARD_TYPES.find(s => s.key === card.type) || { label: card.type }).label, dx + rw, ly);
-      ly += 24;
-      ctx.font = 'italic 500 15px Georgia, serif'; body = wrapText(card.text || '', CSHEET.x1 - 40 - dx);
+      cardFull(card, CARD_FULL.x, CARD_FULL.y, CARD_FULL.w, CARD_FULL.h, 700);
       const ws = card.type === 'weapon' && equipped.weapon === card.id && equipped.weaponSpec;
-      if (ws) body = [weaponStats(ws).dmg + '% per hit' + (ws.mods.length ? ' · ' + ws.mods.map(modLabel).join(', ') : ''), ...wrapText('Select it in the gallery to open the forge.', CSHEET.x1 - 40 - dx)];
-    } else ctx.font = 'italic 500 17px Georgia, serif';
-    ctx.fillStyle = 'rgba(21,18,15,0.65)';
-    body.slice(0, 7).forEach((l, i) => ctx.fillText(l, dx, ly + 2 + i * 20));
+      if (ws) { ctx.textAlign = 'left'; ctx.font = 'italic 500 14px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.55)';
+        wrapText('Select it in the gallery to open the forge.', CSHEET.x1 - 40 - (CARD_FULL.x + CARD_FULL.w + 18)).forEach((l, i) => ctx.fillText(l, CARD_FULL.x + CARD_FULL.w + 18, CARD_FULL.y + CARD_FULL.h - 30 + i * 18)); }
+    } else {
+      ctx.textAlign = 'left'; ctx.font = 'italic 700 22px Georgia, serif'; ctx.fillStyle = INK; ctx.fillText(head, dx, dy);
+      ctx.font = 'italic 500 17px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.65)';
+      body.slice(0, 7).forEach((l, i) => ctx.fillText(l, dx, dy + 30 + i * 20));
+    }
     // divider
     ctx.fillStyle = INK; ctx.fill(brushPath([[SLOT.x - 6, DIV_Y], [640, DIV_Y + 1], [CSHEET.x1 - 44, DIV_Y - 1]], 3, 0.03, 0.4, 0.4, 590));
     // sorting tabs, with the bumper hints either side
