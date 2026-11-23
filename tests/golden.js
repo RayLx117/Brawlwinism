@@ -1,10 +1,10 @@
 // Golden traces: scripted keyboard input through fixed scenarios, recording the player's and the bot's state every frame, so a
 // restructure can be checked against the build before it ("does it still play the same?").
 //   node golden.js record [file]   -> writes golden/<name>.json from that build (default ../index.html, name 'before')
-//   node golden.js compare [file]  -> runs the build and compares with golden/before.json: per scenario, the largest difference
+//   node golden.js compare [file] [base]  -> runs the build and compares with golden/<base>.json (default before): per scenario, the largest difference
 // Math.random is replaced by a seeded generator so runs repeat exactly.
 const { chromium } = require('playwright'); const path = require('path'), fs = require('fs');
-const mode = process.argv[2] || 'compare', file = path.resolve(__dirname, process.argv[3] || '../index.html'), name = process.argv[4] || 'before';
+const mode = process.argv[2] || 'compare', file = path.resolve(__dirname, process.argv[3] || '../index.html'), name = process.argv[4] || 'before';   // (compare: name = the baseline)
 // each scenario: setup (loadout, positions, bot mode), then a timeline of [frame, 'd'|'u', code], run for `frames`
 const SC = {
   move: { frames: 260, bot: 1100, steps: [[0, 'd', 'KeyD'], [40, 'd', 'Space'], [52, 'u', 'Space'], [70, 'd', 'Space'], [74, 'u', 'Space'], [90, 'd', 'KeyS'], [96, 'u', 'KeyS'], [110, 'u', 'KeyD'],
@@ -49,7 +49,7 @@ const SEEDED = `(() => { let s = 12345; Math.random = () => { s |= 0; s = s + 0x
   if (errs.length) console.log('page errors:', errs);
   const gf = path.join(__dirname, 'golden', name + '.json');
   if (mode === 'record') { fs.writeFileSync(gf, JSON.stringify(out)); console.log('recorded', Object.keys(out).map(k => k + ':' + out[k].length).join(' '), '->', gf); return; }
-  const before = JSON.parse(fs.readFileSync(path.join(__dirname, 'golden', 'before.json'), 'utf8'));
+  const before = JSON.parse(fs.readFileSync(path.join(__dirname, 'golden', name + '.json'), 'utf8'));
   for (const k of Object.keys(SC)) {
     const A = before[k], B = out[k], worst = {}; let firstDiff = null;
     for (let i = 0; i < Math.min(A.length, B.length); i++) for (const f of Object.keys(A[i])) {
