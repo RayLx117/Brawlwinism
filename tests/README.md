@@ -86,6 +86,6 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `swing-trail.js`: close-ups of the weapon swing trails at the moment of each sword swing (rising slash, overhead chop, sword spin). Sheet: out/swing-trail.png.
 - `golden.js`: golden traces. `node golden.js record [file] [name]` saves every frame of 8 scripted scenarios; `node golden.js compare [file] [name]` compares a build with a saved one (default `golden/before.json`, the build before the rollback restructure).
 - `sync-test.js`: the rollback sync test: random inputs for both players, run twice and saved/loaded every frame, compared by state hash (PASS/FAIL per setup). `sync-test-packs.js` holds its input generator.
-- `rollback.js`: the local rollback mode against the parrying bot: counts rollbacks and checks the result matches a straight replay. Frames: out/rollback.png.
+- `rollback.js`: the Rollback Test against four fake networks (typical to awful, parrying bot and busy bot): rollbacks counted, each run checked against a straight replay; also drives the page (type a ping, drag a slider, arrows, Esc). Frames: out/rollback.png, page: out/rbtest-menu.png.
 - `before-after.js`: the same inputs on the published main (`git show origin/main:index.html > out/before-main.html`) and on this build, before above after. Sheets: out/ba-*.png.
 

@@ -2140,6 +2140,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // to face you with a one-frame tap. Parry mode: reacts (0.06 s) to an attack coming at it by pressing Shift with no direction
   function botBrain(b, dt) {
     const I = emptyInput(), E = foeOf(b), ai = BRAIN[b.side] || (BRAIN[b.side] = { react: -1 }), press = (a) => { I.h.add(a); I.p.add(a); };
+    if (RB.on && RB.busy) return busyBrain(b, ai, E, I);
     if (b.mode === 'parry') {
       const P_ = E.punch, A = P_.A, ok = b.stunT <= 0 && b.onGround && !b.rag;
       const threat = P_.on && !P_.hit && P_.t < A.wind + A.act && Math.abs(E.x - b.x) < 200 && Math.sign(b.x - E.x) === E.facing;
@@ -2149,6 +2150,26 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     } else ai.react = -1;
     const free = b.stunT <= 0 && b.hurtT <= 0 && b.onGround && !b.rag && !(b.dead > 0) && b.staggerT <= 0 && b.lockT <= 0 && b.parryT <= 0 && !b.punch.on;
     if (free) { const want = E.x < b.x ? -1 : 1; if (want !== b.facing) press(want > 0 ? 'right' : 'left'); }
+    return I;
+  }
+  // the Rollback Test's busy bot: plays at random, each plan held for a random while (walk in, back off, jump in with an aerial,
+  // attack strings, dash in, parry, wait), so there's far more to guess than a bot that stands still
+  function busyBrain(b, ai, E, I) {
+    const toward = E.x > b.x ? 'right' : 'left', away = toward === 'right' ? 'left' : 'right';
+    if (!(ai.left > 0)) {
+      const r = Math.random(), far = Math.abs(E.x - b.x) > 170;
+      ai.plan = far && r < 0.45 ? 'walk' : r < 0.2 ? 'jump' : r < 0.55 ? 'attack' : r < 0.67 ? 'dash' : r < 0.75 ? 'parry' : r < 0.85 ? 'back' : 'wait';
+      ai.left = Math.round({ walk: 20 + Math.random() * 30, jump: 34, attack: 10 + Math.random() * 22, dash: 14, parry: 24, back: 14 + Math.random() * 16, wait: 8 + Math.random() * 22 }[ai.plan]);
+      ai.t = 0; ai.dir = toward; ai.vary = Math.random();
+    }
+    const t = ai.t++, tap = (a) => { I.h.add(a); I.p.add(a); };
+    ai.left--;
+    if (ai.plan === 'walk') I.h.add(ai.dir);
+    else if (ai.plan === 'back') I.h.add(away);
+    else if (ai.plan === 'jump') { I.h.add(ai.dir); if (t === 0) tap('jump'); else if (t < 10) I.h.add('jump'); if (t === 14) { if (ai.vary < 0.3) I.h.add('down'); else if (ai.vary < 0.5) I.h.add('up'); tap('punch'); } }
+    else if (ai.plan === 'attack') { if (ai.vary < 0.3 && t >= 9) I.h.add(ai.dir); else if (ai.vary < 0.45 && t >= 9) I.h.add('down'); if (t % 9 === 0) tap('punch'); }
+    else if (ai.plan === 'dash') { I.h.add(ai.dir); if (t === 0) tap('shift'); if (t === 4 && ai.vary < 0.6) tap('punch'); }
+    else if (ai.plan === 'parry') { if (t === 0) tap('shift'); }
     return I;
   }
   // drawing-only upkeep for a fighter: labels and the KO tag fading, the can't-be-hit shimmer, the bot's ink outline and the red goo
@@ -3099,8 +3120,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     drawRoundMsg();
     if (RB.on) {   // the rollback test's readout, top left
       setM(ID); ctx.textAlign = 'left'; ctx.font = 'italic 600 15px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.72)';
-      ctx.fillText(`Rollback test · the bot's inputs arrive ${RB.delay} frames late`, 30, 96);
-      ctx.fillText(`rollbacks ${RB.rollbacks} · last ${RB.lastRoll} frames · longest ${RB.maxRoll}`, 30, 116);
+      ctx.fillText(`Rollback test · ping ${RB.ping} ms ±${RB.jitter} · loss ${RB.loss}% · input delay ${RB.inDelay}${RB.busy ? ' · busy bot' : ''}`, 30, 96);
+      ctx.fillText(`rollbacks ${RB.rollbacks} · last ${RB.lastRoll} frames · longest ${RB.maxRoll} · guessing ${RB.guessing}`, 30, 116);
     }
     drawBoxes();
     drawMenu();
@@ -4202,23 +4223,39 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return { frames: packs.length, twiceMismatchAt: twice, reloadMismatchAt: reload, finalHash: a[a.length - 1], end };
   }
   window.__syncTest = syncTest;
-  // ---- local rollback mode (practice, pause menu): fakes an online match against the bot. Your inputs apply at once; the bot's
-  // reach the game RB.delay frames late, as if over a network. Until they arrive the game guesses them (the bot keeps holding
-  // what it last held, and presses nothing new) and plays on. When the real ones land and differ from the guess, it rolls back:
-  // loads the state saved at that frame and re-runs every frame since with the real inputs, all before the next draw.
-  const RB = { on: false, delay: 7, hist: [], base: 0, queue: [], lastRemote: [0, 0, 0, 0], rollbacks: 0, lastRoll: 0, maxRoll: 0, start: null };
-  function rbInit() { Object.assign(RB, { hist: [], base: GAME.frame, queue: [], lastRemote: [0, 0, 0, 0], rollbacks: 0, lastRoll: 0, maxRoll: 0, start: saveState(), log: [] }); }
+  // ---- local rollback mode (pause menu: Rollback Test): fakes an online match against the bot, over a made-up network.
+  //   ping: the round trip in ms (an input takes half of it to arrive); jitter: how much each input's trip wobbles (± ms);
+  //   loss: the % of inputs lost on the way (a lost one comes again with the next packet, a frame later); inDelay: frames both
+  //   players' inputs are held back before they happen (what online games do to hide rollbacks); busy: the bot plays at random.
+  // Each frame the bot decides its input and "sends" it. Until it arrives the game guesses it (the bot keeps holding what it last
+  // held, and presses nothing new) and plays on. When the real one lands and differs from the guess, the game rolls back: loads
+  // the state saved at that frame and re-runs every frame since with what's known now, all before the next draw.
+  const RB = { on: false, ping: 100, jitter: 10, loss: 0, inDelay: 2, busy: false,
+    hist: [], base: 0, queue: [], recv: {}, localQ: {}, lastRemote: [0, 0, 0, 0], lastRecvF: -1, rollbacks: 0, lastRoll: 0, maxRoll: 0, guessing: 0, start: null, log: [] };
+  const ZERO_IN = [0, 0, 0, 0];
+  const rbOneWay = () => RB.ping / 2 / (1000 / SIM_HZ);   // frames an input takes to arrive, on average
+  function rbInit() {
+    Object.assign(RB, { hist: [], base: GAME.frame, queue: [], recv: {}, localQ: {}, lastRemote: ZERO_IN, lastRecvF: -1, rollbacks: 0, lastRoll: 0, maxRoll: 0, guessing: 0, start: saveState(), log: [] });
+    for (let k = 0; k < RB.inDelay; k++) RB.recv[RB.base + k] = ZERO_IN;   // the first frames of a delayed start: no one's input yet
+  }
+  function rbLatency() {   // frames this input takes: half the ping, the jitter's wobble, and one more for each time it's lost
+    let at = Math.max(0, Math.round((RB.ping / 2 + RB.jitter * (Math.random() * 2 - 1)) / (1000 / SIM_HZ)));
+    while (Math.random() < RB.loss / 100 && at < 60) at++;
+    return at;
+  }
   const rbGuess = () => [RB.lastRemote[0], 0, RB.lastRemote[2], RB.lastRemote[3]];   // held buttons carry on, no new presses
   function rbStep() {   // one real frame in rollback mode
-    const N = GAME.frame;
-    RB.queue.push({ frame: N, input: packInput(botBrain(bot, SIM_DT)), at: N + RB.delay });   // the bot decides now; its packet is "in the post"
-    const local = packInput(deviceInput());
+    const N = GAME.frame, D = RB.inDelay;
+    RB.queue.push({ frame: N + D, input: packInput(botBrain(bot, SIM_DT)), at: N + rbLatency() });   // the bot's input for N + D, on its way
+    RB.localQ[N + D] = packInput(deviceInput());   // yours, held back the same input delay
     let rollTo = -1;
-    while (RB.queue.length && RB.queue[0].at <= N) {   // packets arriving this frame
-      const q = RB.queue.shift(), H = RB.hist[q.frame - RB.base]; RB.lastRemote = q.input;
-      if (!H) continue;
+    for (let i = RB.queue.length - 1; i >= 0; i--) {   // inputs arriving this frame (jitter can bring them out of order)
+      const q = RB.queue[i]; if (q.at > N) continue;
+      RB.queue.splice(i, 1); RB.recv[q.frame] = q.input;
+      if (q.frame > RB.lastRecvF) { RB.lastRecvF = q.frame; RB.lastRemote = q.input; }
+      const H = RB.hist[q.frame - RB.base]; if (!H) continue;   // (a frame not played yet: it's simply known when it comes)
       H.confirmed = true;
-      if (H.inputs[1].join() !== q.input.join()) { H.inputs[1] = q.input; if (rollTo < 0) rollTo = q.frame; }
+      if (H.inputs[1].join() !== q.input.join()) { H.inputs[1] = q.input; if (rollTo < 0 || q.frame < rollTo) rollTo = q.frame; }
     }
     if (rollTo >= 0) {   // a wrong guess: back to that frame, then forward again with what's known now
       const from = rollTo - RB.base; loadState(RB.hist[from].state); resim = true;
@@ -4231,10 +4268,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       resim = false;
       RB.rollbacks++; RB.lastRoll = N - rollTo; RB.maxRoll = Math.max(RB.maxRoll, RB.lastRoll);
     }
-    const H = { state: saveState(), inputs: [local, rbGuess()], confirmed: false };   // this frame, on a guess for now
+    const r = RB.recv[N], H = { state: saveState(), inputs: [RB.localQ[N] || ZERO_IN, r || rbGuess()], confirmed: !!r };   // this frame
+    delete RB.localQ[N];
     RB.hist.push(H);
     simFrame(H.inputs.map(unpackInput), SIM_DT);
-    while (RB.hist.length > RB.delay + 2 && RB.hist[0].confirmed) { (RB.log || (RB.log = [])).push(RB.hist.shift().inputs); RB.base++; }   // older than any packet still to come: final
+    while (RB.hist.length > 1 && RB.hist[0].confirmed) { RB.log.push(RB.hist.shift().inputs); delete RB.recv[RB.base]; RB.base++; }   // settled: final
+    RB.guessing = RB.hist.reduce((n, h) => n + (h.confirmed ? 0 : 1), 0);
   }
   // test hook: replays the inputs the rollback run settled on, straight through with no rollbacks, from where it started, and
   // checks it reaches the same state as the rollback run did at its oldest kept frame
@@ -4246,7 +4285,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     resim = false; loadState(now);
     return { frame: RB.base, straight, rolled, same: straight === rolled, rollbacks: RB.rollbacks, maxRoll: RB.maxRoll };
   };
-  window.__rb = RB; window.__rbStart = () => { RB.on = true; rbInit(); };
+  window.__rb = RB; window.__rbStart = (o) => { Object.assign(RB, o || {}); RB.on = true; rbInit(); };   // test hook: settings, then start
   window.__simFrame = (packs) => { pl.paused = true; game.mode = 'practice'; simFrame(packs.map(unpackInput), SIM_DT); };   // test hook: one step from packed inputs
   window.__round = round;
   window.__resetRound = () => resetRound();   // test hook
@@ -4336,7 +4375,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     { label: 'Bot’s Cards', act: () => openCards('bot') },
     { label: 'Bot parries', get: () => bot.mode === 'parry', set: (v) => setBotParry(v) },
     { label: 'Hitboxes', get: () => showBoxes, set: (v) => { showBoxes = v; } },
-    { label: 'Rollback test', get: () => RB.on, set: (v) => { RB.on = v; if (v) rbInit(); } },
+    { label: 'Rollback Test', act: () => { menu.screen = 'rbtest'; rbt.sel = 0; rbt.selT = 0; rbt.edit = null; } },
     { label: 'No card cooldowns', get: () => noItemCd, set: (v) => { noItemCd = v; if (v) clearCardCds(pl); } },
     { label: 'Damage numbers', get: () => showDmg, set: (v) => { showDmg = v; if (!v) dmgNums.length = 0; } },
     { label: 'Controls', act: () => { menu.controls = true; menu.ct = 0; } },
@@ -4358,7 +4397,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   window.__menu = menu;
   function openMenu() { menu.sig = loadoutSig(); menu.open = true; menu.screen = 'pause'; menu.sel = 0; menu.controls = false; menu.t = 0; menu.selT = 0; menu.k = MENU_ITEMS.map(it => it.get && it.get() ? 1 : 0); }
   function closeMenu() {
-    menu.open = false; menu.screen = 'pause'; menu.controls = false; pressed.clear();
+    rbtCommit(); rbt.drag = -1; menu.open = false; menu.screen = 'pause'; menu.controls = false; pressed.clear();
     if (menu.sig && loadoutSig() !== menu.sig) { menu.sig = null; resetRound(); }   // a changed loadout starts a fresh round
   }
   function menuSelect(i) { if (i !== menu.sel) { menu.sel = i; menu.selT = 0; } }
@@ -4366,12 +4405,112 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const it = MENU_ITEMS[i];
     if (it.act) it.act(); else it.set(v === undefined ? !it.get() : v);
   }
+  // ---- the Rollback Test page: a switch, sliders for the fake network (drag, click, ← →, or type a number and press Enter), and a
+  // plain explanation of whichever row is picked
+  const RBT_ITEMS = [
+    { label: 'Rollback test', get: () => RB.on, set: (v) => { RB.on = v; if (v) rbInit(); },
+      help: 'Fakes an online match against the bot. Its inputs reach your game late, like over the internet. The game guesses them and plays on, and when the real ones arrive and differ, it rewinds and replays those frames: a rollback. The top left counts them.' },
+    { label: 'Ping', key: 'ping', min: 0, max: 300, step: 10, unit: 'ms',
+      help: () => `The round trip between the two players. Half of it is how late their inputs arrive: right now about ${Math.round(rbOneWay())} frame${Math.round(rbOneWay()) === 1 ? '' : 's'} (1 frame = 16.7 ms). Rough guide: same city 10–40 ms, same country 50–90, overseas 100–160, very bad 200 and up.` },
+    { label: 'Jitter', key: 'jitter', min: 0, max: 100, step: 5, unit: 'ms',
+      help: 'How much the delay wobbles from one input to the next. Wired connections barely wobble; Wi-Fi and busy networks wobble more, which makes rollbacks less even.' },
+    { label: 'Packet loss', key: 'loss', min: 0, max: 20, step: 1, unit: '%',
+      help: 'The share of inputs lost on the way. A lost input comes again with the next one, a frame later. Good connections lose 0–1%; a struggling one 5% or more.' },
+    { label: 'Input delay', key: 'inDelay', min: 0, max: 6, step: 1, unit: 'frames', restart: true,
+      help: 'Holds both players’ inputs back this many frames before they happen. Each frame of it covers a frame of the trip, so there are fewer rollbacks, but every press feels a touch later. Online fighting games usually use 2–3. Changing it restarts the counters.' },
+    { label: 'Busy bot', get: () => RB.busy, set: (v) => { RB.busy = v; },
+      help: 'While the test is on, the bot moves, jumps, dashes, attacks and parries at random. The more it does, the more the game has to guess, so the more rollbacks there are to see.' },
+    { label: 'Back', act: () => { rbtCommit(); menu.screen = 'pause'; }, help: 'Back to the pause menu.' },
+  ];
+  const RCARD = { x0: 320, x1: 960, y0: 18, y1: 540 }, RROW0 = 122, RROW = 40, RSL = [620, 790];   // RSL: the sliders' track
+  const rbt = { sel: 0, selT: 0, k: RBT_ITEMS.map(() => 0), edit: null, drag: -1, rep: 0 };
+  window.__rbt = rbt;   // test hook: the Rollback Test page
+  function rbtSet(it, v) {
+    v = Math.max(it.min, Math.min(it.max, Math.round(v / it.step) * it.step));
+    if (RB[it.key] === v) return;
+    RB[it.key] = v; if (it.restart && RB.on) rbInit();
+  }
+  function rbtCommit() { if (rbt.edit === null) return; const it = RBT_ITEMS[rbt.sel]; if (it.key && rbt.edit !== '') rbtSet(it, +rbt.edit); rbt.edit = null; }
+  function rbtSelect(i) { if (i !== rbt.sel) { rbtCommit(); rbt.sel = i; rbt.selT = 0; } }
+  function rbtStep(dt, P) {
+    rbt.selT += dt;
+    RBT_ITEMS.forEach((it, i) => { if (it.get) rbt.k[i] += ((it.get() ? 1 : 0) - rbt.k[i]) * Math.min(1, dt * 18); });
+    if (P('pause') || P('back')) { if (rbt.edit !== null) rbt.edit = null; else menu.screen = 'pause'; return; }
+    const n = RBT_ITEMS.length;
+    if (P('up')) rbtSelect((rbt.sel + n - 1) % n);
+    if (P('down')) rbtSelect((rbt.sel + 1) % n);
+    const it = RBT_ITEMS[rbt.sel];   // (after ↑ ↓, so a change in the same frame goes to the row now picked)
+    if (it.key) {   // a slider: ← → step it (held, it keeps going), Enter / Space confirms a typed number
+      const d = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
+      if (P('left') || P('right')) { rbtCommit(); rbtSet(it, RB[it.key] + (P('right') ? 1 : -1) * it.step); rbt.rep = -0.35; }
+      else if (d) { rbt.rep += dt; if (rbt.rep > 0.05) { rbt.rep = 0; rbtSet(it, RB[it.key] + d * it.step); } }
+      if (P('ok')) rbtCommit();
+    } else if (it.get) { if (P('ok')) it.set(!it.get()); if (P('left')) it.set(false); if (P('right')) it.set(true); }
+    else if (P('ok')) it.act();
+  }
+  window.addEventListener('keydown', (e) => {   // typing a number into the picked slider (before the game's own keys see it)
+    if (!menu.open || menu.screen !== 'rbtest' || !RBT_ITEMS[rbt.sel].key) return;
+    const dg = /^(?:Digit|Numpad)(\d)$/.exec(e.code);
+    if (dg) rbt.edit = ((rbt.edit || '') + dg[1]).slice(0, 4);
+    else if (e.code === 'Backspace' && rbt.edit !== null) rbt.edit = rbt.edit.slice(0, -1);
+    else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && rbt.edit !== null) rbtCommit();
+    else return;
+    e.preventDefault(); e.stopImmediatePropagation();
+  }, true);
+  function rbtRowAt(x, y) {
+    if (x < RCARD.x0 || x > RCARD.x1) return -1;
+    const i = Math.round((y - RROW0) / RROW);
+    return i >= 0 && i < RBT_ITEMS.length && Math.abs(y - (RROW0 + i * RROW)) < RROW / 2 ? i : -1;
+  }
+  function rbtSlide(i, x) { const it = RBT_ITEMS[i]; rbtSet(it, it.min + (it.max - it.min) * Math.max(0, Math.min(1, (x - RSL[0]) / (RSL[1] - RSL[0])))); }
+  function rbtHover(x, y) { if (rbt.drag >= 0) { rbtSlide(rbt.drag, x); return; } const i = rbtRowAt(x, y); if (i >= 0) rbtSelect(i); }
+  function rbtClick(x, y) {
+    const i = rbtRowAt(x, y); if (i < 0) return;
+    rbtSelect(i); const it = RBT_ITEMS[i];
+    if (it.key) { if (x >= RSL[0] - 14 && x <= RSL[1] + 14) { rbt.edit = null; rbt.drag = i; rbtSlide(i, x); } }
+    else if (it.get) it.set(!it.get()); else it.act();
+  }
+  function drawRbTest() {
+    inkCard(RCARD, 481);
+    inkTitle('Rollback Test', (RCARD.x0 + RCARD.x1) / 2, RCARD.y0 + 58, 38, 491);
+    RBT_ITEMS.forEach((it, i) => {
+      const y = RROW0 + i * RROW, on = i === rbt.sel, mid = !it.get && !it.key, lx = mid ? (RCARD.x0 + RCARD.x1) / 2 : RCARD.x0 + 56;
+      ctx.font = `italic ${on ? 700 : 600} 25px Georgia, serif`; ctx.textAlign = mid ? 'center' : 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = on ? INK : 'rgba(21,18,15,0.62)';
+      ctx.fillText(it.label, lx, y + 8);
+      if (on) {   // picked: a brush stroke swept in under the label, an ink tick in the margin
+        const w = ctx.measureText(it.label).width, l = mid ? lx - w / 2 : lx, g = Math.min(1, rbt.selT / 0.12);
+        ctx.fill(brushPath([[l - 4, y + 16], [l + w * 0.5 * g, y + 17], [l + (w + 6) * g, y + 15]], 3.5, 0.05, 0.55, 0.3, 500 + i));
+        ctx.fill(brushPath([[RCARD.x0 + 24, y - 6], [RCARD.x0 + 36, y], [RCARD.x0 + 24, y + 6]], 5, 0.1, 0.4, 0.2, 510 + i));
+      }
+      if (it.get) inkSwitch(RSL[0] + 22, y, rbt.k[i], 520 + i * 3);
+      if (it.key) {   // the slider: a faint brushed track, the inked part up to the value, an ink knob, then the value
+        const k = (RB[it.key] - it.min) / (it.max - it.min), kx = RSL[0] + (RSL[1] - RSL[0]) * k;
+        ctx.fillStyle = 'rgba(21,18,15,0.22)'; ctx.fill(brushPath([[RSL[0], y], [(RSL[0] + RSL[1]) / 2, y + 1], [RSL[1], y]], 3, 0.1, 0.1, 0.4, 530 + i));
+        if (kx > RSL[0] + 2) { ctx.fillStyle = INK; ctx.fill(brushPath([[RSL[0], y], [(RSL[0] + kx) / 2, y + 0.5], [kx, y]], 4, 0.15, 0.05, 0.3, 540 + i)); }
+        ctx.fillStyle = PAPER; ctx.beginPath(); ctx.arc(kx, y, 10.5, 0, TAU); ctx.fill();
+        ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(kx, y, 8, 0, TAU); ctx.fill();
+        ctx.font = 'italic 600 19px Georgia, serif'; ctx.textAlign = 'left'; ctx.fillStyle = on ? INK : 'rgba(21,18,15,0.7)';
+        const typing = on && rbt.edit !== null, txt = typing ? rbt.edit + (Math.floor(menu.t * 2.5) % 2 ? ' ' : '|') : String(RB[it.key]);
+        ctx.fillText(txt + ' ' + it.unit, RSL[1] + 22, y + 7);
+        if (typing) { const w = ctx.measureText(txt + ' ' + it.unit).width; ctx.fill(brushPath([[RSL[1] + 20, y + 13], [RSL[1] + 22 + w / 2, y + 14], [RSL[1] + 24 + w, y + 12]], 2, 0.05, 0.5, 0.3, 550 + i)); }
+      }
+    });
+    // what the picked row does, in plain words
+    const it = RBT_ITEMS[rbt.sel], help = typeof it.help === 'function' ? it.help() : it.help, hy = RROW0 + RBT_ITEMS.length * RROW + 12;
+    ctx.fillStyle = 'rgba(21,18,15,0.2)'; ctx.fill(brushPath([[RCARD.x0 + 50, hy - 18], [(RCARD.x0 + RCARD.x1) / 2, hy - 17], [RCARD.x1 - 50, hy - 18]], 1.6, 0.1, 0.3, 0.3, 560));
+    ctx.font = 'italic 500 17px Georgia, serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(21,18,15,0.78)';
+    wrapText(help, RCARD.x1 - RCARD.x0 - 100).slice(0, 5).forEach((l, j) => ctx.fillText(l, RCARD.x0 + 50, hy + 8 + j * 22));
+    ctx.font = 'italic 500 14px Georgia, serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(21,18,15,0.5)';
+    ctx.fillText(it.key ? '← → or drag to change · type a number + Enter · Esc back' : 'Enter to change · Esc back', RCARD.x1 - 30, RCARD.y1 - 16);
+  }
   function menuStep(dt) {
     menu.t += dt; menu.ct += dt; menu.selT += dt;
     MENU_ITEMS.forEach((it, i) => { if (it.get) menu.k[i] += ((it.get() ? 1 : 0) - menu.k[i]) * Math.min(1, dt * 18); });
     const P = (a) => pressed.has(a);
     if (menu.screen === 'cards') cardsStep(dt, P);
     else if (menu.screen === 'forge') forgeStep(dt, P);
+    else if (menu.screen === 'rbtest') rbtStep(dt, P);
     else if (menu.controls) { if (P('back') || P('pause') || P('ok') || P('punch')) menu.controls = false; }
     else if (P('pause') || P('back')) closeMenu();
     else {
@@ -4402,6 +4541,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!menu.open || menu.controls) return;
     if (menu.screen === 'cards') { cardsHover(...gamePt(e)); return; }
     if (menu.screen === 'forge') { forgeHover(...gamePt(e)); return; }
+    if (menu.screen === 'rbtest') { rbtHover(...gamePt(e)); return; }
     const i = menuRowAt(...gamePt(e)); if (i >= 0) menuSelect(i);
   });
   canvas.addEventListener('pointerleave', () => { cards.hoverTab = -1; aim.on = false; });
@@ -4413,7 +4553,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const MOUSE_ACT = { 0: 'punch', 2: 'ability' };
   window.addEventListener('pointermove', (e) => { if (e.target === canvas) { [aim.x, aim.y] = gamePt(e); aim.on = true; } });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());   // right click is a game button, not the browser menu
-  window.addEventListener('pointerup', (e) => { const a = MOUSE_ACT[e.button]; if (a) mouseHeld.delete(a); });
+  window.addEventListener('pointerup', (e) => { const a = MOUSE_ACT[e.button]; if (a) mouseHeld.delete(a); rbt.drag = -1; });
   canvas.addEventListener('pointerdown', (e) => {
     if (fighting()) {
       [aim.x, aim.y] = gamePt(e); aim.on = true;
@@ -4427,6 +4567,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const [x, y] = gamePt(e);
     if (menu.screen === 'cards') { cardsClick(x, y); return; }
     if (menu.screen === 'forge') { forgeClick(x, y); return; }
+    if (menu.screen === 'rbtest') { rbtClick(x, y); return; }
     if (menu.controls) { menu.controls = false; return; }
     const i = menuRowAt(x, y);
     if (i >= 0) { menuSelect(i); menuActivate(i); }
@@ -4515,6 +4656,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.fillStyle = 'rgba(236,228,211,0.62)'; ctx.fillRect(-20, -20, GW + 40, GH + 40);   // a wash of paper over the frozen fight
     if (menu.screen === 'cards') { drawCards(); return; }
     if (menu.screen === 'forge') { drawCards(); drawForge(); return; }
+    if (menu.screen === 'rbtest') { drawRbTest(); return; }
     inkCard(MCARD, 401);
     inkTitle('Paused', (MCARD.x0 + MCARD.x1) / 2, MCARD.y0 + 56, 38, 411);
     MENU_ITEMS.forEach((it, i) => {

@@ -54,7 +54,14 @@ Esc or Start freezes the fight under a paper wash and shows an ink-bordered card
 - Main Menu (last item), which goes back to the home menu. The practice fight keeps its state for when you return.
 - Bot parries, an on/off switch.
 - Hitboxes, an on/off switch.
-- Rollback test, an on/off switch (off by default). Fakes an online match: the bot's inputs reach the game 7 frames late, the game guesses them and rolls back when it guessed wrong. A readout in the top left counts the rollbacks. It should play the same as with it off; that's the point. See `code-guide.md`.
+- Rollback Test, a page of its own (Esc back to the pause menu). It fakes an online match against the bot, so you can feel what different connections would play like. Each row's meaning is explained in plain words at the bottom of the page.
+  - **Rollback test:** on/off switch. The bot's inputs reach your game late; the game guesses them, plays on, and rewinds and replays when it guessed wrong (a rollback). A readout in the top left shows the settings, the number of rollbacks, the last and longest (in frames), and how many frames it's guessing right now.
+  - **Ping** (0–300 ms, default 100): the round trip. Half of it is how late the bot's inputs arrive. Rough guide: same city 10–40, same country 50–90, overseas 100–160, very bad 200+.
+  - **Jitter** (0–100 ms, default 10): how much that delay wobbles from one input to the next.
+  - **Packet loss** (0–20%, default 0): inputs lost on the way; a lost one comes again with the next, a frame later.
+  - **Input delay** (0–6 frames, default 2): holds both players' inputs back, as online games do; each frame of it hides a frame of the trip, so there are fewer rollbacks but presses feel a touch later. Changing it restarts the counters.
+  - **Busy bot** (off by default): while the test is on, the bot moves, jumps, dashes, attacks and parries at random, so there's much more to guess.
+  - Sliders: drag them, click on the track, ← → (hold to keep going), or type a number and press Enter.
 - No card cooldowns, an on/off switch (off by default). Turns off every card cooldown: No Scope now, and every future ability or card, because each one sets its cooldown through `itemCd()`. Turning it on clears any cooldown already running.
 - Damage numbers, an on/off switch (off by default).
   - Each hit pops its damage, for example "2.5%", in italic ink with a paper halo, out to the side the hit knocked the target.

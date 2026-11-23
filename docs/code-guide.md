@@ -108,12 +108,19 @@ A new card only needs an entry in `CARD_FX`.
 - Also saves, steps, loads and steps again every frame (8 frames deep every 8th frame), which proves a save holds everything.
 - Covered setups: fists v fists, sword + No Scope, the Divine General, and swords with Echo, Phantom, Splash and Bleed.
 
-**7. Local rollback mode (pause menu: Rollback test; `tests/rollback.js`).**
-- Fakes an online match against the bot. Your inputs apply at once; the bot's arrive `RB.delay` (7) frames late.
-- Until they arrive the game guesses them: held buttons carry on, nothing new is pressed.
-- When a real packet differs from the guess, the game loads the state saved at that frame and re-runs every frame since, before the next draw.
-- A readout shows the number of rollbacks and their length.
+**7. Local rollback mode (pause menu: Rollback Test; `tests/rollback.js`).**
+- Fakes an online match against the bot over a made-up network (`RB`):
+  - `ping`: an input arrives after half of it.
+  - `jitter`: a random ± per input, which can bring inputs out of order.
+  - `loss`: a lost input arrives a frame later, again for each further loss.
+  - `inDelay`: both players' inputs are held back that many frames, so rollbacks are about the trip minus the delay.
+  - `busy`: the bot plays at random (`busyBrain`).
+- Each frame the bot decides its input for frame N + inDelay and sends it (`rbStep`); yours waits the same input delay (`localQ`).
+- Until a bot input arrives, the game guesses it: held buttons carry on, nothing new is pressed.
+- When a real input lands and differs from the guess, the game loads the state saved at that frame and re-runs every frame since, before the next draw.
+- The readout counts rollbacks, the last and longest, and the frames it's still guessing.
 - `__rbCheck()` replays the settled inputs straight through without rollbacks and confirms the state is identical.
+- `tests/rollback.js` covers four networks, from typical to awful (200 ms ±60, 10% loss), with the parrying bot and the busy bot. Every one matched its straight replay exactly.
 
 **Checking the game still plays the same (`tests/golden.js`).** Scripted keyboard input through 8 scenarios, recording player and bot state every frame (`golden/before.json` from the original build). Results:
 - **Player:** identical to the original in every scenario.
