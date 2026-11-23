@@ -1388,6 +1388,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     gripDown: 3, fore: [25, 6.5], reach: 0.97, stock: -9, mag: [13.5, 6], flash: 0.09,
     kneel: { fx: 10, fy: 16, bl1: 0.12, bl2: 1.5, bf: 1.35, tl: 0.18 } };   // on one knee (on the ground): the front foot's place from the hip, the back thigh / shin / foot angles, the body's lean
   const NOSCOPE_BACK = 2.55;   // where the whip starts: the lead arm's angle against the torso, back behind the shoulder
+  let noItemCd = false;   // practice switch (pause menu): card cooldowns off (No Scope, and every future ability or card)
+  const itemCd = (v) => noItemCd ? 0 : v;   // every card cooldown goes through this, so new cards must set theirs with it
   const noScopeFx = [];   // tracers and the rifle out: { kind, ... , t }
   let noScopeMark = null;   // the red X, built once (local coords, centred)
   const hasNoScope = (side) => (LOADOUT[side].passives || []).includes('noScope');
@@ -1423,7 +1425,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function noScopeFire(f) {
     if (!noScopeReady(f) || f.snipe) return false;
     const T_ = noScopeTarget(f); if (!T_) return false;
-    f.nsCd = NOSCOPE.cd;
+    f.nsCd = itemCd(NOSCOPE.cd);
     f.snipe = { t: 0, wait: true, kind: T_.kind, at: T_.c.slice(), fired: false };
     return true;
   }
@@ -3834,6 +3836,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     { label: 'Bot’s Cards', act: () => openCards('bot') },
     { label: 'Bot parries', get: () => bot.mode === 'parry', set: (v) => setBotParry(v) },
     { label: 'Hitboxes', get: () => showBoxes, set: (v) => { showBoxes = v; } },
+    { label: 'No card cooldowns', get: () => noItemCd, set: (v) => { noItemCd = v; if (v) pl.nsCd = 0; } },
     { label: 'Damage numbers', get: () => showDmg, set: (v) => { showDmg = v; if (!v) dmgNums.length = 0; } },
     { label: 'Controls', act: () => { menu.controls = true; menu.ct = 0; } },
     { label: 'Main Menu', act: () => { closeMenu(); goHome(); } },
@@ -3880,7 +3883,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     pressed.clear();
   }
   // layout (game px): the menu card sits high so the controls pop-up can rise from the bottom beneath it
-  const MCARD = { x0: 410, x1: 870, y0: 18, y1: 418 }, MROW0 = 114, MROW = 35;
+  const MCARD = { x0: 410, x1: 870, y0: 18, y1: 453 }, MROW0 = 114, MROW = 35;
   const CPOP = { x0: 130, x1: 1150, y0: 388, y1: 712 };   // tall enough for every row plus the close hint
   // mouse: hover picks, click activates, a click off the pop-up closes it
   function gamePt(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / view.s, (e.clientY - r.top) / view.s]; }

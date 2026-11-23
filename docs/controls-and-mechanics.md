@@ -54,6 +54,7 @@ Esc or Start freezes the fight under a paper wash and shows an ink-bordered card
 - Main Menu (last item), which goes back to the home menu. The practice fight keeps its state for when you return.
 - Bot parries, an on/off switch.
 - Hitboxes, an on/off switch.
+- No card cooldowns, an on/off switch (off by default). Turns off every card cooldown: No Scope now, and every future ability or card, because each one sets its cooldown through `itemCd()`. Turning it on clears any cooldown already running.
 - Damage numbers, an on/off switch (off by default).
   - Each hit pops its damage, for example "2.5%", in italic ink with a paper halo, out to the side the hit knocked the target.
   - The number drifts a little and shrinks away after 0.9 s.
