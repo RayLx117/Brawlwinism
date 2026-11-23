@@ -1383,9 +1383,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const NOSCOPE = { cd: 10, dmg: 20, kb: 280, pop: 115, spin: 8, anim: 0.7, whip: 0.32, hold: 0.25, fade: 0.22, scale: 1.35, range: 2600,
     // how it's held once shouldered: grip = the trigger (the near hand) below the eye line by gripDown px; fore = where the far hand
     // holds the handguard, just in front of the bipod legs (rifle units); reach = how straight the far arm is (share of full reach);
-    // stock = where the stock is cut short so it ends at the shoulder (rifle units behind the grip)
-    gripDown: 3, fore: [25, 6.5], reach: 0.97, stock: -9,
+    // stock = where the stock is cut short so it ends at the shoulder (rifle units behind the grip); mag = where the near fist holds it
+    // (the mag under the scope, rifle units); flash = the muzzle flash's life (s)
+    gripDown: 3, fore: [25, 6.5], reach: 0.97, stock: -9, mag: [13.5, 6], flash: 0.09,
     kneel: { fx: 10, fy: 16, bl1: 0.12, bl2: 1.5, bf: 1.35, tl: 0.18 } };   // on one knee (on the ground): the front foot's place from the hip, the back thigh / shin / foot angles, the body's lean
+  const NOSCOPE_BACK = 2.55;   // where the whip starts: the lead arm's angle against the torso, back behind the shoulder
   const noScopeFx = [];   // tracers and the rifle out: { kind, ... , t }
   let noScopeMark = null;   // the red X, built once (local coords, centred)
   const hasNoScope = (side) => (LOADOUT[side].passives || []).includes('noScope');
@@ -1433,16 +1435,16 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // and the muzzle (mx, my)
   function rifleFrame(Rg, f) {
     const A = NOSCOPE, S_ = f && f.snipe;
-    let fr;
-    const m = Rg.fa.lo, [hx, hy] = apply(m, 0, 19), d = Math.hypot(m[2], m[3]) || 1, ux = m[2] / d, uy = m[3] / d;
-    const arm = { hx, hy, ux, uy };
-    if (S_ && !S_.wait && S_.t >= A.whip) {   // shouldered: blend over from the whip's frame in 0.08 s
-      const h = rifleHold(Rg, S_.at), k = Math.min(1, (S_.t - A.whip) / 0.08);
-      fr = k >= 1 ? h : { hx: arm.hx + (h.hx - arm.hx) * k, hy: arm.hy + (h.hy - arm.hy) * k, ux: arm.ux + (h.ux - arm.ux) * k, uy: arm.uy + (h.uy - arm.uy) * k };
-      const l = Math.hypot(fr.ux, fr.uy) || 1; fr.ux /= l; fr.uy /= l;
-    } else fr = arm;
-    let px = -fr.uy, py = fr.ux; if (py < 0) { px = -px; py = -py; }   // whichever side of the barrel faces down, so the scope stays on top
-    return { ...fr, px, py, mx: fr.hx + fr.ux * 92 * A.scale + px * -1 * A.scale, my: fr.hy + fr.uy * 92 * A.scale + py * -1 * A.scale };
+    const m = Rg.fa.lo, [hx, hy] = apply(m, 0, 19), d = Math.hypot(m[2], m[3]) || 1;
+    let ux = m[2] / d, uy = m[3] / d;   // during the whip: along the forearm
+    if (S_ && !S_.wait) {   // swinging round onto the aim line over the end of the whip
+      const h = rifleHold(Rg, S_.at), e = Math.max(0, Math.min(1, (S_.t - A.whip * 0.55) / (A.whip * 0.45 + 0.05))), k = e * e * (3 - 2 * e);
+      let a0 = Math.atan2(uy, ux), a1 = Math.atan2(h.uy, h.ux), da = wrapA(a1 - a0);
+      ux = Math.cos(a0 + da * k); uy = Math.sin(a0 + da * k);
+    }
+    let px = -uy, py = ux; if (py < 0) { px = -px; py = -py; }   // whichever side of the barrel faces down, so the scope stays on top
+    const sc = A.scale, ox = hx - (ux * A.mag[0] + px * A.mag[1]) * sc, oy = hy - (uy * A.mag[0] + py * A.mag[1]) * sc;   // the rifle hangs from the near fist, at the mag
+    return { hx: ox, hy: oy, ux, uy, px, py, mx: ox + ux * 92 * sc - px * sc, my: oy + uy * 92 * sc - py * sc };
   }
   // shouldered: the barrel on the line from the shoulder to the target, the grip pushed forward just far enough that the far hand,
   // nearly straight, reaches the handguard in front of the bipod
@@ -1469,7 +1471,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!f.noScope) return;
     f.nsCd = Math.max(0, (f.nsCd || 0) - dt);
     const S_ = f.snipe; if (!S_) return;
-    if (S_.wait) { if (f.punch.on) return; S_.wait = false; f.pose.fa1 = 2.7 - f.pose.tl; f.pose.fa2 = -0.05; }   // the rifle starts up behind the shoulder
+    if (S_.wait) { if (f.punch.on) return; S_.wait = false; f.pose.fa1 = NOSCOPE_BACK; f.pose.fa2 = -0.05; }   // the rifle starts up behind the shoulder
     S_.t += dt;
     const A = NOSCOPE, T_ = snipeTargetOf(S_.kind);
     if (T_ && !S_.fired) { S_.at = T_.c.slice(); f.facing = Math.sign(S_.at[0] - f.x) || f.facing; }   // tracking their torso right up to the shot, turning to face them
@@ -1519,24 +1521,27 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // and head then hold the rifle the same way every time, relative to the torso; past the torso's range the arms make up the rest
     const tl = Math.max(-1.1, Math.min(0.9, (f.onGround ? K.tl : 0.1) - phi)), aimAbs = -Math.PI / 2 - phi;
     const hold = aimAbs - tl;   // the lead arm's angle against the torso (straight out from the chest when the torso covers it all)
-    const BACK = 2.7 - tl;      // the whip starts with the rifle behind the shoulder
-    let u;
-    if (S_.t < A.whip) { const e = S_.t / A.whip, s = e * e * (3 - 2 * e); u = BACK + (hold + TAU - BACK) * s; }   // from over the back, up over the head and down onto the target (the long way round)
-    else u = hold + TAU;   // (kept on the far side of the turn so the easing doesn't swing it back under)
+    const BACK = NOSCOPE_BACK;   // the whip starts with the rifle behind the shoulder (against the torso)
     const kick = S_.fired ? 0.25 * Math.max(0, 1 - (S_.t - A.anim) / 0.12) : 0;
-    const out = { ...tg, tl, hd: 0.08, fa1: u - kick, fa2: -0.05, ba1: Math.max(-2.6 - tl, u + 0.55), ba2: -1.0 };
+    const out = { ...tg, tl, hd: 0.08 };
     if (f.onGround) {   // down on one knee to take the shot: front foot planted forward with its knee up, back knee on the floor, shin flat behind
       const [fl1, fl2] = ik(K.fx, K.fy);
       Object.assign(out, { fl1, fl2, ff: 0, bl1: K.bl1, bl2: K.bl2, bf: K.bf, dx: 0 });
     }
-    if (S_.t >= A.whip) {   // shouldered: the near hand on the trigger (elbow bent down), the far hand out straight on the handguard
-      const Rp = rig({ ...f, pose: { ...f.pose, ...out } }), h = rifleHold(Rp, S_.at), [sx, sy] = apply(Rp.torso, 1, -21);
-      let px = -h.uy, py = h.ux; if (py < 0) { px = -px; py = -py; }
-      const kk = kick * 6;   // recoil: the rifle kicked back along itself
-      const gx = h.hx - h.ux * kk, gy = h.hy - h.uy * kk, fx = gx + h.ux * A.fore[0] * A.scale + px * A.fore[1] * A.scale, fy = gy + h.uy * A.fore[0] * A.scale + py * A.fore[1] * A.scale;
-      [out.fa1, out.fa2] = armIK(f, tl, sx, sy, gx, gy, true);
-      [out.ba1, out.ba2] = armIK(f, tl, sx, sy, fx, fy, true);
-    }
+    // the hold (both hands placed by IK on the shouldered rifle): the near fist on the mag (elbow bent down), the far arm out nearly
+    // straight to the handguard. All in the torso's frame, so the whip below lands exactly on it
+    const Rp = rig({ ...f, pose: { ...f.pose, ...out } }), h = rifleHold(Rp, S_.at), [qx, qy] = apply(Rp.torso, 1, -21);
+    let px = -h.uy, py = h.ux; if (py < 0) { px = -px; py = -py; }
+    const kk = kick * 6, sc = A.scale, gx = h.hx - h.ux * kk, gy = h.hy - h.uy * kk;   // recoil: the rifle kicked back along itself
+    const nx = gx + (h.ux * A.mag[0] + px * A.mag[1]) * sc, ny = gy + (h.uy * A.mag[0] + py * A.mag[1]) * sc;
+    const fx = gx + (h.ux * A.fore[0] + px * A.fore[1]) * sc, fy = gy + (h.uy * A.fore[0] + py * A.fore[1]) * sc;
+    let [nf1, nf2] = armIK(f, tl, qx, qy, nx, ny, true), [nb1, nb2] = armIK(f, tl, qx, qy, fx, fy, true);
+    const end = hold + TAU, near = (v, ref) => v + TAU * Math.round((ref - v) / TAU);
+    nf1 = near(nf1, end); nb1 = near(nb1, end + 0.55);   // on the far side of the turn, where the whip ends (the long way round, over the head)
+    // the whip: from behind the shoulder, up over the head and down into the hold, eased; relative to the torso the whole way
+    const e = Math.min(1, S_.t / A.whip), s = e * e * (3 - 2 * e);
+    out.fa1 = BACK + (nf1 - BACK) * s; out.fa2 = -0.05 + (nf2 + 0.05) * s;
+    out.ba1 = (BACK + 0.55) + (nb1 - BACK - 0.55) * s; out.ba2 = -1.0 + (nb2 + 1.0) * s;
     return out;
   }
 
@@ -1559,14 +1564,25 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       ctx.fillStyle = `rgb(${RED})`; ctx.fill(noScopeMark);
     }
   }
+  // the muzzle flash (rifle frame, k 0..1 through its life): brushed flame petals, red outside, yellow in the core, with a thin
+  // ink edge, bursting out and shrinking back to the muzzle
+  function muzzleFlash(k) {
+    const g = k < 0.25 ? 0.75 + k : 1 - (k - 0.25) * 0.9, a = 1 - k * k, X = 93, seed = 1510 + ((noScopeFx.length * 7) % 3);
+    const petal = (len, ang, w, sd) => { const ca = Math.cos(ang), sa = Math.sin(ang), bend = Math.sin(sd) * 0.12;   // one tapered brush stroke out of the muzzle
+      return brushPath([[X - 1, 0], [X + ca * len * 0.5 - sa * len * bend, sa * len * 0.5 + ca * len * bend], [X + ca * len, sa * len]], w, 0.02, 0.7, 0.25, sd | 0); };
+    const outer = [[30, 0, 11], [17, -0.8, 6.5], [17, 0.8, 6.5], [10, -1.7, 4], [10, 1.7, 4]], inner = [[19, 0, 5.5], [10, -0.65, 3.5], [10, 0.65, 3.5]];
+    ctx.save(); ctx.globalAlpha *= Math.max(0, a);
+    for (const [L, an, w] of outer) { const P = petal(L * g, an, w * g, seed + an * 10); ctx.fillStyle = 'rgb(196,38,24)'; ctx.fill(P); }
+    for (const [L, an, w] of inner) { ctx.fillStyle = 'rgb(255,214,60)'; ctx.fill(petal(L * g, an, w * g, seed + 40 + an * 10)); }
+    ctx.restore();
+  }
   // the sniper, while it's out: an ink rifle held up to the shoulder, aimed at where the shot went, with a kick of recoil
   function drawRifle(f, Rg) {
     const S_ = f.snipe; if (!S_ || S_.wait || !Rg) return;
     const A = NOSCOPE, fr = rifleFrame(Rg, f), al = Math.min(1, S_.t / 0.06, (A.anim + A.hold - S_.t) / 0.08);
-    const kick = S_.fired ? 6 * 0.25 * Math.max(0, 1 - (S_.t - A.anim) / 0.12) : 0;
-    setM([fr.ux * A.scale, fr.uy * A.scale, fr.px * A.scale, fr.py * A.scale, fr.hx - fr.ux * kick, fr.hy - fr.uy * kick]);
+    setM([fr.ux * A.scale, fr.uy * A.scale, fr.px * A.scale, fr.py * A.scale, fr.hx, fr.hy]);   // (recoil comes with the fist)
     ctx.save(); ctx.globalAlpha = Math.max(0, al); paintRifle(S_.t >= A.whip ? A.stock : -18);
-    if (S_.fired && S_.t - A.anim < 0.08) { const k2 = 1 - (S_.t - A.anim) / 0.08; ctx.fillStyle = `rgba(21,18,15,${k2})`; ctx.fill(brushPath([[92, -1], [104, -6], [112, -1], [104, 4], [92, -1]], 4 * k2, 0.1, 0.1, 1.5, 1501)); }   // muzzle blast
+    if (S_.fired && S_.t - A.anim < A.flash) muzzleFlash((S_.t - A.anim) / A.flash);
     ctx.restore();
   }
 
@@ -1666,7 +1682,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
     // punch
     // No Scope: X with the mark up whips the rifle out at once, instead of attacking (and cutting short any attack under way)
-    if (pressed.has('snipe') && noScopeFire(pl)) { pl.punch.on = false; pl.punch.queued = false; pl.lungeT = 0; pl.snipe.wait = false; pl.pose.fa1 = 2.7 - pl.pose.tl; pl.pose.fa2 = -0.05; }
+    if (pressed.has('snipe') && noScopeFire(pl)) { pl.punch.on = false; pl.punch.queued = false; pl.lungeT = 0; pl.snipe.wait = false; pl.pose.fa1 = NOSCOPE_BACK; pl.pose.fa2 = -0.05; }
     if (pl.snipe && !pl.snipe.wait) { pressed.delete('punch'); B.punch = 0; }   // the rifle is out: no attacks   // No Scope: X attacks as normal and, while the mark is up, also fires the shot (an extra hit on a combo)
     if (pressed.has('punch')) B.punch = 0.16;
     if (B.punch > 0 && !shielding && pl.staggerT <= 0 && pl.landT <= 0 && !(pl.dashT > 0 && pl.dashAir)) {

@@ -68,3 +68,5 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - Render with `__step(1/60, n)` before screenshots. Use `deviceScaleFactor: 2` for images Ray will see.
 - Some effects use `Math.random`, such as ragdoll limb kicks and particles. Run a timing several times before calling it reliable.
 - `sniper-fill.py`: builds the rifle's fill silhouette (`RIFLE_FILL`) from `reference/sniper-ink.webp`.
+- `pullout-frames.js`: No Scope's pull-out, every frame from the X press (env N, EVERY). Sheet: out/pullout-frames.png.
+- `sniper-closeup.js`: close-ups of the shouldered hold (out/sniper-hold.png) and the muzzle flash (out/sniper-flash.png).

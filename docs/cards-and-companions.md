@@ -141,7 +141,9 @@ While the holder's enemy is ragdolled (the bot, or the Divine General when he's 
   - It relaunches them at half a full horizontal kill's knockback (280 / 115, scaled by their damage), added to how they're already flying, and restarts their ragdoll.
 - **Cooldown:** 10 s from the press. The mark stays on the target until the shot fires.
 - **Size:** the rifle is drawn 1.35× its first version, sized so both arms reach it.
-- **Hold (Ray's spec):** once the whip ends (0.08 s blend) the rifle is shouldered along shoulder → target. The near (front) arm is drawn in front of the rifle, elbow bent, fist on the trigger at the front of the mag. The far arm is near fully extended (97% reach), holding just in front of the bipod legs. Both arms use two-bone IK (`armIK`) in `snipePose`. The stock is cut short (`NOSCOPE.stock`) once shouldered so it fits the chibi body.
+- **Hold (Ray's spec):** the near (front) arm is drawn in front of the rifle, elbow bent, fist on the mag (the box under the scope, `NOSCOPE.mag`). The far arm is near fully extended (97% reach), holding just in front of the bipod legs (`fore`). Both arms use two-bone IK (`armIK`) in `snipePose`. The stock is cut short (`NOSCOPE.stock`) once shouldered so it fits the chibi body.
+- **Pull-out (Ray's rule):** worked out against the torso, which already faces the target. The arms ease from behind the shoulder (`NOSCOPE_BACK`), up over the head, straight into the IK hold, so it lands with no snap. The rifle always hangs from the near fist at the mag, swinging from along the forearm onto the aim line over the last part of the whip.
+- **Muzzle flash:** tapered brush-stroke flame petals, red outside with a yellow core, bursting and shrinking back in `NOSCOPE.flash` (0.09 s).
 - **Fill:** a medium-dark grey (`RIFLE_FILL_COL`) under the ink lines, from the silhouette made by `tests/sniper-fill.py`.
 
 Numbers in `NOSCOPE`. **The rifle** is Ray's ink drawing (`reference/sniper-ink.webp`), traced to vector by `tests/sniper-trace.py` (`reference/sniper-trace.svg`), with the pistol grip in the hand and the muzzle at the tip of the barrel. The card shows it with the red X.
