@@ -1269,6 +1269,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const A = pickMove(chain);
     P_.A = A; P_.arm = A.limb[1] === 'a' ? A.limb[0] : '';
     P_.on = true; P_.t = 0; P_.queued = false; P_.flecked = false; P_.hit = false; P_.ghosted = false; P_.lunged = false; P_.hopped = false; P_.floated = false; P_.trail = [];
+    // a keyed sword swing only ever moves the sword for its own animation: anything else that starts clears what it left behind,
+    // and a sword attack that isn't a keyed swing starts with the sword back to normal (along the forearm, edge as drawn, full length)
+    P_.keyBlade = P_.keyTwist = undefined;
+    if (!A.keys && pl.wpn) { pl.swordTwist = 1; pl.swordFS = 1; pl.swordW = 0; pl.swordKeyed = false; }
     P_.track = A.keys ? swordTrack(pl, A) : null;
     if (A.slide) pl.slideT = Math.max(pl.slideT, 0.38);
     if (A.key === 'dashPunch') pl.dashT = 0;   // the dash turns into the punch, keeping its speed
@@ -2026,12 +2030,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
     pl.prevSwordW = pl.swordW || 0; pl.prevSwordFS = pl.swordFS || 1;
     if (pl.wpn) {   // the wrist turns the sword toward its stance angle (ABS: in the body frame; REL: against the forearm)
-      const P_ = pl.punch;
-      if (P_.on && P_.keyBlade !== undefined) { pl.swordW = P_.keyBlade - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2); pl.swordTwist = P_.keyTwist; }   // a keyed swing: the wrist turns the blade exactly where the swing has it
+      const P_ = pl.punch, keyed = P_.on && P_.A.keys && P_.keyBlade !== undefined;
+      if (keyed) { pl.swordW = P_.keyBlade - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2); pl.swordTwist = P_.keyTwist; pl.swordKeyed = true; }   // a keyed swing: the wrist turns the blade exactly where the swing has it
       else {
-        const H = pl.swordAim || { rel: 0 }, w = H.abs !== undefined ? H.abs - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2) : H.rel;
-        pl.swordW = (pl.swordW || 0) + wrapA(w - (pl.swordW || 0)) * (1 - Math.exp(-(H.rate || 18) * dt));
-        pl.swordTwist = (pl.swordTwist ?? 1) + (1 - (pl.swordTwist ?? 1)) * (1 - Math.exp(-16 * dt));   // turned back over, edge down
+        if (pl.swordKeyed && !(P_.on && P_.A.keys)) { pl.swordKeyed = false; pl.swordResetT = 0.14; }   // the swing was cut short (dash, jump, parry, a hit) or just ended: the sword goes straight back to normal
+        pl.swordResetT = Math.max(0, (pl.swordResetT || 0) - dt);
+        const fast = pl.swordResetT > 0, H = pl.swordAim || { rel: 0 }, w = H.abs !== undefined ? H.abs - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2) : H.rel;
+        pl.swordW = (pl.swordW || 0) + wrapA(w - (pl.swordW || 0)) * (1 - Math.exp(-(fast ? 45 : H.rate || 18) * dt));
+        pl.swordTwist = (pl.swordTwist ?? 1) + (1 - (pl.swordTwist ?? 1)) * (1 - Math.exp(-(fast ? 50 : 16) * dt));   // turned back over, edge down
       }
       pl.swordTurn = (pl.swordTurn || 0) + ((pl.swordTurnTo || 0) - (pl.swordTurn || 0)) * (1 - Math.exp(-30 * dt));
       const Rp = rig();
@@ -4025,7 +4031,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const f of [pl, bot]) Object.assign(f, { anchorUsed: false, lastHitT: -99, parryOkT: -99, hits: 0, gbT: 0, bleedT: 0 });
     Object.assign(pl, { x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, rag: null, out: false, launched: false, damage: 0, rot: 0, roll: 1,
       staggerT: 0, stunT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
-      wallT: 0, wallSlide: false, wallTouch: false, fastFall: false, landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null });
+      wallT: 0, wallSlide: false, wallTouch: false, fastFall: false, landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0 });
     pl.punch.on = false; pl.punch.queued = false; pl.pose = idlePose(pl.time); auraReady = false; forming.length = 0;
     R0 = rig(); auraUpdate(R0, 0);
     botRespawn(bot); Object.assign(bot, { y: PLAT.y, onGround: true, out: false, facing: -1 }); bot.R = rig(bot); botInk(bot.R);

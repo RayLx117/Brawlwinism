@@ -80,3 +80,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `sword-slash.js`: the sword string (rising slash, overhead) against the bot with the hitbox view on; sheets out/sword-rise.png, out/sword-over.png (env BOTX).
 - `sword-slash-zoom.js`: close-up frame sheets of both slashes on their own, following the fighter (out/sword-rise-zoom.png, out/sword-over-zoom.png).
 - `sword-combos.js`: the sword string as gameplay: reach of each slash vs the jab, rising slash > jump-cancel > aerials (true combos), the escape window before the overhead, the overhead's launch.
+- `sword-cancel.js`: cuts the sword swings short (dash, jump-cancel, parry) or lets them finish, then dash stabs; the sword must be back to normal through the stab. Frames: out/sword-cancel.png.

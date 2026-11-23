@@ -95,6 +95,7 @@ How it plays out:
 - Where a low swing would cut into the floor, the blade is drawn foreshortened, as if turned across the body beside the legs, so the tip skims over the floor (`swordFS`).
 - The hit test follows the whole arc between frames (`sweep`), only in front of you (`front`), and uses the foreshortened tip.
 - Tune the motion by editing the keys; tune timing and launch with the usual fields.
+- A keyed swing only moves the sword for its own animation. Any other attack starts with the sword back to normal (along the forearm, edge as drawn, full length). A swing cut short (dash, jump-cancel, parry, a hit) turns the sword back to normal in a few frames (`swordResetT`). Checked by `tests/sword-cancel.js`.
 
 - **Combos:** Ray is making the sword's other moves (aerials and the rest) sword-only, so follow-ups will be designed with those. After the higher launch the overhead no longer reaches them, and the fist aerials' old routes don't apply.
 - A crouching low kick also leads into the overhead (it's the second step of the string).
