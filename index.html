@@ -562,7 +562,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   // yellow sparks: thrown off the crossed arms while the parry window is up, then fall
   const sparks = [];
-  function addSpark(x, y, vx, vy, life, red = 0) { if (sparks.length < 120) sparks.push({ x, y, vx, vy, life, max: life, red }); }
+  function addSpark(x, y, vx, vy, life, red = 0) { if (!resim && sparks.length < 120) sparks.push({ x, y, vx, vy, life, max: life, red }); }
   // one quick metallic "cling": a small burst of short sparks and a brief glint where the arms cross
   const glints = [];
   function parrySparks(f, R, dt, burst) {
@@ -634,7 +634,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     airDashes: 1, airCarry: false, airDashCd: 0, airReadyT: 0, airJumps: 1, flipT: 0, slideT: 0, crouchK: 0, rot: 0, roll: 1, rollAng: 0, parryT: 0, parryCd: 0, readyT: 0, shieldK: 0, parryOk: false, lockT: 0,
     // being hit: hit-stun, the flinch, knocked about with no control (knocked), the combo counter and labels over them, KOs
     stunT: 0, stunMax: 1, hurtT: 0, hurtKind: 0, knocked: false, combo: 0, label: '', labelT: 0, moveLab: '', moveLabT: 0, R: null, box: null, damage: 0, dead: 0, out: false,
-    ai: { react: -1 }, in: { h: new Set(), p: new Set(), stick: [0, 0] }, ...o });
+    in: { h: new Set(), p: new Set(), stick: [0, 0] }, ...o });
   const pl = makeFighter({ side: 'pl', home: [GW / 2, 160], respawnDelay: 0, ink: 'liquid' });
   const motes = [];   // ink flecks from landings and punches, kept sparse on purpose
   const drops = [];   // drips that fell off the liquid aura
@@ -894,10 +894,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const wNorm = (m, s, i) => { const x = m[0] * s.sx[i] + m[2] * s.sy[i], y = m[1] * s.sx[i] + m[3] * s.sy[i], l = Math.hypot(x, y); return [x / l, y / l]; };
   const RED = '150,28,22';   // damage goo
   function addMote(x, y, vx, vy, life, r, g = 18, c) {
+    if (resim) return;
     if (motes.length >= 130) return;
     motes.push({ x, y, vx, vy, life, max: life, r, g, c });
   }
-  function addDrop(x, y, vx, vy, r, c) { if (drops.length < 130) drops.push({ x, y, vx, vy, r, c }); }
+  function addDrop(x, y, vx, vy, r, c) { if (!resim && drops.length < 130) drops.push({ x, y, vx, vy, r, c }); }
   function splash(x, y, n) {
     for (let i = 0; i < n; i++) {
       const a = Math.PI + Math.random() * Math.PI;
@@ -1008,7 +1009,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function kickJoints(b, amt) { for (const k of KEYS) if (k !== 'dx' && k !== 'sp') b.rag.pv[k] = (b.rag.pv[k] || 0) + (grand() - 0.5) * amt; }
   function startRagdoll(b, vx, vy, av) {   // limp: everything they were doing stops
     Object.assign(b, { dashT: 0, slideT: 0, wallSlide: false, flipT: 0, airCarry: false, lungeT: 0, staggerT: 0, stunT: 0, lockT: 0, parryT: 0, fastFall: false, landT: 0, launched: true, hitShape: null, hurtT: 0, knocked: false });
-    b.punch.on = false; b.punch.queued = false; b.ai.react = -1;
+    b.punch.on = false; b.punch.queued = false;
     b.rag = { t: 0, av, pv: {}, phase: 'air', left: ragTime(b.damage, maxDmg(b)), gt: 0, trail: [] };
     kickJoints(b, 16);
     b.vx = vx; b.vy = vy; b.onGround = false;
@@ -2128,6 +2129,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     simFrame(inputs, dt);
   }
   function simFrame(inputs, dt) {
+    GAME.frame++;
     shakeT = Math.max(0, shakeT - dt);
     FIGHTERS.forEach((f, i) => { f.in = inputs[i]; });
     for (const f of FIGHTERS) fighterStep(f, dt);
@@ -2135,10 +2137,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     R0 = pl.R;
     worldStep(dt);
   }
+  const BRAIN = {};   // the bot's own memory (its reaction timer): not game state, the same as a human player's thoughts aren't
   // the practice bot "presses buttons": every frame it makes an input packet, the way a player would. Dummy: stands still, turning
   // to face you with a one-frame tap. Parry mode: reacts (0.06 s) to an attack coming at it by pressing Shift with no direction
   function botBrain(b, dt) {
-    const I = emptyInput(), E = foeOf(b), ai = b.ai, press = (a) => { I.h.add(a); I.p.add(a); };
+    const I = emptyInput(), E = foeOf(b), ai = BRAIN[b.side] || (BRAIN[b.side] = { react: -1 }), press = (a) => { I.h.add(a); I.p.add(a); };
     if (b.mode === 'parry') {
       const P_ = E.punch, A = P_.A, ok = b.stunT <= 0 && b.onGround && !b.rag;
       const threat = P_.on && !P_.hit && P_.t < A.wind + A.act && Math.abs(E.x - b.x) < 200 && Math.sign(b.x - E.x) === E.facing;
@@ -4111,6 +4114,65 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // ---------------------------------------------------------------- rounds
   // A round starts when Practice opens, on Restart Round, and when you resume after changing either loadout.
   const round = { msg: '', msgT: 0, endT: 0, started: false };
+  // ---- the game state, all in one place. GAME reaches everything the game's outcome depends on: the frame, the random state,
+  // the round, both fighters, the Divine General, and the weapon effects that can still hit. saveState() copies it (a snapshot),
+  // loadState() puts a snapshot back, stateHash() boils one down to a number both machines can compare (online: a desync check).
+  // Left out on purpose, because they never change what happens: particles, the ink aura, swing trails, screen shake, the HUD,
+  // the menus, and each fighter's input packet (in), which is handed over fresh every frame.
+  let resim = false;   // true while a rollback re-runs frames: those don't spawn particles again
+  const GAME = { frame: 0, rng: simRng, round, fighters: FIGHTERS, echoes, phantoms, inkPools, wpnWaves, get dg() { return dg; }, set dg(v) { dg = v; } };
+  const SKIP_KEYS = new Set(['in', 'paused', 'trails', 'swordTipPrev']);   // per-fighter things that aren't game state
+  const STATIC_REFS = new Set([...Object.values(MOVES), ...Object.values(DG_ATK)]);   // fixed data the state points at: kept as links
+  function cloneState(v, top) {
+    if (v === null || typeof v !== 'object') return v;
+    if (STATIC_REFS.has(v) || (!top && FIGHTERS.includes(v))) return v;   // a fighter inside something else (dg.owner): a link
+    if (Array.isArray(v)) return v.map(x => cloneState(x));
+    if (ArrayBuffer.isView(v)) return v.slice();
+    if (v instanceof Set) return new Set(v);
+    if (v.constructor !== Object) return v;
+    const o = {}; for (const k in v) if (!SKIP_KEYS.has(k)) o[k] = cloneState(v[k]); return o;
+  }
+  function restoreInto(dst, src) {
+    for (const k of Object.keys(dst)) if (!(k in src) && !SKIP_KEYS.has(k)) delete dst[k];
+    for (const k in src) dst[k] = cloneState(src[k]);
+  }
+  const LISTS = ['echoes', 'phantoms', 'inkPools', 'wpnWaves'];
+  function saveState() {
+    const S = { frame: GAME.frame, rng: simRng.s, round: cloneState(round, true), fighters: FIGHTERS.map(f => cloneState(f, true)), dg: dg ? cloneState(dg, true) : null };
+    for (const k of LISTS) S[k] = cloneState(GAME[k]);
+    return S;
+  }
+  function loadState(S) {
+    GAME.frame = S.frame; simRng.s = S.rng; restoreInto(round, S.round);
+    FIGHTERS.forEach((f, i) => restoreInto(f, S.fighters[i]));
+    dg = S.dg ? cloneState(S.dg, true) : null;
+    for (const k of LISTS) { const a = GAME[k]; a.length = 0; for (const x of S[k]) a.push(cloneState(x)); }
+    R0 = pl.R;
+  }
+  // FNV-1a over the snapshot: numbers by their exact bits, object keys in sorted order, fixed data by its name, a fighter inside
+  // something else by its side
+  const hashBuf = new Float64Array(1), hashU = new Uint32Array(hashBuf.buffer);
+  function stateHash(S = saveState()) {
+    let h = 0x811c9dc5;
+    const mix = (n) => { h ^= n; h = Math.imul(h, 0x01000193) >>> 0; };
+    const str = (t) => { for (let i = 0; i < t.length; i++) mix(t.charCodeAt(i)); mix(0); };
+    const walk = (v) => {
+      if (v === null || v === undefined) return mix(v === null ? 1 : 2);
+      if (typeof v === 'number') { hashBuf[0] = v; mix(hashU[0]); mix(hashU[1]); return; }
+      if (typeof v === 'boolean') return mix(v ? 3 : 4);
+      if (typeof v === 'string') return str(v);
+      if (typeof v === 'function') return;
+      if (STATIC_REFS.has(v)) return str('#' + (v.key || v.name || ''));
+      if (FIGHTERS.includes(v)) return str('@' + v.side);
+      if (Array.isArray(v) || ArrayBuffer.isView(v)) { mix(v.length); for (const x of v) walk(x); return; }
+      if (v instanceof Set) { str([...v].sort().join(',')); return; }
+      for (const k of Object.keys(v).sort()) { if (SKIP_KEYS.has(k)) continue; str(k); walk(v[k]); }
+    };
+    walk(S);
+    return h >>> 0;
+  }
+  window.__save = saveState; window.__load = loadState; window.__hash = () => stateHash();
+  window.__simFrame = (packs) => { pl.paused = true; game.mode = 'practice'; simFrame(packs.map(unpackInput), SIM_DT); };   // test hook: one step from packed inputs
   window.__round = round;
   window.__resetRound = () => resetRound();   // test hook
   function roundLost() { round.msg = 'Divine General wins'; round.msgT = 2.2; round.endT = 1.8; }
@@ -4125,7 +4187,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return true;
   }
   function resetRound() {
-    simRng.s = MATCH_SEED;   // every round rolls the same numbers from the same inputs
+    simRng.s = MATCH_SEED; GAME.frame = 0;   // every round rolls the same numbers from the same inputs
     round.endT = 0; round.started = true;
     dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
     for (const l of [echoes, phantoms, inkPools, wpnWaves, procs]) l.length = 0;
@@ -4138,7 +4200,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       Object.assign(f, { vx: 0, vy: 0, onGround: true, rag: null, out: false, dead: 0, launched: false, damage: 0, rot: 0, roll: 1, staggerT: 0, stunT: 0, hurtT: 0, knocked: false,
         lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false, wallT: 0, wallSlide: false, wallTouch: false, fastFall: false,
         landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, hitTest: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0, moveReady: {}, combo: 0 });
-      f.punch.on = false; f.punch.queued = false; f.ai.react = -1; f.pose = idlePose(f.time);
+      f.punch.on = false; f.punch.queued = false; f.pose = idlePose(f.time);
+      BRAIN[f.side] = { react: -1 };
     }
     Object.assign(pl, { x: GW / 2, y: PLAT.y, facing: 1 }); Object.assign(bot, { x: BOT_HOME, y: PLAT.y, facing: -1 });
     auraReady = false; forming.length = 0;
