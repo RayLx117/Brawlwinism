@@ -1819,7 +1819,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       P_.t += dt * (P_.t < A.wind ? cardStat(f, 'windSpeed') : 1);   // cards can make wind-ups run faster (a weapon's Quick) or slower (its curse)
       if (A.float && !P_.floated && P_.t >= A.wind - 0.01) { P_.floated = true; A.float(f); f.fastFall = false; }   // aerials drift a little toward their direction
       if (!P_.lunged && P_.t >= (A.lungeAt ?? A.wind * 0.55)) {   // step into it
-        P_.lunged = true; f.lungeT = A.lungeT; f.lungeV = A.lunge * (f.onGround ? 1 : 0.5);
+        P_.lunged = true; f.lungeT = A.lungeT || 0; f.lungeV = (A.lunge || 0) * (f.onGround ? 1 : 0.5);   // (moves with no lunge: 0, never NaN)
       }
       if (A.hop && !P_.hopped && P_.t >= A.wind - 0.02) {   // the uppercut drives up off the floor: feet leave the ground
         P_.hopped = true;
@@ -2121,6 +2121,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (pressed.has('pause')) { openMenu(); pressed.clear(); }
     if (pressed.has('boxes')) showBoxes = !showBoxes;
     if (pressed.has('botmode')) setBotParry(bot.mode !== 'parry');
+    if (RB.on) { rbStep(); pressed.clear(); return; }   // local rollback mode: the bot's inputs come late
     const inputs = [deviceInput(), botBrain(bot, dt)];
     pressed.clear();
     simFrame(inputs, dt);
@@ -3096,6 +3097,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     drawDmgNums();
     { const sx = SHX, sy = SHY; SHX = SHY = 0; drawHud(); drawDGPortrait(); SHX = sx; SHY = sy; }   // the HUD sits still while the screen shakes
     drawRoundMsg();
+    if (RB.on) {   // the rollback test's readout, top left
+      setM(ID); ctx.textAlign = 'left'; ctx.font = 'italic 600 15px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.72)';
+      ctx.fillText(`Rollback test · the bot's inputs arrive ${RB.delay} frames late`, 30, 96);
+      ctx.fillText(`rollbacks ${RB.rollbacks} · last ${RB.lastRoll} frames · longest ${RB.maxRoll}`, 30, 116);
+    }
     drawBoxes();
     drawMenu();
   }
@@ -4155,7 +4161,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const str = (t) => { for (let i = 0; i < t.length; i++) mix(t.charCodeAt(i)); mix(0); };
     const walk = (v) => {
       if (v === null || v === undefined) return mix(v === null ? 1 : 2);
-      if (typeof v === 'number') { hashBuf[0] = v; mix(hashU[0]); mix(hashU[1]); return; }
+      if (typeof v === 'number') { if (v !== v) return mix(5); hashBuf[0] = v; mix(hashU[0]); mix(hashU[1]); return; }   // (any NaN hashes the same)
       if (typeof v === 'boolean') return mix(v ? 3 : 4);
       if (typeof v === 'string') return str(v);
       if (typeof v === 'function') return;
@@ -4169,6 +4175,78 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return h >>> 0;
   }
   window.__save = saveState; window.__load = loadState; window.__hash = () => stateHash();
+  // ---- sync test: the same input packets, run twice from the same start, must give the same game every frame (equal hashes).
+  // It also saves, steps, loads that save and steps again, every frame (and every 8th frame, 8 frames deep): a rollback does
+  // exactly that, so the save has to hold everything. packs: one [player 1, player 2] pair of packed inputs per frame
+  function syncTest(packs) {
+    const start = saveState(), step = (pk) => simFrame(pk.map(unpackInput), SIM_DT);
+    resim = true;
+    let taken = [0, 0, 0], kos = 0;   // run 1's damage taken (player 1, player 2, the Divine General) and knockouts: proof it was a fight
+    const run = (count) => { loadState(start); return packs.map(pk => {
+      const before = [pl.damage, bot.damage, dg ? dg.damage : 0], dead = FIGHTERS.map(f => f.dead > 0 || f.out);
+      step(pk);
+      if (count) { [pl.damage, bot.damage, dg ? dg.damage : 0].forEach((d, k) => { taken[k] += Math.max(0, d - before[k]); }); FIGHTERS.forEach((f, k) => { if ((f.dead > 0 || f.out) && !dead[k]) kos++; }); }
+      return stateHash(); }); };
+    const a = run(true), b = run(false), end = { taken: taken.map(v => Math.round(v)), kos };
+    const twice = a.findIndex((h, i) => h !== b[i]);
+    loadState(start); let reload = -1;
+    for (let i = 0; i < packs.length && reload < 0; i++) {
+      const deep = i % 8 === 0 ? Math.min(8, packs.length - i) : 1, S = saveState();
+      for (let k = 0; k < deep; k++) step(packs[i + k]);
+      const h1 = stateHash(); loadState(S);
+      for (let k = 0; k < deep; k++) step(packs[i + k]);
+      if (stateHash() !== h1) reload = i;
+      loadState(S); step(packs[i]);
+    }
+    resim = false; loadState(start);
+    return { frames: packs.length, twiceMismatchAt: twice, reloadMismatchAt: reload, finalHash: a[a.length - 1], end };
+  }
+  window.__syncTest = syncTest;
+  // ---- local rollback mode (practice, pause menu): fakes an online match against the bot. Your inputs apply at once; the bot's
+  // reach the game RB.delay frames late, as if over a network. Until they arrive the game guesses them (the bot keeps holding
+  // what it last held, and presses nothing new) and plays on. When the real ones land and differ from the guess, it rolls back:
+  // loads the state saved at that frame and re-runs every frame since with the real inputs, all before the next draw.
+  const RB = { on: false, delay: 7, hist: [], base: 0, queue: [], lastRemote: [0, 0, 0, 0], rollbacks: 0, lastRoll: 0, maxRoll: 0, start: null };
+  function rbInit() { Object.assign(RB, { hist: [], base: GAME.frame, queue: [], lastRemote: [0, 0, 0, 0], rollbacks: 0, lastRoll: 0, maxRoll: 0, start: saveState(), log: [] }); }
+  const rbGuess = () => [RB.lastRemote[0], 0, RB.lastRemote[2], RB.lastRemote[3]];   // held buttons carry on, no new presses
+  function rbStep() {   // one real frame in rollback mode
+    const N = GAME.frame;
+    RB.queue.push({ frame: N, input: packInput(botBrain(bot, SIM_DT)), at: N + RB.delay });   // the bot decides now; its packet is "in the post"
+    const local = packInput(deviceInput());
+    let rollTo = -1;
+    while (RB.queue.length && RB.queue[0].at <= N) {   // packets arriving this frame
+      const q = RB.queue.shift(), H = RB.hist[q.frame - RB.base]; RB.lastRemote = q.input;
+      if (!H) continue;
+      H.confirmed = true;
+      if (H.inputs[1].join() !== q.input.join()) { H.inputs[1] = q.input; if (rollTo < 0) rollTo = q.frame; }
+    }
+    if (rollTo >= 0) {   // a wrong guess: back to that frame, then forward again with what's known now
+      const from = rollTo - RB.base; loadState(RB.hist[from].state); resim = true;
+      for (let k = from; k < RB.hist.length; k++) {
+        const H = RB.hist[k];
+        if (k > from) H.state = saveState();
+        if (!H.confirmed) H.inputs[1] = rbGuess();
+        simFrame(H.inputs.map(unpackInput), SIM_DT);
+      }
+      resim = false;
+      RB.rollbacks++; RB.lastRoll = N - rollTo; RB.maxRoll = Math.max(RB.maxRoll, RB.lastRoll);
+    }
+    const H = { state: saveState(), inputs: [local, rbGuess()], confirmed: false };   // this frame, on a guess for now
+    RB.hist.push(H);
+    simFrame(H.inputs.map(unpackInput), SIM_DT);
+    while (RB.hist.length > RB.delay + 2 && RB.hist[0].confirmed) { (RB.log || (RB.log = [])).push(RB.hist.shift().inputs); RB.base++; }   // older than any packet still to come: final
+  }
+  // test hook: replays the inputs the rollback run settled on, straight through with no rollbacks, from where it started, and
+  // checks it reaches the same state as the rollback run did at its oldest kept frame
+  window.__rbCheck = () => {
+    const keep = RB.hist[0]; if (!keep) return null;
+    const log = RB.log || [], now = saveState(); loadState(RB.start); resim = true;
+    for (let f = RB.start.frame; f < RB.base; f++) simFrame(log[f - RB.start.frame].map(unpackInput), SIM_DT);
+    const straight = stateHash(), rolled = stateHash(keep.state);
+    resim = false; loadState(now);
+    return { frame: RB.base, straight, rolled, same: straight === rolled, rollbacks: RB.rollbacks, maxRoll: RB.maxRoll };
+  };
+  window.__rb = RB; window.__rbStart = () => { RB.on = true; rbInit(); };
   window.__simFrame = (packs) => { pl.paused = true; game.mode = 'practice'; simFrame(packs.map(unpackInput), SIM_DT); };   // test hook: one step from packed inputs
   window.__round = round;
   window.__resetRound = () => resetRound();   // test hook
@@ -4185,6 +4263,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   function resetRound() {
     simRng.s = MATCH_SEED; GAME.frame = 0;   // every round rolls the same numbers from the same inputs
+    if (RB.on) RB.reinit = true;   // (the rollback mode starts over with the round, once it's set up)
     round.endT = 0; round.started = true;
     dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
     for (const l of [echoes, phantoms, inkPools, wpnWaves, procs]) l.length = 0;
@@ -4205,6 +4284,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const f of FIGHTERS) { f.R = rig(f); f.box = rigBox(f.R); }
     R0 = pl.R; auraUpdate(R0, 0); botInk(bot.R);
     for (const f of FIGHTERS) fireHook(f, 'onRoundStart');   // (the Divine General drops in)
+    if (RB.reinit) { RB.reinit = false; rbInit(); }
   }
   function drawRoundMsg() {
     if (round.msgT <= 0) return;
@@ -4256,6 +4336,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     { label: 'Bot’s Cards', act: () => openCards('bot') },
     { label: 'Bot parries', get: () => bot.mode === 'parry', set: (v) => setBotParry(v) },
     { label: 'Hitboxes', get: () => showBoxes, set: (v) => { showBoxes = v; } },
+    { label: 'Rollback test', get: () => RB.on, set: (v) => { RB.on = v; if (v) rbInit(); } },
     { label: 'No card cooldowns', get: () => noItemCd, set: (v) => { noItemCd = v; if (v) clearCardCds(pl); } },
     { label: 'Damage numbers', get: () => showDmg, set: (v) => { showDmg = v; if (!v) dmgNums.length = 0; } },
     { label: 'Controls', act: () => { menu.controls = true; menu.ct = 0; } },
@@ -4303,7 +4384,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     pressed.clear();
   }
   // layout (game px): the menu card sits high so the controls pop-up can rise from the bottom beneath it
-  const MCARD = { x0: 410, x1: 870, y0: 18, y1: 453 }, MROW0 = 114, MROW = 35;
+  const MCARD = { x0: 410, x1: 870, y0: 18, y1: 488 }, MROW0 = 114, MROW = 35;
   const CPOP = { x0: 130, x1: 1150, y0: 388, y1: 712 };   // tall enough for every row plus the close hint
   // mouse: hover picks, click activates, a click off the pop-up closes it
   function gamePt(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / view.s, (e.clientY - r.top) / view.s]; }
