@@ -16,6 +16,6 @@ for (const ms of [30, 90, 150, 220, 400, 900, 1300, 1500]) { const w = ms - (Dat
   const f = OUT + `dth-${fs_.length}.png`; await p.screenshot({ path: f, clip: { x: box.x + 460 * k, y: box.y + 540 * k, width: 360 * k, height: 180 * k } }); fs_.push(f); }
 console.log(JSON.stringify(await p.evaluate(() => ({ botDead: __bot.dead > 0, botX: Math.round(__bot.x), dmg: __bot.damage }))));
 await p.evaluate(() => __hudDeath('pl')); await p.waitForTimeout(500);
-await p.screenshot({ path: OUT + 'death-icon-zoom.png', clip: { x: box.x + 470 * k, y: box.y + 580 * k, width: 140 * k, height: 140 * k } });
+await p.screenshot({ path: OUT + 'death-icon-zoom.png', clip: { x: box.x + 450 * k, y: box.y + 560 * k, width: 180 * k, height: 160 * k } });
 execSync(`python3 ${__dirname}/grid.py ${OUT}death-icon.png 4 0.6 ${fs_.join(' ')}`);
 console.log('errors', errs); await b.close(); })();

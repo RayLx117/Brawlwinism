@@ -74,3 +74,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `no-scope-close.js`: No Scope at point blank (target in front, overlapping, just behind); checks every shot hits and knocks the target away. Sheet: out/no-scope-close.png.
 - `cd-badges.js`: card cooldown badges round the HUD portraits: No Scope's ring unwinding over its cooldown, plus several stacked (out/cd-badges.png, out/cd-badges-zoom.png).
 - `death-icon.js`: the death icon: the bot KO'd for real (skull slam, ink thrown off, fade on respawn), plus a close-up. Sheet: out/death-icon.png.
+- `skull-trace.py`: traces Ray's skull (reference/skull-ink.webp) to the death icon's SKULL_PATH (run from a scratch dir; writes skull.json and reference/skull-trace.svg).
