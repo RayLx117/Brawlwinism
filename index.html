@@ -4408,16 +4408,16 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!c) { ctx.font = 'italic 500 14px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.4)'; ctx.fillText('empty', x + SLOT.w / 2, y + SLOT.h / 2 + 22); }
     if (f) focusTick(x - 14, y + SLOT.h / 2, seed + 8);
   }
-  // a card's stat sheet rows: [label, value]. '—' where a card has none
+  // a card's stat sheet rows: [label, value]. A card with no cooldown has no CD row
   function cardStats(c) {
     const ws = c.type === 'weapon' && equipped.weapon === c.id && equipped.weaponSpec;
     if (c.id === 'noScope') return [['CD:', NOSCOPE.cd + ' s'], ['DMG:', NOSCOPE.dmg + '%']];
     if (c.type === 'weapon') {
-      if (ws) { const st = weaponStats(ws); return [['CD:', '—'], ['DMG:', st.dmg + '% per hit'], ...(ws.mods.length ? [['MODS:', ws.mods.map(modLabel).join(', ')]] : [])]; }
-      const r = WEAPON_RARITY[c.rarity] || WEAPON_RARITY.common; return [['CD:', '—'], ['DMG:', r.dmg[0] + '–' + r.dmg[1] + '% per hit']];
+      if (ws) { const st = weaponStats(ws); return [['DMG:', st.dmg + '% per hit'], ...(ws.mods.length ? [['MODS:', ws.mods.map(modLabel).join(', ')]] : [])]; }
+      const r = WEAPON_RARITY[c.rarity] || WEAPON_RARITY.common; return [['DMG:', r.dmg[0] + '–' + r.dmg[1] + '% per hit']];
     }
-    if (c.id === 'divineGeneral') { const d = Object.values(DG_ATK).map(a => a.dmg).filter(v => v > 0); return [['CD:', '—'], ['DMG:', Math.min(...d) + '–' + Math.max(...d) + '%']]; }
-    return [['CD:', '—'], ['DMG:', '—']];
+    if (c.id === 'divineGeneral') { const d = Object.values(DG_ATK).map(a => a.dmg).filter(v => v > 0); return [['DMG:', Math.min(...d) + '–' + Math.max(...d) + '%']]; }
+    return [['DMG:', '—']];
   }
   // the full card (the preview on the card screen): the title at the top, a banner of the card's art, then a stat sheet (CD, DMG)
   // and the one-line description; rarity and type along the foot. Inked like the small cards: rarity wash, brush frame, gold for Ancient

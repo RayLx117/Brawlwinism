@@ -243,7 +243,7 @@ Ray's standard card, shown full size in the top right of Select Cards / Bot's Ca
 
 - **Top:** the title, centred, italic, with a brush underline. The card's type (Weapon, Companion, Passive...) sits small in the top-right corner.
 - **Banner:** the card's art (`cardArt`) over its rarity wash, in a brushed ink box. It gives up height when the stat sheet is long, such as a weapon with many modifiers.
-- **Stat sheet:** rows with a bold label and the value, a faint brush rule under each: **CD:** and **DMG:** (— when a card has none). An equipped weapon adds **MODS:**, listed under its label in smaller text. The values come live from the game (`cardStats`): No Scope from `NOSCOPE`, a weapon from its rarity's damage range or the rolled copy, the Divine General from his attack table.
+- **Stat sheet:** rows with a bold label and the value, a faint brush rule under each: **CD:** (only on cards with a cooldown) and **DMG:**. An equipped weapon adds **MODS:**, listed under its label in smaller text. The values come live from the game (`cardStats`): No Scope from `NOSCOPE`, a weapon from its rarity's damage range or the rolled copy, the Divine General from his attack table.
 - **Description:** one brief line in the card's `desc`, centred:
   - No Scope: "Press ‘Attack’ to Snipe Rag-dolled Targets" (Ray's wording).
   - Divine General: "With this treasure, I summon..." (Ray's wording).
