@@ -67,3 +67,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - Brute-force the input timings with `__tick(1/60)` in loops, which is fast. Hits are detected when `__bot.moveT` jumps back to 1.4 and `__bot.move` names the move.
 - Render with `__step(1/60, n)` before screenshots. Use `deviceScaleFactor: 2` for images Ray will see.
 - Some effects use `Math.random`, such as ragdoll limb kicks and particles. Run a timing several times before calling it reliable.
+- `sniper-fill.py`: builds the rifle's fill silhouette (`RIFLE_FILL`) from `reference/sniper-ink.webp`.
