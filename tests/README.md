@@ -82,3 +82,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `sword-combos.js`: the sword string as gameplay: reach of each slash vs the jab, rising slash > jump-cancel > aerials (true combos), the escape window before the overhead, the overhead's launch.
 - `sword-cancel.js`: cuts the sword swings short (dash, jump-cancel, parry) or lets them finish, then dash stabs; the sword must be back to normal through the stab. Frames: out/sword-cancel.png.
 - `sword-string.js`: the full sword string on the bot (rising slash straight up, the overhead catching them on the way down), hitbox view on. Sheet: out/sword-string.png.
+- `sword-nair.js`: the sword neutral air (sword spin): knockback direction against a bot above / in front / behind / below (radial, no ragdoll), its 0.5 s reuse delay, the dash stab's 0.3 s reuse delay; frames out/sword-nair.png.
