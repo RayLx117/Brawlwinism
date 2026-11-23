@@ -899,12 +899,18 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const RAG_GETUP = 0.45, MAX_DAMAGE = 150;
   const canBeHit = (f) => !f.rag && !(f.dead > 0);   // ragdolled (incl. getting up) or knocked out: hits pass through
   const KO_DAMAGE = MAX_DAMAGE;   // the goo is fully red at max
-  const ragTime = (d) => 0.2 + 1.3 * Math.pow(Math.min(1, d / MAX_DAMAGE), 1.2);
+  // Each fighter's own damage cap (f.maxDmg, for cards that raise it; MAX_DAMAGE if not set; the Divine General's is DG.max).
+  // Everything that scales with damage (knockback, ragdoll time, the red goo, the HUD number, how red the splashes come out) reads
+  // the share of that cap, 0..1, so a higher cap stretches the whole curve
+  const maxDmg = (f) => f && f === dg ? DG.max : (f && f.maxDmg) || MAX_DAMAGE;
+  const dmgShare = (f) => Math.min(1, ((f && f.damage) || 0) / maxDmg(f));
+  const addDmg = (f, d) => { f.damage = Math.min(maxDmg(f), (f.damage || 0) + d); };
+  const ragTime = (d, max = MAX_DAMAGE) => 0.2 + 1.3 * Math.pow(Math.min(1, d / max), 1.2);
   const LAUNCH_GROW = 1.755;   // how much damage adds to knockback (at max damage launches are 1 + this times as strong). Raised 30% from 1.35
-  const launchScale = (d) => 1 + LAUNCH_GROW * Math.pow(Math.min(1, d / MAX_DAMAGE), 1.1);
+  const launchScale = (d, max = MAX_DAMAGE) => 1 + LAUNCH_GROW * Math.pow(Math.min(1, d / max), 1.1);
   function kickJoints(b, amt) { for (const k of KEYS) if (k !== 'dx' && k !== 'sp') b.rag.pv[k] = (b.rag.pv[k] || 0) + (Math.random() - 0.5) * amt; }
   function startRagdoll(b, vx, vy, av) {
-    b.rag = { t: 0, av, pv: {}, phase: 'air', left: ragTime(b.damage), gt: 0, trail: [] };
+    b.rag = { t: 0, av, pv: {}, phase: 'air', left: ragTime(b.damage, maxDmg(b)), gt: 0, trail: [] };
     kickJoints(b, 16);
     b.vx = vx; b.vy = vy; b.onGround = false; b.hurtT = 0; b.stunT = 0; b.parryT = 0; b.react = -1;
   }
@@ -965,13 +971,13 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // flight trail: the body's centre over the last moments, drawn as a tapered ink smear
     if (b.R) { g.trail.push([b.R.centre[0], b.R.centre[1]]); if (g.trail.length > 9) g.trail.shift(); }
     if (sp > 500 && Math.random() < dt * sp / 40) {
-      const [cx, cy] = b.R ? b.R.centre : [b.x, b.y - 50], red = Math.min(1, b.damage / MAX_DAMAGE);
+      const [cx, cy] = b.R ? b.R.centre : [b.x, b.y - 50], red = dmgShare(b);
       addMote(cx + (Math.random() - 0.5) * 30, cy + (Math.random() - 0.5) * 30, -b.vx * 0.2 + (Math.random() - 0.5) * 60, -b.vy * 0.2 + (Math.random() - 0.5) * 60, 0.3 + Math.random() * 0.2, 0.8 + Math.random() * 1.2, 60, Math.random() < red ? RED : undefined);
     }
   }
   // impact: splash and a fresh jolt through the limbs
   function ragImpact(b, x, y, nx, ny, v) {
-    const n = 3 + Math.min(8, Math.round(v / 220)), red = Math.min(1, b.damage / MAX_DAMAGE);
+    const n = 3 + Math.min(8, Math.round(v / 220)), red = dmgShare(b);
     for (let i = 0; i < n; i++) {
       const a = Math.atan2(ny, nx) + (Math.random() - 0.5) * 2.2, vv = 120 + Math.random() * v * 0.45;
       if (i % 2) addDrop(x, y, Math.cos(a) * vv, Math.sin(a) * vv, 0.7 + Math.random() * 0.8, Math.random() < red ? RED : undefined);
@@ -1020,7 +1026,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   function koBurst(b) {   // knocked off screen
     const [cx, cy] = b.R ? b.R.centre : [b.x, b.y - 50];
-    blastSplash(cx, cy, 0.2 + 0.6 * Math.min(1, b.damage / MAX_DAMAGE));
+    blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(b));
     b.koPos = [Math.max(260, Math.min(GW - 160, cx)), Math.max(190, Math.min(PLAT.y - 60, cy))];
     b.rag = null; b.dead = 1.2; b.box = null; b.labelT = 0; b.koT = 1.4;
   }
@@ -1081,7 +1087,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     botInk(b.R);
     if (!b.rag && b.onGround && b.footPad == null) b.footPad = b.box[3] - PLAT.y;
     // damaged: red goo beads off the body, more often the more damaged
-    const d01 = Math.min(1, b.damage / KO_DAMAGE);
+    const d01 = dmgShare(b);
     if (d01 > 0 && Math.random() < dt * (0.6 + 5 * d01)) {
       const inst = INST[(Math.random() * INST.length) | 0], g = inst.rings[0], i = (Math.random() * g.src.n) | 0;
       if (Math.hypot(g.bro[2 * i] - g.bliq[2 * i], g.bro[2 * i + 1] - g.bliq[2 * i + 1]) > 0.5) addDrop(g.bro[2 * i], g.bro[2 * i + 1], b.vx * 0.4 + (Math.random() - 0.5) * 30, b.vy * 0.3 + 20, 0.8 + Math.random() * 0.6, RED);
@@ -1097,7 +1103,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // the red level for a given damage, in the same height units (rises from the soles to past the crest at max)
   const redLevel = (b, d01) => b.hMin + (b.hMax - b.hMin + 14) * Math.pow(d01, 1.35) - 4;   // slow to start, full only at max damage
   function botInk(r) {
-    const t = bot.time, low = AUR.LOW * S, d01 = Math.min(1, bot.damage / KO_DAMAGE);
+    const t = bot.time, low = AUR.LOW * S, d01 = dmgShare(bot);
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     const F = bodyFrame(r), calib = bot.hMin == null;
     let hMin = 1e9, hMax = -1e9;
@@ -1219,7 +1225,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       b.parryT = 0; pl.gbT = pl.time + 5; procLabel('Guard Breaker', [fx, fy]);
     }
     if (b.parryT > 0) {   // parried: the attacker is knocked off balance
-      if (b.wpn && b.wpn.has.mirror) { const back = pl.wpn ? pl.wpn.dmg : A.damage; pl.damage = Math.min(MAX_DAMAGE, (pl.damage || 0) + back); procLabel('Mirror', [fx, fy]); }
+      if (b.wpn && b.wpn.has.mirror) { const back = pl.wpn ? pl.wpn.dmg : A.damage; addDmg(pl, back); procLabel('Mirror', [fx, fy]); }
       b.parryOkT = b.time;
       // a successful parry: the attacker is stunned for 1.5 s, and the parry recharges at once
       pl.staggerT = PARRY_STUN; pl.vx = -pl.facing * 220; pl.lungeT = 0;
@@ -1235,10 +1241,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (b.combo >= 2) { b.label = b.combo + ' hit combo'; b.labelT = 1.4; }
     else if (P_.ci > 0) { b.label = 'not a true combo'; b.labelT = 1.4; }
     b.move = A.name; b.moveT = 1.4;
-    const ls = 1 + (launchScale(b.damage) - 1) * (A.lsK ?? 1);   // knockback uses the damage they had going in (lsK: how much damage grows it)
+    const ls = 1 + (launchScale(b.damage, maxDmg(b)) - 1) * (A.lsK ?? 1);   // knockback uses the damage they had going in (lsK: how much damage grows it)
     const kd = A.limbs ? (Math.sign(b.x - pl.x) || pl.facing) : pl.facing;   // two-sided moves knock them away from you
     const wh = pl.wpn ? wpnHit(pl, 'bot', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 }, dmg = wh.dmg;   // holding a weapon: its damage, through its modifiers
-    b.damage = Math.min(MAX_DAMAGE, b.damage + dmg);
+    addDmg(b, dmg);
     if (showDmg) {   // older numbers still showing step up out of the way, so a string reads as a little stack
       const step = (A.ragdoll ? 34 : 24 + Math.min(12, dmg) * 1.2) * 1.15 + 6;   // roughly the new number's height
       for (const n of dmgNums) n.y -= step;
@@ -1251,7 +1257,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (A.pop) { b.vy = -A.pop * (1 + 0.3 * (ls - 1)); b.onGround = false; }   // popped up: juggle them
     }
     // ink splash, scaled with how hard it hit
-    const dirx = kd, diry = A.up ? -1.6 : A.pop < 0 ? 1.2 : A.pop > 300 ? -0.8 : -0.15, k = A.dmg, red = Math.min(1, b.damage / 100);   // more of it comes out red the more damaged they are
+    const dirx = kd, diry = A.up ? -1.6 : A.pop < 0 ? 1.2 : A.pop > 300 ? -0.8 : -0.15, k = A.dmg, red = Math.min(1, dmgShare(b) * 1.5);   // more of it comes out red the more damaged they are
     for (let i = 0; i < Math.round(5 * k); i++) addDrop(fx, fy, dirx * (160 + Math.random() * 260) * (A.up ? 0.5 : 1), (diry + (Math.random() - 0.5) * 1.4) * (150 + Math.random() * 150), 0.8 + Math.random() * 0.7 * k, Math.random() < red ? RED : undefined);
     for (let i = 0; i < Math.round(6 * k); i++) { const a = Math.atan2(diry, dirx) + (Math.random() - 0.5) * 2.4; addMote(fx, fy, Math.cos(a) * (220 + Math.random() * 260), Math.sin(a) * (220 + Math.random() * 260), 0.25 + Math.random() * 0.2, 0.8 + Math.random() * k, 300); }
   }
@@ -1263,8 +1269,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const FATE = ['keen', 'heavy', 'lifesteal', 'executioner', 'momentum', 'skyborne', 'bleed', 'dazing', 'echo', 'rending', 'splash', 'inkpool', 'thunderclap'];
   const tgtOf = (kind) => kind === 'bot' ? bot : dg;
   function addToTarget(kind, d, pt, num = true) {   // damage straight onto a target (no launch), with ink and a number
-    if (kind === 'bot') { if (bot.dead > 0) return; bot.damage = Math.min(MAX_DAMAGE, bot.damage + d); }
-    else { if (!dg) return; d = Math.round(d * DG.take * 10) / 10; dg.damage = Math.min(DG.max, dg.damage + d); dg.shudder = 0.1; }
+    if (kind === 'bot') { if (bot.dead > 0) return; addDmg(bot, d); }
+    else { if (!dg) return; d = Math.round(d * DG.take * 10) / 10; addDmg(dg, d); dg.shudder = 0.1; }
     for (let i = 0; i < 5; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 260, -120 - Math.random() * 200, 0.7 + Math.random() * 0.6, Math.random() < 0.4 ? RED : undefined);
     if (num && showDmg) { for (const n of dmgNums) n.y -= 26; dmgNums.push({ x: pt[0] + 30, y: pt[1] + 6, v: d, kill: false, dir: 1, t: 0 }); }
   }
@@ -1327,7 +1333,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (p.t < -0.22) phantoms.splice(i, 1);
     }
     for (const f of [bot, dg]) if (f && f.bleedT > 0) {   // Bleeding Ink: +1% a second
-      f.bleedT -= dt; f.damage = Math.min(f === dg ? DG.max : MAX_DAMAGE, f.damage + dt * (f === dg ? DG.take : 1));
+      f.bleedT -= dt; addDmg(f, dt * (f === dg ? DG.take : 1));
       const c = f === dg ? f.R && f.R.centre : f.R && f.R.centre;
       if (c && Math.random() < dt * 8) addDrop(c[0] + (Math.random() - 0.5) * 30, c[1], (Math.random() - 0.5) * 40, 30, 0.6 + Math.random() * 0.5, RED);
     }
@@ -2255,7 +2261,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // the line work of each part turns red once the tide has risen past it
     let inkC = INK;
     if (b.damage > 0 && b.hMin != null) {
-      const F = bodyFrame(b.R), lev = redLevel(b, Math.min(1, b.damage / KO_DAMAGE));
+      const F = bodyFrame(b.R), lev = redLevel(b, dmgShare(b));
       inkC = (m) => {
         const px = m[0] * 0 + m[2] * 10 + m[4], py = m[1] * 0 + m[3] * 10 + m[5], h = (px - F.hx) * F.ux + (py - F.hy) * F.uy;
         const k = Math.max(0, Math.min(1, (lev - h) / 22));
@@ -2281,7 +2287,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!g || g.phase !== 'air' || g.trail.length < 4) return;
     const sp = Math.hypot(b.vx, b.vy);
     if (sp < 450) return;
-    const k = Math.min(1, (sp - 450) / 700), red = Math.min(1, b.damage / MAX_DAMAGE);
+    const k = Math.min(1, (sp - 450) / 700), red = dmgShare(b);
     const pts = g.trail.slice(-7), [hx, hy] = pts[pts.length - 1], [tx, ty] = pts[0];
     const dx = hx - tx, dy = hy - ty, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
     setM(ID);
@@ -2403,7 +2409,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const BUST = { s: 1.12, tl: 0.08, hd: -0.06 };
   const redInk = (k) => `rgb(${Math.round(21 + 129 * k)},${Math.round(18 + 10 * k)},${Math.round(15 + 7 * k)})`;
   function drawPortrait(h) {
-    const f = h.f(), d = f.damage || 0, out = f.dead > 0 || !!f.out, t = f.time || 0, d01 = Math.min(1, d / KO_DAMAGE);
+    const f = h.f(), d = f.damage || 0, out = f.dead > 0 || !!f.out, t = f.time || 0, d01 = dmgShare(f);
     if (d > h.last + 0.01) h.popT = t;   // took a hit: the portrait jolts and the number swells
     h.last = d;
     const pop = Math.max(0, Math.min(1, 1 - (t - h.popT) / 0.35)), sh = 6 * pop * pop;
@@ -2463,7 +2469,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const g of h.ring) { ctx.fillStyle = `rgba(21,18,15,${g.a})`; ctx.fill(g.p); }
     if (out && !(ht >= DGH.fly)) { ctx.fillStyle = 'rgba(221,211,191,0.7)'; ctx.beginPath(); ctx.arc(cx, cy, HUD_R + 9, 0, TAU); ctx.fill(); }   // knocked out: washed back into the page until the respawn
     else if (!out || ht >= DGH.fly) {   // the number sits over the bottom of the portrait, cut out of it with a paper halo
-      const big = 30 * (1 + 0.35 * pop) * (d >= MAX_DAMAGE ? 1 + 0.05 * Math.sin(t * 9) : 1), num = String(Math.round(d));
+      const big = 30 * (1 + 0.35 * pop) * (d >= maxDmg(f) ? 1 + 0.05 * Math.sin(t * 9) : 1), num = String(Math.round(d));
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
       ctx.font = `italic 700 ${big.toFixed(1)}px Georgia, serif`; const wN = ctx.measureText(num).width;
       ctx.font = `italic 700 ${(big * 0.55).toFixed(1)}px Georgia, serif`; const wP = ctx.measureText('%').width;
@@ -2808,9 +2814,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const g = dg, f = E.f, cx = A.key === 'leap' ? g.leapTo : g.x;
     const dir = A.wave ? (Math.sign(E.x - cx) || g.facing) : A.key === 'backhand' ? -g.facing : g.facing;
     if (dgParried(f, pt, A)) return false;
-    const ls = launchScale(f.damage || 0);
+    const ls = launchScale(f.damage || 0, maxDmg(f));
     const AD = dgDmg(A.dmg);
-    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + AD);
+    addDmg(f, AD);
     if (A.stun) {   // popped straight up and hit-stunned, like a regular hit (not a ragdoll)
       const vx = dir * A.kb * (1 + 0.4 * (ls - 1)), vy = -A.pop * (1 + 0.3 * (ls - 1));
       if (f === pl) {
@@ -2819,14 +2825,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       } else Object.assign(bot, { stunT: A.stun, stunMax: A.stun, hurtT: 0.24, hurtKind: 1, vx, vy, onGround: false });
       shakeT = Math.max(shakeT, 0.18);
       if (showDmg) { for (const n of dmgNums) n.y -= 40; dmgNums.push({ x: pt[0] + dir * 30, y: pt[1] + 6, v: AD, kill: false, dir, t: 0 }); }
-      for (let i = 0; i < 8; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 220, -200 - Math.random() * 300, 0.8 + Math.random(), Math.random() < Math.min(1, f.damage / 100) ? RED : undefined);
+      for (let i = 0; i < 8; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 220, -200 - Math.random() * 300, 0.8 + Math.random(), Math.random() < Math.min(1, dmgShare(f) * 1.5) ? RED : undefined);
       return true;
     }
     if (f === pl) plRagdoll(dir * A.kb * ls, -A.pop * ls, -8 * dir);
     else { startRagdoll(bot, dir * A.kb * ls, -A.pop * ls, -8); bot.combo = 0; }
     shakeT = 0.22;
     if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + dir * 34, y: pt[1] + 6, v: AD, kill: true, dir, t: 0 }); }
-    const red = Math.min(1, f.damage / 100);
+    const red = Math.min(1, dmgShare(f) * 1.5);
     for (let i = 0; i < 10; i++) addDrop(pt[0], pt[1], dir * (200 + Math.random() * 320), -150 - Math.random() * 260, 0.9 + Math.random() * 1.1, Math.random() < red ? RED : undefined);
     for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; addMote(pt[0], pt[1], Math.cos(a) * 340 + dir * 200, Math.sin(a) * 340, 0.3, 1 + Math.random() * 1.6, 300); }
     return true;
@@ -3030,12 +3036,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (dgParried(f, pt, A)) return;
     g.pose.fa1 = w - g.pose.tl; g.pose.fa2 = 0;   // the jab arrives straight: the arm is out along the aim, with no wind-round left in it
     const AD = dgDmg(A.dmg);
-    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + AD);
+    addDmg(f, AD);
     if (f === pl) plRagdoll(0, 0, 0); else { startRagdoll(bot, 0, 0, 0); bot.combo = 0; }
     g.pin = { f }; a.pin0 = a.t; a.w0 = w; a.tl0 = g.pose.tl;
     shakeT = 0.24;
     if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + g.facing * 34, y: pt[1] + 6, v: AD, kill: true, dir: g.facing, t: 0 }); }
-    const red = Math.min(1, f.damage / 100), dx = -Math.sin(w), dy = Math.cos(w);   // ink bursts out both sides of the wound
+    const red = Math.min(1, dmgShare(f) * 1.5), dx = -Math.sin(w), dy = Math.cos(w);   // ink bursts out both sides of the wound
     for (let i = 0; i < 14; i++) { const s = (i % 2 ? 1 : -0.6) * (220 + Math.random() * 300); addDrop(pt[0], pt[1], g.facing * dx * s + (Math.random() - 0.5) * 120, dy * s - 120 - Math.random() * 160, 0.9 + Math.random() * 1.2, Math.random() < 0.4 + 0.6 * red ? RED : undefined); }
     for (let i = 0; i < 10; i++) { const an = Math.random() * TAU; addMote(pt[0], pt[1], Math.cos(an) * 300, Math.sin(an) * 300, 0.3, 1 + Math.random() * 1.4, 300); }
   }
@@ -3055,7 +3061,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgUnpin(g, slam) {
     const f = g.pin.f; g.pin = null;
     if (!f.rag) return;
-    const ls = launchScale(f.damage || 0), A = DG_ATK.pierce;
+    const ls = launchScale(f.damage || 0, maxDmg(f)), A = DG_ATK.pierce;
     const vx = slam ? g.facing * A.kb * ls : 0, vy = slam ? A.down * ls : 0, av = slam ? g.facing * 14 : 0;
     if (f === pl) plRagdoll(vx, vy, av); else { startRagdoll(bot, vx, vy, av); bot.combo = 0; }
     if (slam) g.slamWatch = { f, t: 0 };
@@ -3068,14 +3074,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const over = f.x > PLAT.x0 && f.x < PLAT.x1;
     if (!over || !f.box || f.box[3] < PLAT.y - 4) return;
     g.slamWatch = null;
-    const A = DG_ATK.pierce, ls = launchScale(f.damage || 0), x = f.x, y = PLAT.y;
+    const A = DG_ATK.pierce, ls = launchScale(f.damage || 0, maxDmg(f)), x = f.x, y = PLAT.y;
     const AI = dgDmg(A.impact);
-    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + AI);
+    addDmg(f, AI);
     f.vy = -A.bounce * (0.75 + 0.25 * ls); f.vx *= A.carry;   // rebound up, still carried on by the throw
     Object.assign(f.rag, { phase: 'air', av: g.facing * 13 });
     shakeT = Math.max(shakeT, 0.42);
     splash(x, y, 20);
-    const red = Math.min(1, f.damage / 100);
+    const red = Math.min(1, dmgShare(f) * 1.5);
     for (let i = 0; i < 46; i++) {   // the crown of ink: most thrown up and out in a fan, a few fine flecks high
       const an = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, v = 250 + Math.random() * 650;
       addDrop(x + (Math.random() - 0.5) * 60, y - 4, Math.cos(an) * v, Math.sin(an) * v, 0.8 + Math.random() * 1.8, Math.random() < 0.3 + 0.5 * red ? RED : undefined);
@@ -3097,8 +3103,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (showDmg) { for (const n of dmgNums) n.y -= 34; dmgNums.push({ x: fx + kd * 34, y: fy + 6, v: take, kill: !!A.ragdoll, dir: kd, t: 0 }); }
     for (let i = 0; i < Math.round(5 * A.dmg); i++) { const a = Math.atan2(-0.3, kd) + (Math.random() - 0.5) * 2.4; addMote(fx, fy, Math.cos(a) * (220 + Math.random() * 240), Math.sin(a) * (220 + Math.random() * 240), 0.25, 0.8 + Math.random(), 300); }
     if (A.ragdoll && before >= DG.weak) {   // worn down: kill blows finally send him flying
-      const k = DG.max > DG.weak ? DG.launchLo + (DG.launchHi - DG.launchLo) * Math.min(1, (before - DG.weak) / (DG.max - DG.weak)) : DG.launchHi, ls = launchScale(before) * k;
-      g.state = 'rag'; g.rag = { t: 0, left: ragTime(g.damage) * 1.1, av: -kd * g.facing * 3.5, ground: false };
+      const k = DG.max > DG.weak ? DG.launchLo + (DG.launchHi - DG.launchLo) * Math.min(1, (before - DG.weak) / (DG.max - DG.weak)) : DG.launchHi, ls = launchScale(before, DG.max) * k;
+      g.state = 'rag'; g.rag = { t: 0, left: ragTime(g.damage, DG.max) * 1.1, av: -kd * g.facing * 3.5, ground: false };
       g.vx = kd * A.kb * wh.kb * ls * 1.6; g.vy = -Math.max(260, A.pop) * ls * wh.kb; shakeT = 0.25;
       g.label = ''; g.labelT = 0;
     } else {
@@ -3585,7 +3591,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   function plKO() {
     const [cx, cy] = R0 ? R0.centre : [pl.x, pl.y - 50];
-    blastSplash(cx, cy, 0.2 + 0.6 * Math.min(1, (pl.damage || 0) / MAX_DAMAGE));
+    blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(pl));
     if (roundTakesOut(pl)) { pl.out = true; pl.rag = null; pl.vx = pl.vy = 0; return; }
     plReturn();
   }
