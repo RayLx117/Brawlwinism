@@ -1388,8 +1388,24 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     gripDown: 3, fore: [25, 6.5], reach: 0.97, stock: -9, mag: [13.5, 6], flash: 0.09,
     kneel: { fx: 10, fy: 12, bl1: 0.1, bl2: 1.47, bf: 2.9, tl: 0.18 } };   // on one knee (on the ground): the front foot's place from the hip, the back thigh / shin / foot angles (knee on the floor, shin flat behind, foot laid back along the floor), the body's lean
   const NOSCOPE_BACK = 2.55;   // where the whip starts: the lead arm's angle against the torso, back behind the shoulder
-  let noItemCd = false;   // practice switch (pause menu): card cooldowns off (No Scope, and every future ability or card)
-  const itemCd = (v) => noItemCd ? 0 : v;   // every card cooldown goes through this, so new cards must set theirs with it
+  // ---------------------------------------------------------------- card cooldowns: one place for every card's cooldown
+  // Every card (passives, abilities, anything with a cooldown) starts, reads and clears its cooldown here, and nowhere else, so
+  // whatever changes cooldowns works on all of them at once: the practice switch, and later cards like "-50% card cooldowns",
+  // which fold into cardCdMult. Each fighter keeps f.cds = { [cardId]: { t: seconds left, max: the full length } }; the HUD shows
+  // each running one as a badge round the fighter's portrait (drawCdBadges)
+  let noItemCd = false;   // practice switch (pause menu): card cooldowns off
+  function cardCdMult(f) {   // how long this fighter's card cooldowns run, as a share of their base length
+    if (noItemCd && f === pl) return 0;
+    const m = 1;   // (cooldown-cutting cards multiply in here)
+    return m;
+  }
+  function startCardCd(f, id, base) {
+    const t = base * cardCdMult(f); f.cds = f.cds || {};
+    if (t > 0) f.cds[id] = { t, max: t }; else delete f.cds[id];
+  }
+  const cardCdLeft = (f, id) => (f.cds && f.cds[id] ? f.cds[id].t : 0);
+  function stepCardCds(f, dt) { if (f.cds) for (const id in f.cds) { const c = f.cds[id]; c.t -= dt; if (c.t <= 0) delete f.cds[id]; } }
+  const clearCardCds = (f) => { f.cds = {}; };
   const noScopeFx = [];   // tracers and the rifle out: { kind, ... , t }
   let noScopeMark = null;   // the red X, built once (local coords, centred)
   const hasNoScope = (side) => (LOADOUT[side].passives || []).includes('noScope');
@@ -1420,12 +1436,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (bot.rag && !(bot.dead > 0) && !bot.out && bot.R) return { kind: 'bot', c: bot.R.centre, f: bot };
     return null;
   }
-  const noScopeReady = (f) => f.noScope && (f.nsCd || 0) <= 0 && !f.rag && !f.out;
+  const noScopeReady = (f) => f.noScope && cardCdLeft(f, 'noScope') <= 0 && !f.rag && !f.out;
   // X with the mark up: the shot starts (after any attack that same press started has finished)
   function noScopeFire(f) {
     if (!noScopeReady(f) || f.snipe) return false;
     const T_ = noScopeTarget(f); if (!T_) return false;
-    f.nsCd = itemCd(NOSCOPE.cd);
+    startCardCd(f, 'noScope', NOSCOPE.cd);
     f.snipe = { t: 0, wait: true, kind: T_.kind, at: T_.c.slice(), fired: false };
     return true;
   }
@@ -1471,7 +1487,6 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
   function noScopeStep(f, dt) {
     if (!f.noScope) return;
-    f.nsCd = Math.max(0, (f.nsCd || 0) - dt);
     const S_ = f.snipe; if (!S_) return;
     if (S_.wait) { if (f.punch.on) return; S_.wait = false; f.pose.fa1 = NOSCOPE_BACK; f.pose.fa2 = -0.05; }   // the rifle starts up behind the shoulder
     S_.t += dt;
@@ -1968,6 +1983,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   // everything that moves whether or not the player is in control: the bot, the Divine General, the round, ink
   function worldStep(dt) {
+    stepCardCds(pl, dt); stepCardCds(bot, dt);   // card cooldowns run on, ragdolled or not
     botUpdate(dt);
     dgUpdate(dt);
     wpnWorldStep(dt);
@@ -2708,8 +2724,42 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       ctx.font = `italic 700 ${(big * 0.55).toFixed(1)}px Georgia, serif`; ctx.lineWidth = 5; ctx.strokeText('%', x0 + wN + 2, by); ctx.fillText('%', x0 + wN + 2, by);
     }
     ctx.restore();
+    if (!(ht >= DGH.fly)) drawCdBadges(h, f, M0);   // card cooldowns round the portrait (not while it's knocked out of its slot)
   }
   function drawHud() { for (const h of HUD) drawPortrait(h); }
+  // card cooldown badges: a small round portrait of each card on cooldown, orbiting its owner's portrait from the top round to the
+  // outside (and on round it, as more stack up). A dry-brush ring round each one unwinds back to the top as the cooldown runs out;
+  // when it's done the badge pops and the rest slide round to close the gap
+  const CDB = { r: 16, orbit: HUD_R + 29, a0: 0.5, gap: 5, ring: 4.2, popIn: 0.14, popOut: 0.24 };
+  function drawCdBadges(h, f, M0) {
+    const now = performance.now() / 1000, dt = Math.min(0.1, now - (h.cdT || now)); h.cdT = now;
+    const B = h.cdb = h.cdb || {}, ids = Object.keys(f.cds || {}), step = (2 * CDB.r + CDB.gap) / CDB.orbit, side = h.face > 0 ? -1 : 1;   // the side away from the other portrait
+    ids.forEach((id, i) => { const b = B[id] = B[id] || { pos: i, k: 0, out: 0 }; b.out = 0; b.pos += (i - b.pos) * Math.min(1, dt * 14); b.k = Math.min(1, b.k + dt / CDB.popIn); b.frac = f.cds[id].t / f.cds[id].max; });
+    for (const id in B) {
+      const b = B[id], live = ids.includes(id);
+      if (!live) { b.out += dt / CDB.popOut; if (b.out >= 1) { delete B[id]; continue; } }
+      const c = cardById(id); if (!c) continue;
+      const a = -Math.PI / 2 + side * (CDB.a0 + b.pos * step), [bx, by] = apply(M0, h.x + Math.cos(a) * CDB.orbit, HUD_Y + Math.sin(a) * CDB.orbit);
+      const e = b.k, sc = live ? 1 + 2.7 * Math.pow(e - 1, 3) + 1.7 * Math.pow(e - 1, 2) : 1 + 0.35 * b.out, al = live ? Math.min(1, e * 1.5) : 1 - b.out * b.out, r = CDB.r * sc;
+      ctx.save(); ctx.globalAlpha = al; setM(ID);
+      const disc = new Path2D(); disc.arc(bx, by, r, 0, TAU);
+      ctx.fillStyle = PAPER; ctx.fill(disc);
+      ctx.save(); ctx.clip(disc);
+      const ra = RARITIES[c.rarity] || RARITIES.common; ctx.globalAlpha = al * 0.42; ctx.fillStyle = ra.stain; ctx.fill(disc); ctx.globalAlpha = al;
+      cardArt(c, bx, by - r * 1.05, r * 2.1, r * 2.9, now); setM(ID);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(21,18,15,0.85)'; ctx.lineWidth = 1.5; ctx.stroke(disc);
+      const R2 = r + CDB.ring * 0.5 + 1.2;
+      ctx.strokeStyle = 'rgba(21,18,15,0.14)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bx, by, R2, 0, TAU); ctx.stroke();   // the faint track
+      const fr = live ? b.frac : 0;
+      if (fr > 0.004) {   // what's left: a loaded brush stroke from the top, clockwise, its end winding back as the time runs down
+        const n = Math.max(3, Math.ceil(28 * fr) + 1), pts = [];
+        for (let j = 0; j < n; j++) { const aa = -Math.PI / 2 + TAU * fr * j / (n - 1); pts.push([bx + Math.cos(aa) * R2, by + Math.sin(aa) * R2]); }
+        ctx.fillStyle = INK; ctx.fill(brushPath(pts, CDB.ring * sc, 0.03, Math.min(0.3, 0.06 / fr), 0.25, 1601 + id.length));
+      }
+      ctx.restore();
+    }
+  }
 
   function draw() {
     const key = canvas.width + 'x' + canvas.height;
@@ -3780,7 +3830,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
     for (const l of [echoes, phantoms, inkPools, wpnWaves, procs]) l.length = 0;
     pl.wpn = weaponStats(LOADOUT.pl.weapon && LOADOUT.pl.weaponSpec); bot.wpn = weaponStats(LOADOUT.bot.weapon && LOADOUT.bot.weaponSpec);   // the weapons each side holds this round
-    pl.noScope = hasNoScope('pl'); pl.nsCd = 0; pl.snipe = null; noScopeFx.length = 0;
+    pl.noScope = hasNoScope('pl'); clearCardCds(pl); clearCardCds(bot); pl.snipe = null; noScopeFx.length = 0;
     for (const f of [pl, bot]) Object.assign(f, { anchorUsed: false, lastHitT: -99, parryOkT: -99, hits: 0, gbT: 0, bleedT: 0 });
     Object.assign(pl, { x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, rag: null, out: false, launched: false, damage: 0, rot: 0, roll: 1,
       staggerT: 0, stunT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
@@ -3842,7 +3892,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     { label: 'Bot’s Cards', act: () => openCards('bot') },
     { label: 'Bot parries', get: () => bot.mode === 'parry', set: (v) => setBotParry(v) },
     { label: 'Hitboxes', get: () => showBoxes, set: (v) => { showBoxes = v; } },
-    { label: 'No card cooldowns', get: () => noItemCd, set: (v) => { noItemCd = v; if (v) pl.nsCd = 0; } },
+    { label: 'No card cooldowns', get: () => noItemCd, set: (v) => { noItemCd = v; if (v) clearCardCds(pl); } },
     { label: 'Damage numbers', get: () => showDmg, set: (v) => { showDmg = v; if (!v) dmgNums.length = 0; } },
     { label: 'Controls', act: () => { menu.controls = true; menu.ct = 0; } },
     { label: 'Main Menu', act: () => { closeMenu(); goHome(); } },
@@ -4182,7 +4232,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const LOADOUT = { pl: newLoadout(), bot: newLoadout() };   // yours (Select Cards) and the bot's (Bot's Cards)
   let equipped = LOADOUT.pl;
   const loadoutSig = () => JSON.stringify(LOADOUT);
-  window.__cards = { CARDS, LOADOUT };
+  window.__cards = { CARDS, LOADOUT, cdLeft: (who, id) => cardCdLeft(who === 'bot' ? bot : pl, id) };
   // focus rows: 0 = gear slots, 1 = passive slots (+ at the end), 2 = tabs, 3 = gallery
   const R_GEAR = 0, R_PASS = 1, R_TABS = 2, R_GAL = 3;
   const cards = { row: 0, col: 0, tab: 0, scroll: 0, passScroll: 0, t: 0, selT: 0, hits: [], passSlot: -1, hoverTab: -1, hk: [] };   // hoverTab: the category tab under the mouse; hk: each tab's hover glow-up, eased
@@ -4302,6 +4352,17 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!c) { ctx.font = 'italic 500 14px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.4)'; ctx.fillText('empty', x + SLOT.w / 2, y + SLOT.h / 2 + 22); }
     if (f) focusTick(x - 14, y + SLOT.h / 2, seed + 8);
   }
+  // a card's art (its icon), centred on cx across the art area from y0, ch tall, at size s (the card's smaller side). Shared by the
+  // card faces and the cooldown badges round the HUD portraits
+  function cardArt(c, cx, y0, ch, s, t) {
+    if (c.art === 'divineGeneral') dgBust(cx, y0 + ch * 0.66, s / 255, t, 1);
+    if (c.art === 'noScope') {   // the rifle across the card, the red X over it
+      const k = s / 120, cy = y0 + ch * 0.5, o = s >= 60 ? 1 : k / 0.8;   // (the offsets shrink with it on a small badge)
+      setM(chain(T(cx - 4 * o, cy + 10 * o), R(-0.35), Sc(k, k), T(-24, 0))); paintRifle();
+      setM(chain(T(cx + 4 * o, cy - 10 * o), Sc(k * 1.15, k * 1.15))); ctx.fillStyle = `rgb(${RED})`; ctx.fill(noScopeMarkPath()); setM(ID);
+    }
+    if (c.art === 'sword') { const k = s / 72, cy = y0 + ch * 0.52; drawSword(chain(T(cx, cy), R(-2.25), Sc(k, k), T(0, -40)), null); }
+  }
   // a card's face: the rarity's watercolour wash, the card art, its name. Ancient: gold strokes round the edge, pulsing glow
   function cardFace(c, x, y, w, h, f, seed, top = 16) {
     const ra = RARITIES[c.rarity] || RARITIES.common, t = performance.now() / 1000;
@@ -4315,13 +4376,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     cardFrame(x, y, w, h, seed, f, false);
     ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - 4); ctx.clip();
     ctx.globalAlpha = ra.gold ? 0.32 : 0.42; ctx.fillStyle = ra.stain; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
-    if (c.art === 'divineGeneral') dgBust(x + w / 2, y + top + (h - top - 26) * 0.66, Math.min(w, h) / 255, t, 1);
-    if (c.art === 'noScope') {   // the rifle across the card, the red X over it
-      const k = Math.min(w, h) / 120, cx = x + w / 2, cy = y + top + (h - top - 26) * 0.5;
-      setM(chain(T(cx - 4, cy + 10), R(-0.35), Sc(k, k), T(-24, 0))); paintRifle();
-      setM(chain(T(cx + 4, cy - 10), Sc(k * 1.15, k * 1.15))); ctx.fillStyle = `rgb(${RED})`; ctx.fill(noScopeMarkPath()); setM(ID);
-    }
-    if (c.art === 'sword') { const k = Math.min(w, h) / 72, cx = x + w / 2, cy = y + top + (h - top - 26) * 0.52; drawSword(chain(T(cx, cy), R(-2.25), Sc(k, k), T(0, -40)), null); }
+    cardArt(c, x + w / 2, y + top, h - top - 26, Math.min(w, h), t);
     ctx.restore();
     if (ra.gold) {   // gold brush strokes laid over the ink border
       ctx.fillStyle = dgGold;

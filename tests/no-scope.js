@@ -15,13 +15,13 @@ const OUT = path.join(__dirname, 'out') + '/'; fs.mkdirSync(OUT, { recursive: tr
     window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyD' })); for (let i = 0; i < 14; i++) __tick(1 / 60); __step(1 / 60, 1); });
   const shot = async () => { const x = await p.evaluate(() => [__fighter.x, __bot.x]); const f = OUT + `ns-${fs_.length}.png`; await p.screenshot({ path: f, clip: { x: box.x + (Math.min(x[0], x[1]) - 120) * k, y: box.y + 300 * k, width: (Math.abs(x[1] - x[0]) + 260) * k, height: 280 * k } }); fs_.push(f); };
   await shot();   // the mark on the ragdoll
-  const before = await p.evaluate(() => ({ dmg: __bot.damage, rag: !!__bot.rag, vx: __bot.vx | 0, cd: __fighter.nsCd }));
+  const before = await p.evaluate(() => ({ dmg: __bot.damage, rag: !!__bot.rag, vx: __bot.vx | 0, cd: __cards.cdLeft('pl', 'noScope') }));
   await ev('keydown', 'KeyX'); await ev('keyup', 'KeyX');
   for (const n of [8, 8, 10, 8, 8, 5, 4]) { await p.evaluate((n) => __step(1 / 60, n), n); await shot(); }
-  const after = await p.evaluate(() => ({ dmg: __bot.damage, rag: !!__bot.rag, vx: __bot.vx | 0, vy: __bot.vy | 0, cd: +__fighter.nsCd.toFixed(2), punching: __fighter.punch.on }));
+  const after = await p.evaluate(() => ({ dmg: __bot.damage, rag: !!__bot.rag, vx: __bot.vx | 0, vy: __bot.vy | 0, cd: +__cards.cdLeft('pl', 'noScope').toFixed(2), punching: __fighter.punch.on }));
   // on cooldown: X just attacks
   await p.evaluate(() => __step(1 / 60, 60)); await ev('keydown', 'KeyX'); await ev('keyup', 'KeyX'); await p.evaluate(() => __step(1 / 60, 2));
-  const cool = await p.evaluate(() => ({ punching: __fighter.punch.on, cd: +__fighter.nsCd.toFixed(2), botDmg: __bot.damage }));
+  const cool = await p.evaluate(() => ({ punching: __fighter.punch.on, cd: +__cards.cdLeft('pl', 'noScope').toFixed(2), botDmg: __bot.damage }));
   console.log('before', JSON.stringify(before)); console.log('after X', JSON.stringify(after)); console.log('X on cooldown', JSON.stringify(cool));
   // the Divine General, ragdolled
   const dgr = await p.evaluate(() => { const L = __cards.LOADOUT; L.bot.companion = 'divineGeneral'; __resetRound(); __step(1 / 60, 200);

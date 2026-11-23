@@ -72,3 +72,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `sniper-closeup.js`: close-ups of the shouldered hold (out/sniper-hold.png) and the muzzle flash (out/sniper-flash.png).
 - `menu-itemcd.js`: the pause menu with the No card cooldowns switch (out/menu-itemcd.png); clicks it on and checks No Scope fires twice in a row.
 - `no-scope-close.js`: No Scope at point blank (target in front, overlapping, just behind); checks every shot hits and knocks the target away. Sheet: out/no-scope-close.png.
+- `cd-badges.js`: card cooldown badges round the HUD portraits: No Scope's ring unwinding over its cooldown, plus several stacked (out/cd-badges.png, out/cd-badges-zoom.png).

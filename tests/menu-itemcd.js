@@ -17,6 +17,6 @@ console.log(JSON.stringify(await p.evaluate(() => {
   const hold = () => { if (__bot.rag) { Object.assign(__bot, { x: 880, y: 470, vx: 0, vy: 0 }); __bot.rag.left = 3; } };
   const shoot = () => { ev('KeyX'); let n = 0; for (let i = 0; i < 70; i++) { Object.assign(__fighter, { x: 420, vx: 0 }); hold(); __tick(1 / 60); if (__fighter.snipe) n++; } return n > 0; };
   for (let i = 0; i < 40; i++) { __fighter.punch.on = false; Object.assign(__fighter, { x: 420, vx: 0, facing: 1 }); hold(); __tick(1 / 60); }
-  const d0 = __bot.damage, a = shoot(), cd = __fighter.nsCd, b2 = shoot();
+  const d0 = __bot.damage, a = shoot(), cd = __cards.cdLeft('pl', 'noScope'), b2 = shoot();
   return { firstShot: a, cdAfter: cd, secondShot: b2, dmgGain: __bot.damage - d0 }; })));
 console.log('errors', errs); await b.close(); })();

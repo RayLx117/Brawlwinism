@@ -227,3 +227,13 @@ The Sweep is never picked on its own; `dgOptions` doesn't list it.
 7. A miss leaves him frozen in the jab for 0.3 s, then he recovers.
 
 **Test hooks:** `__dg()` returns his state. `__dgStart('cleave')` forces an attack (also `'pierce'`). `__resetRound()` restarts the round. `__cards.LOADOUT` holds both loadouts.
+
+## Card cooldowns (shared system)
+
+Every card's cooldown goes through one set of functions, so anything that changes cooldowns works on all cards at once. Ray plans cards like "-50% card cooldowns".
+
+- `startCardCd(f, id, base)` starts a card's cooldown at `base` seconds times `cardCdMult(f)`. `cardCdLeft(f, id)` reads it, `stepCardCds` runs it down every frame (in `worldStep`, so it keeps running while ragdolled), and `clearCardCds(f)` clears it (round restart).
+- `cardCdMult(f)` is the one place cooldown changes go: the practice switch **No card cooldowns** makes it 0. Future cooldown cards multiply in there.
+- Each fighter keeps `f.cds = { [cardId]: { t, max } }`; the HUD draws each one as a badge round the portrait (see `hud-and-feedback.md`).
+- No Scope uses it (`'noScope'`, 10 s). New abilities and cards must too.
+

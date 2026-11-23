@@ -21,7 +21,7 @@ const OUT = path.join(__dirname, 'out') + '/'; fs.mkdirSync(OUT, { recursive: tr
   await shot();
   await p.evaluate(() => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyX' })); window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyX' })); });
   let t = 0; for (const ts of [0.08, 0.16, 0.24, 0.32, 0.45, 0.6, 0.7, 0.75, 0.86]) { await p.evaluate(([ts, t]) => { let n = Math.round((ts - t) * 60); while (n-- > 0) { __fighter.punch.on = false; Object.assign(__fighter, { x: 420, vx: 0 }); if (!__fighter.snipe || !__fighter.snipe.fired) window.__hold(); __step(1 / 60, 1); } }, [ts, t]); t = ts; await shot(); }
-  console.log(JSON.stringify(await p.evaluate(() => ({ dmg: __bot.damage, rag: !!__bot.rag, vx: __bot.vx | 0, cd: +__fighter.nsCd.toFixed(1) }))));
+  console.log(JSON.stringify(await p.evaluate(() => ({ dmg: __bot.damage, rag: !!__bot.rag, vx: __bot.vx | 0, cd: +__cards.cdLeft('pl', 'noScope').toFixed(1) }))));
   execSync(`python3 ${__dirname}/grid.py ${OUT}no-scope-anim.png 5 0.4 ${fs_.join(' ')}`);
   console.log('errors', errs); await b.close();
 })();

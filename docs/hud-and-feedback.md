@@ -42,3 +42,14 @@ It fades in fast and out faster (`invK`), so it's gone the moment they can be hi
 ## Page layout
 
 The game fills the browser window edge to edge, with no desk border and no controls line under it; Ray asked for full screen. It keeps 16:9, so a window of another shape gets plain black bars, like a letterbox. The controls are listed in the pause menu's Controls pop-up.
+
+## Card cooldown badges
+
+Ray's design (v45+): every card on cooldown shows as a small round badge orbiting its owner's portrait.
+
+- **The badge:** a mini card portrait (r 16): a paper disc, the card's rarity wash and its art (`cardArt`, shared with the card faces), with a thin ink edge.
+- **The cooldown ring:** a loaded dry-brush stroke round the badge, starting at the top and running clockwise for the share of the cooldown left. As the time runs down its end winds back to the top, like a loading circle run backwards. A faint track shows the full circle.
+- **Placement:** the first badge sits just off the top of the portrait, toward the outside (away from the other portrait). More badges wrap on round the portrait in the order their cooldowns started.
+- **Motion:** a badge pops in with a little overshoot. When its cooldown ends it swells and fades (0.24 s), and the others slide round to close the gap.
+- Badges hide while the Divine General has knocked the portrait out of its slot.
+- Numbers in `CDB`; the drawing is `drawCdBadges`.
