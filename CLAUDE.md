@@ -106,6 +106,14 @@ HUD: there is a round portrait for each fighter in play, bottom centre. Each one
 
 ## Guardrails
 
+- **Rollback-ready rules** (for the planned P2P online play with rollback netcode, so there's no host advantage; see `docs/code-guide.md`):
+  - The game only advances in fixed 1/60 s steps (`simFrame`) and reads input only from each fighter's packet (`f.in`), never the keyboard.
+  - Both fighters run `fighterStep`; nothing is special-cased to the player or the bot (use `foeOf`, `side`).
+  - Anything random that affects gameplay uses `grand()`, never `Math.random`; cosmetic effects may use `Math.random`.
+  - Gameplay state lives on the fighters, `dg`, `round` or the `GAME` lists, so `saveState` captures it. Anything new that can affect the outcome must be reachable from `GAME`.
+  - New cards are entries in `CARD_FX` using the hooks, not special cases.
+  - After gameplay changes, run `node tests/sync-test.js` (all PASS) and `node tests/rollback.js`.
+
 - Keep existing behaviour intact when changing something else. Many mechanics have specific numbers Ray asked for; they're recorded in `docs/`.
 - When Ray says "remove" or "forget" an idea, remove it fully. Don't leave toggles or remnants.
 - Keep everything in `index.html` unless Ray asks to split it up or move to an engine.

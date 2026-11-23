@@ -43,3 +43,83 @@ Line numbers below are approximate; search for the names.
 - `window.__hitPt` is `[x, y]` of the last hit.
 - `window.__dbg`, `window.__XG` are debug bits.
 - Inputs: `window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' }))`, then `'keyup'`.
+
+## Rollback-ready foundation (built for P2P online with rollback netcode)
+
+Ray's plan is fair peer-to-peer online play with rollback netcode, so neither player has a host advantage. Online networking isn't built yet; this is the foundation it needs. The rule everything follows: **given the same game state and the same inputs, a frame always plays out exactly the same.**
+
+**1. Fixed 60 Hz simulation (`frame`, `simStep`).**
+- The game advances in whole 1/60 s steps (`SIM_DT`), however fast the screen draws. Each display frame runs as many steps as the real time calls for (at most `MAX_CATCHUP`), then draws once.
+- Menus and the home screen run on real time, since they aren't the game. Drawing-only effects use `lastDt`.
+
+**2. Input packets; both fighters run the same code.**
+- Each step, every fighter gets one packet: `h` (buttons held), `p` (buttons newly pressed) and `stick`. `packInput` / `unpackInput` turn a packet into four integers and back; that's what will go over the wire.
+- `deviceInput()` makes yours from the keyboard, pad and mouse.
+- `botBrain(bot)` makes the bot's: it presses Shift to parry, and taps a direction to turn. Its reaction timer lives in `BRAIN`, outside the game state, like a player's thoughts.
+- `makeFighter` builds both fighters. `fighterStep(f, dt)` is the whole of one fighter's frame, read from `f.in`. The old separate bot simulation is gone.
+- KOs and respawns are shared: `koFighter`, `respawnFighter`, `ragStep`. Each fighter's `side` picks its loadout and HUD slot; `foeOf(f)` gives the opponent.
+
+**Frame order (`simFrame(inputs, dt)`):**
+1. Hand out the packets.
+2. Step player 1, then player 2.
+3. `resolveHits()`: each attack only records what it's touching (`f.hitTest`). Then every hit is found against where everyone is this frame, and only then applied, so player 1's hits don't land first. A trade is a trade.
+4. `worldStep`: the Divine General, weapon effects, card hooks, the round and particles.
+
+`update(dt)` reads the devices and the bot, then calls `simFrame`.
+
+**3. Seeded random numbers.**
+- Everything random that changes the game uses `grand()`: ragdoll limb jolts, the Divine General's attack choices and pauses, Wheel of Fate.
+- Its state `simRng.s` is part of the game state, and every round starts from `MATCH_SEED` (online, both players will agree on it).
+- Purely cosmetic effects keep `Math.random`: ink motes, drops, sparks, drips, shake, the HUD.
+
+**4. One game state (`GAME`).**
+- It holds the frame, the random state, the round, both fighters, the Divine General, and the weapon effects that can still hit (echoes, phantoms, ink pools, shockwaves).
+- `saveState()` makes a deep copy. Fixed data such as `MOVES` and `DG_ATK` is kept as a link, and so is a fighter referenced from elsewhere (`dg.owner`).
+- `loadState(S)` puts a copy back. `stateHash()` is an FNV-1a hash over it (numbers by their exact bits, keys sorted): the desync check both machines will compare.
+- Left out on purpose: particles, the ink aura, swing trails, shake, HUD, menus, and each fighter's input packet (`in`).
+- While a rollback re-runs frames, `resim` is true and particles aren't spawned twice.
+
+**5. Card hooks (`CARD_FX`, beside `LOADOUT`).** A card is data: stats it changes, and hooks the game calls at fixed points. Each fighter has its round's card ids in `f.cards`.
+
+| Hook | When it's called |
+|---|---|
+| `stats` | Multipliers folded together by `cardStat(f, key)`: `runSpeed`, `windSpeed`, `missRecovery`, `cardCd`. |
+| `onRoundStart(f)` | The round begins. |
+| `onInput(f, I)` | Before attacks, with this frame's packet; returns true if it used the press. |
+| `onStep(f, dt)` | Every frame. |
+| `pose(f, target)` | Lays the card's own animation over the fighter's. |
+| `onHit(f, ctx)` | One of f's attacks lands; it can change `dmg`, `kb` and `stun`. |
+| `breakParry(f, ctx)` | Lets f's attack go straight through a parry. |
+| `onParry(f, ctx)` / `onParried(f, ctx)` | f parries an attack / f's attack is parried. |
+| `onDash(f, ctx)` | f dashes. |
+| `onKO(f)` | f is about to be knocked out; return true to save them. |
+| `draw(f, R)` | Drawn with the fighter. |
+
+Ported to hooks so far:
+- **No Scope:** `onInput` (X), `onStep`, `pose`, `draw`.
+- **Divine General:** `onRoundStart`.
+- **Weapons (`WEAPON_FX`):** stats, `onHit` through `wpnHit`, Guard Breaker, Mirror and Anchor.
+
+A new card only needs an entry in `CARD_FX`.
+
+**6. Sync test (`__syncTest(packs)`, `tests/sync-test.js`).**
+- Random input packets for both players, so the bot fights back.
+- Runs them twice from the same start and compares the hash every frame.
+- Also saves, steps, loads and steps again every frame (8 frames deep every 8th frame), which proves a save holds everything.
+- Covered setups: fists v fists, sword + No Scope, the Divine General, and swords with Echo, Phantom, Splash and Bleed.
+
+**7. Local rollback mode (pause menu: Rollback test; `tests/rollback.js`).**
+- Fakes an online match against the bot. Your inputs apply at once; the bot's arrive `RB.delay` (7) frames late.
+- Until they arrive the game guesses them: held buttons carry on, nothing new is pressed.
+- When a real packet differs from the guess, the game loads the state saved at that frame and re-runs every frame since, before the next draw.
+- A readout shows the number of rollbacks and their length.
+- `__rbCheck()` replays the settled inputs straight through without rollbacks and confirms the state is identical.
+
+**Checking the game still plays the same (`tests/golden.js`).** Scripted keyboard input through 8 scenarios, recording player and bot state every frame (`golden/before.json` from the original build). Results:
+- **Player:** identical to the original in every scenario.
+- **Bot:** small, deliberate differences, because it now runs the same fighter code as the player:
+  - Its hit flinch changes its arm pose by about 0.2 rad.
+  - When hit, it's planted for one frame before sliding back, just as the player always was.
+  - Its parry fires one frame later, because it now presses Shift as an input like a player would.
+- `tests/before-after.js` draws both builds side by side.
+
