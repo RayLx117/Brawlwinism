@@ -71,3 +71,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `pullout-frames.js`: No Scope's pull-out, every frame from the X press (env N, EVERY). Sheet: out/pullout-frames.png.
 - `sniper-closeup.js`: close-ups of the shouldered hold (out/sniper-hold.png) and the muzzle flash (out/sniper-flash.png).
 - `menu-itemcd.js`: the pause menu with the No card cooldowns switch (out/menu-itemcd.png); clicks it on and checks No Scope fires twice in a row.
+- `no-scope-close.js`: No Scope at point blank (target in front, overlapping, just behind); checks every shot hits and knocks the target away. Sheet: out/no-scope-close.png.

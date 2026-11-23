@@ -1480,16 +1480,19 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const Rg = f === pl ? R0 : f.R;
     if (!S_.fired && S_.t >= A.anim && Rg) {   // the shot, straight down the barrel
       S_.fired = true;
-      const fr = rifleFrame(Rg, f), [ax, ay] = S_.at, dl = Math.hypot(ax - fr.mx, ay - fr.my) || 1, ux = (ax - fr.mx) / dl, uy = (ay - fr.my) / dl, dir = Math.sign(ux) || f.facing;
-      fr.ux = ux; fr.uy = uy;   // the round goes from the muzzle straight through the target's torso
+      const fr = rifleFrame(Rg, f), [ax, ay] = S_.at, sc = A.scale;
+      // the round starts at the back of the (cut) stock, on the barrel's line, so a target pressed right up against the shooter
+      // still gets shot forward, never backward out of the muzzle. The shooter is drawn over the line's first stretch
+      const ox = fr.hx + (fr.ux * A.stock - fr.px) * sc, oy = fr.hy + (fr.uy * A.stock - fr.py) * sc;
+      const dl = Math.hypot(ax - ox, ay - oy) || 1, ux = (ax - ox) / dl, uy = (ay - oy) / dl, dir = Math.sign(ux) || f.facing;
       let hit = null;
       let exit = null;
       if (T_) {
         const sh = T_.shapes(); let d = 0;
-        for (; d <= A.range && !hit; d += 6) { const x = fr.mx + ux * d, y = fr.my + uy * d; if (hurtHit(sh, x, y, 6)) hit = [x, y]; }
-        if (hit) { for (; d <= A.range; d += 4) { const x = fr.mx + ux * d, y = fr.my + uy * d; if (!hurtHit(sh, x, y, 0)) { exit = [x, y]; break; } } }   // where the round comes out the other side
+        for (; d <= A.range && !hit; d += 6) { const x = ox + ux * d, y = oy + uy * d; if (hurtHit(sh, x, y, 6)) hit = [x, y]; }
+        if (hit) { for (; d <= A.range; d += 4) { const x = ox + ux * d, y = oy + uy * d; if (!hurtHit(sh, x, y, 0)) { exit = [x, y]; break; } } }   // where the round comes out the other side
       }
-      noScopeFx.push({ kind: 'line', x0: fr.mx, y0: fr.my, x1: fr.mx + ux * A.range, y1: fr.my + uy * A.range, t: 0 });   // across the whole screen
+      noScopeFx.push({ kind: 'line', x0: ox, y0: oy, x1: ox + ux * A.range, y1: oy + uy * A.range, t: 0 });   // across the whole screen
       shakeT = Math.max(shakeT, 0.2);
       for (let i = 0; i < 12; i++) { const a = Math.atan2(fr.uy, fr.ux) + (Math.random() - 0.5) * 0.9; addMote(fr.mx, fr.my, Math.cos(a) * (300 + Math.random() * 300), Math.sin(a) * (300 + Math.random() * 300), 0.25, 1 + Math.random() * 1.4, 100); }
       if (hit) {
@@ -1547,7 +1550,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return out;
   }
 
-  function drawNoScope(dt) {
+  function drawNoScopeShot(dt) {   // under the shooter (so the stretch from the stock to the muzzle is hidden), over the bot
     setM(ID);
     for (let i = noScopeFx.length - 1; i >= 0; i--) {   // the shot: a faded black line across the screen, thinning and fading away fast
       const e = noScopeFx[i]; e.t += dt; const k = e.t / NOSCOPE.fade; if (k >= 1) { noScopeFx.splice(i, 1); continue; }
@@ -1556,6 +1559,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       ctx.strokeStyle = `rgba(21,18,15,${0.75 * (1 - k)})`; ctx.lineWidth = 2.4 * (1 - k) + 0.4; ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke();
       ctx.restore();
     }
+  }
+  function drawNoScope() {
     // the mark: a red X painted over the ragdolled enemy while the card is ready
     const T_ = noScopeReady(pl) ? noScopeTarget(pl) : pl.snipe && !pl.snipe.fired ? (() => { const t2 = snipeTargetOf(pl.snipe.kind); return t2 && { kind: pl.snipe.kind, c: t2.c }; })() : null;
     if (T_) {
@@ -2748,9 +2753,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     drawRagTrail();
     drawBot();
     drawDrops();
+    drawNoScopeShot(pl.paused ? 1 / 60 : lastDt);   // the shot's line, behind the shooter
     if (!inDrill() && !pl.out) { drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); }
     drawDrill();
-    drawNoScope(pl.paused ? 1 / 60 : lastDt);   // the mark and the shot sit over the fighters
+    drawNoScope();   // the mark sits over the fighters
     drawSparks();
     if (!pl.out) drawCooldown(r);
     if ((pl.staggerT > 0 || pl.stunT > 0) && r && !inDrill()) {   // stunned (a parry, or a hit): the same circling ink dots as the bot
