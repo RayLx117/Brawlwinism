@@ -37,7 +37,7 @@ const p = await b.newPage({ viewport: { width: 1280, height: 720 } }); const err
 await p.goto('file://' + path.resolve(__dirname, '../index.html')); await p.waitForTimeout(300);
 await p.evaluate(() => __startPractice()); await p.waitForTimeout(300); await p.keyboard.press('Escape'); await p.waitForTimeout(250);
 const box = await p.locator('canvas').boundingBox(), k = box.width / 1280, at = (x, y) => [box.x + x * k, box.y + y * k];
-await p.mouse.click(...at(640, 114 + 6 * 35)); await p.waitForTimeout(200);   // the Rollback Test row
+await p.mouse.click(...at(640, 114 + 9 * 35)); await p.waitForTimeout(200);   // the Rollback Test row
 const ui = { page: await p.evaluate(() => __menu.screen) };
 await p.mouse.click(...at(640, 122)); await p.waitForTimeout(100); ui.switchOn = await p.evaluate(() => __rb.on);   // the switch row
 await p.mouse.move(...at(400, 162)); await p.waitForTimeout(100);   // pick the Ping row, type 250 Enter

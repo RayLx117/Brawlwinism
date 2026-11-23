@@ -4375,10 +4375,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     { label: 'Bot’s Cards', act: () => openCards('bot') },
     { label: 'Bot parries', get: () => bot.mode === 'parry', set: (v) => setBotParry(v) },
     { label: 'Hitboxes', get: () => showBoxes, set: (v) => { showBoxes = v; } },
-    { label: 'Rollback Test', act: () => { menu.screen = 'rbtest'; rbt.sel = 0; rbt.selT = 0; rbt.edit = null; } },
     { label: 'No card cooldowns', get: () => noItemCd, set: (v) => { noItemCd = v; if (v) clearCardCds(pl); } },
     { label: 'Damage numbers', get: () => showDmg, set: (v) => { showDmg = v; if (!v) dmgNums.length = 0; } },
     { label: 'Controls', act: () => { menu.controls = true; menu.ct = 0; } },
+    { label: 'Rollback Test', act: () => { menu.screen = 'rbtest'; rbt.sel = 0; rbt.selT = 0; rbt.edit = null; } },
     { label: 'Main Menu', act: () => { closeMenu(); goHome(); } },
   ];
   const CONTROLS = [   // [what it does, keyboard, controller]
