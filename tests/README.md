@@ -16,6 +16,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 |---|---|
 | `node moves.js` | Smoke test: lands every move on the bot and prints the result (velocity, ragdoll, label). It reports page errors. Note: the flip kick (`uair`) line prints `null` because of a quirk in this script's input timing; it was like that before v40. |
 | `node combos.js` | Replays the combo routes with exact frame inputs and prints which hits landed. The "jump knee" entry predates the split kick and lands nothing. |
+| `node uair-loop.js` | Spams flip kicks under the bot and prints each hit with how much of the bot's stun was left when it landed (0 = it was free in between, so no infinite loop). |
 | `node knockdown.js` | Spin kick: where it connects (y), how far the target slides, when they're flat and when they're back up, at several damages and ranges. |
 | `node ragdoll-time.js` | Compares the spin kick's ragdoll time with the uppercut's at several damages; they should match. |
 | `node move-sheet.js` | One screenshot per move mid-strike (`out/mv*.png`, list in `out/mv.json`). Join them with `python3 join.py out/sheet.png out/mv*.png`. |

@@ -28,7 +28,7 @@ Damage was halved for every unarmed hit in v48 (Ray's plan: weapons and enhancem
 | slide kick | J while sliding | .05 | .22 | .46 | 3 | 120 / 760 | Launcher: pops them up and the slide carries on (keep .9). jc |
 | split kick | J in the air | .07 | .14 | .34 | 2.5 | 150 / 300 | Hits both sides (both legs) |
 | flying kick | J + ←/→ in the air | .16 | .10 | .50 | 5 | 520 / 300 | Kill, about 0.6 of the uppercut's launch. Floats you forward (+200 vx) |
-| flip kick | J + ↑ in the air | .08 | .12 | .36 | 3.5 | 60 / 720 | Juggle pop; floats you up |
+| flip kick | J + ↑ in the air | .08 | .12 | .36 | 3.5 | 60 / 720 | Juggle pop; floats you up. Stun 0.4 s (was 0.55): shorter than the fastest flip kick follow-up (0.44 s), so it can't loop into itself forever |
 | stomp | J + ↓ in the air | .20 | .14 | .50 | 5.5 | 90 / −760 | Kill spike that bounces grounded targets. Hangs a beat, then drops; fast fall is off during it |
 
 ## Spin kick (down finisher), as Ray specified it
@@ -48,7 +48,7 @@ Damage was halved for every unarmed hit in v48 (Ray's plan: weapons and enhancem
 
 - jab > cross (true combo) > any finisher. Finishers are parryable, so they show "not a true combo".
 - dash punch or low kick > cross > finisher.
-- slide kick > flip kick (wide window) > flip kick or flying kick.
+- slide kick > flip kick (wide window) > flying kick. Flip kick > flip kick no longer true-combos: Ray cut its stun to stop the infinite up-air loop.
 - split kick > flying kick (tight window).
 - The kill checks at 140% all died: flying kick, sucker punch, uppercut, and stomp off the edge.
 

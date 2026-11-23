@@ -397,7 +397,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
           tg.fa1 = -0.9; tg.fa2 = -1.9; tg.ba1 = -0.5; tg.ba2 = -2.0; return 30; }
         tg.fl1 = -1.62; tg.fl2 = 0.02; tg.ff = -0.05; tg.bl1 = -0.35; tg.bl2 = 1.5; tg.bf = 0.3; tg.tl = -0.85; tg.hd = 0.6; tg.dx = 6;
         tg.fa1 = 1.0; tg.fa2 = -0.4; tg.ba1 = 1.25; tg.ba2 = -0.5; return 55; } },
-    uair: { name: 'flip kick', limb: 'fl', r: 8, air: true, wind: 0.08, act: 0.12, hold: 0.06, link: 9, end: 0.36, stun: 0.55, dmg: 1.3, damage: 3.5, kb: 60, pop: 720, up: true, gravW: 0.6, gravK: 0.6, landLag: 0.08,
+    uair: { name: 'flip kick', limb: 'fl', r: 8, air: true, wind: 0.08, act: 0.12, hold: 0.06, link: 9, end: 0.36, stun: 0.4, dmg: 1.3, damage: 3.5, kb: 60, pop: 720, up: true, gravW: 0.6, gravK: 0.6, landLag: 0.08,
       float(f) { f.vy = Math.min(f.vy, -250); },
       pose(ph, tg) { if (ph === 2) return 18;
         if (ph === 0) { tg.fl1 = -1.2; tg.fl2 = 2.0; tg.ff = 0.4; tg.bl1 = -0.5; tg.bl2 = 1.6; tg.bf = 0.5; tg.tl = 0.15;
