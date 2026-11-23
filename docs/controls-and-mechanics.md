@@ -132,6 +132,9 @@ Input buffers: jump 0.13 s, punch 0.16 s, and dash 0.14 s (the dash buffer also 
   - Your cooldown resets.
   - The attacker is stunned for 1.5 s: the head snaps back and stays back, they stand tall teetering backwards as if about to fall, with a subtle sway and dazed ink dots.
 - **Miss:** you're locked standing still for 0.3 s with the arms still up.
+- **What a parry cancels (Ray's rule, the precedent for every future ability):**
+  - **Normal attacks are cancelled**, with fists or a weapon, like a dash does. A swing in wind-up or mid-swing stops and never lands, and the combo starts over (`parry()`).
+  - **Abilities and channels are NOT cancelled** (No Scope's shot now, every ability later). The ability carries on and its animation keeps priority over the parry pose. The parry still runs underneath: the window, the white flash and the cling, and a success still stuns the attacker. In code, the parry pose, its arm snap and the arms-in-front layering all stand aside while `sniping(f)`. New abilities should do the same.
 - **Removed by Ray:** feint (v24), shield / hold-to-shield (v25) and the chest-pump/back-arch pose. Don't bring them back.
 
 ## Damage, ragdolls, death

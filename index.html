@@ -654,7 +654,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const L = legs(root);
     const torso = chain(root, R(q.tl));
     const head = chain(torso, T(0, -25), R(q.hd));
-    const pa = f.parryT > 0 || f.lockT > 0 ? 'both' : f.punch.on ? f.punch.arm : '';
+    const pa = (f.parryT > 0 || f.lockT > 0) && !sniping(f) ? 'both' : f.punch.on ? f.punch.arm : '';
     const arm = (a1, a2, push) => { const up = chain(torso, T(1 + push, -21), R(a1)); return { up, lo: chain(up, T(0, LEN.upperArm), R(a2)) }; };
     return { centre, L, torso, head, fa: arm(q.fa1, q.fa2, pa === 'f' || pa === 'both' ? q.sp : 0), ba: arm(q.ba1, q.ba2, pa === 'b' || pa === 'both' ? q.sp : 0) };
   }
@@ -1179,6 +1179,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return [dirX, (held('down') ? 1 : 0) - (held('up') ? 1 : 0)];
   }
   function parry() {
+    // a parry cuts off any attack, like a dash does: one in wind-up or mid-swing stops and never lands, and the combo starts over.
+    // A channel (No Scope's shot) is NOT cancelled: it carries on and keeps its animation, while the parry (window, white flash) runs
+    pl.punch.on = false; pl.punch.queued = false; pl.punch.next = 0; pl.lungeT = 0; pl.buf.punch = 0; pl.hitShape = null;
     pl.parryT = PARRY_WIN; pl.parryOk = false; pl.parryCd = PARRY_CD; pl.parryCdMax = PARRY_CD;
   }
   // which move comes out: air = by direction held; ground = slide / dash / crouch starters, else the string
@@ -1441,6 +1444,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (bot.rag && !(bot.dead > 0) && !bot.out && bot.R) return { kind: 'bot', c: bot.R.centre, f: bot };
     return null;
   }
+  const sniping = (f) => !!(f.snipe && !f.snipe.wait);   // No Scope's rifle is out (its animation has priority over a parry's pose)
   const noScopeReady = (f) => f.noScope && cardCdLeft(f, 'noScope') <= 0 && !f.rag && !f.out;
   // X with the mark up: the shot starts (after any attack that same press started has finished)
   function noScopeFire(f) {
@@ -1882,7 +1886,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     else if (pl.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
     if (pl.landT > 0) target = mixPose(target, idlePose(pl.time, 0.8), Math.min(1, pl.landT / 0.06));   // landing squat
     if (pl.wpn) target = swordHold(pl, target);   // holding a sword: the arms take its stance
-    target = snipePose(pl, target);   // No Scope: the rifle whipped out and aimed
+    target = snipePose(pl, target);   // No Scope: the rifle whipped out and aimed (over a parry's pose: the shot animation has priority)
     let atkRate = 0, atkPh = -1;
     if (pl.punch.on) {
       const P_ = pl.punch, A = P_.A, t = P_.t;
@@ -1894,7 +1898,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (pl.pose[k] > Math.PI + 0.3) pl.pose[k] -= TAU; else if (pl.pose[k] < -Math.PI - 0.3) pl.pose[k] += TAU;
     }
     const base = 1 - Math.exp(-(20 + 25 * pl.sprint) * dt), quick = 1 - Math.exp(-atkRate * dt);
-    const snap = pl.parryT > 0 ? 1 - Math.exp(-75 * dt) : 0;   // the parry X snaps up instantly, chest and all
+    const snap = pl.parryT > 0 && !sniping(pl) ? 1 - Math.exp(-75 * dt) : 0;   // the parry X snaps up instantly, chest and all (not over No Scope's rifle)
     const own = (k) => { const L = pl.punch.A.limb; return k.startsWith(L) || k === (L[1] === 'l' ? L[0] + 'f' : '') || k === 'tl' || k === 'hd' || k === 'dx' || k === 'sp'; };
     pl.prevPose = { ...pl.pose };
     for (const k of KEYS) {
@@ -2268,7 +2272,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
   function drawFighter(r, f = pl, st = stain, hs = headStain, ink = INK) {
     const P_ = f.punch, A = P_.on ? P_.A : null;
-    const crossFront = (A && A.limb === 'ba' && P_.t > A.wind && P_.t < A.end - 0.05) || (!f.wpn && (f.parryT > 0 || f.lockT > 0));   // parry X: both arms in front (with a sword the off arm stays behind the torso)
+    const crossFront = (A && A.limb === 'ba' && P_.t > A.wind && P_.t < A.end - 0.05) || (!f.wpn && !sniping(f) && (f.parryT > 0 || f.lockT > 0));   // parry X: both arms in front (with a sword the off arm stays behind the torso)
     const kickFront = A && A.limb === 'bl' && P_.t > A.wind * 0.4 && P_.t < A.end - 0.12;   // rear-leg kick swings round in front of the body
     if (!crossFront) {
       drawPart(PARTS.upperArm, r.ba.up, true, st, ink);

@@ -85,6 +85,7 @@ Mechanics:
   - A success stuns the attacker for 1.5 s (standing tall, head back, teetering) and resets your cooldown.
   - A miss locks you in place for 0.3 s.
   - The 3 s cooldown starts after the window ends.
+  - It cancels normal attacks (fists or weapon) like a dash, but never an ability or channel such as No Scope: the ability keeps its animation while the parry still runs (white flash, window). This is the rule for every future ability.
 - **Movement:**
   - Each dash adds about 120 px/s of momentum, up to 760 (a run is 330).
   - The air dash has a 1.5 s cooldown and keeps carrying you until you land or press the opposite way. It's drawn as a spinning ink drill.

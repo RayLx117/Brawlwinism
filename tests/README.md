@@ -77,3 +77,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `skull-trace.py`: traces Ray's skull (reference/skull-ink.webp) to the death icon's SKULL_PATH (run from a scratch dir; writes skull.json and reference/skull-trace.svg).
 - `card-full.js`: the full card preview on Select Cards for each card (No Scope, Divine General, a rolled Legendary Sword with mods). Sheet: out/card-full.png; whole screen: out/card-full-screen.png.
 - `dg-adapt.js`: the Divine General's armour (20% cap per hit), regen (20% every 7 s of real time) and speed-up (+10% per 100% damage); frames of the regen animation (out/dg-regen.png).
+- `parry-cancel.js`: parry cancels a swing (a sucker punch parried at several points never lands) but not No Scope (the shot still lands, the parry still runs); frames: out/parry-cancel.png, out/parry-snipe.png.
