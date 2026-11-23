@@ -47,8 +47,8 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 **The held sword's outline (`SWORD_FX`):**
 - **Outline:** a solid ink outline (1.6 px) round the sword's silhouette, with no lag. It replaced a lagging goo coat that Ray had removed.
 - **Ink flecks:** the blade sheds a few when it moves fast in an attack (over 520 px/s, at most 3 a frame).
-- **Swing trails (Ray's design, replacing the old afterimages):** seven invisible points along the centre of the blade, from just past the guard to the tip (following its curve), each leave a thin, fading ink hairline along their path while an attack is under way, like the shading lines on the bodies.
-  - Each line lasts 0.065 s (Ray halved it from 0.13, so the trails are half as long), thinning and fading as it ages, a touch stronger toward the tip.
+- **Swing trails (Ray's design, replacing the old afterimages):** 21 invisible points along the centre of the blade, from just past the guard to the tip (following its curve), each leave a thin, fading ink hairline along their path while an attack is under way, like the shading lines on the bodies.
+  - Each point's line lasts its own time, picked fresh every swing between 0.04 and 0.09 s, so the lines trail different lengths and the fan has a ragged, brushy edge (Ray tripled the points from 7 and asked for the varied lengths; before that, a single 0.065 s for all, which Ray had halved from 0.13). Lines thin and fade as they age and are a touch stronger toward the tip. Each line is a little fainter than before (0.42), so the denser fan keeps about the same weight.
   - Fast swings are filled in between frames and drawn as smooth curves, so the arcs stay clean.
   - A point only leaves a line while it's moving fast (it starts at 700 px/s and is full strength by 1400), so slow wind-ups like the overhead's lift leave nothing.
   - Drawn just behind the fighter. Numbers in `SWING_TRAIL`. Each weapon gives its own points (`weaponTrailPts`; the sword's run along `swordCentre`), so new weapons plug straight in.
