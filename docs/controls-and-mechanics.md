@@ -139,7 +139,7 @@ Input buffers: jump 0.13 s, punch 0.16 s, and dash 0.14 s (the dash buffer also 
 - **The red tide:** red goo rises from the feet to the head over the black ink and the parts' line work as damage builds. It is fully red only at 150%.
 - **Kill blows** (moves with `ragdoll: true`):
   - The target ragdolls for `0.2 + 1.3 * (d/150)^1.2` seconds, using the damage after the hit.
-  - Launch grows with damage: `1 + LAUNCH_GROW * (d/150)^1.1`, with LAUNCH_GROW = 2.055 (Ray raised it from 1.35 so launches at 150% are 30% stronger in total; the base at 0% is unchanged, about +10% at 30%, +17% at 60%, +24% at 100%). A move's `lsK` can soften that growth.
+  - Launch grows with damage: `1 + LAUNCH_GROW * (d/150)^1.1`, with LAUNCH_GROW = 1.755 (Ray raised the damage-driven part 30% from 1.35: about +10% total launch at 60%, +17% at 150%). A move's `lsK` can soften that growth.
   - Ragdolls keep their momentum (no drag), bounce off the floor and wall, spin with their flight, and leave dry-brush streaks.
 - **After a ragdoll:**
   - A ragdoll that's still in the air rights itself and falls normally.
