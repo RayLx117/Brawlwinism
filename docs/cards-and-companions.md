@@ -44,10 +44,10 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 - **Parrying, or stuck after a missed parry:** a supported block, Ray's design. The lead hand holds the grip low in front at the hip, and the blade stands up tilted about 22° forward, away from the body, so the off arm can be seen. The off arm comes up from below, beside the head and never across it, and bends so its hand rests against the back of the blade's lower third, holding it from behind without going past its front, bracing it to take the hit. The off arm is drawn behind the torso and the sword in front of it. The head stays upright (no duck), there's a quick shake as it comes up, and the knee dip and flash are kept. The parry sparks burst from where the off hand holds the blade. Numbers in `SWORD_HOLD.parry`; the arm angles were solved so the forearm lands on the blade while staying clear of the head (`__rigPose` / `__swordAt` test hooks).
 - **Attacking, stunned or wall-sliding:** the blade lines up with the forearm, so the moves strike along it. The punch swoosh follows the fist, not the tip.
 
-**The held sword's outline and swing afterimages (`SWORD_FX`):**
+**The held sword's outline (`SWORD_FX`):**
 - **Outline:** a solid ink outline (1.6 px) round the sword's silhouette, with no lag. It replaced a lagging goo coat that Ray had removed.
-- **Afterimages:** in attacks only, the swinging blade leaves an afterimage each frame (once the tip has moved 6 px). Each one is the whole sword at 50% opacity, fading to nothing in 0.05 s, so a swing reads as a quick fan of blades.
-- **Ink flecks:** the blade still sheds a few when it moves fast in an attack (over 520 px/s, at most 3 a frame).
+- **Ink flecks:** the blade sheds a few when it moves fast in an attack (over 520 px/s, at most 3 a frame).
+- The swing afterimages were removed (Ray will brief a new swing effect).
 
 **Holding a weapon:** the fighter holds it in the lead hand (`drawSword`). Hits from that arm reach out to the blade's tip. **Every** hit they land does the weapon's damage, worked through its modifiers (`wpnHit`), on the bot and on the Divine General (who takes his usual 60%). Ray will design proper weapon movesets later; this is the test setup.
 

@@ -54,7 +54,6 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node export-sword.js` | Exports the in-game sword (ink, pale fill, outline) as a large transparent PNG, blade pointing right: `exports/sword.png`. |
 | `node sword-stances.js` | The sword stances: standing (both facings), walking, sprinting, dashing, jumping, the somersault and a jab (`out/sword-stances.png`). |
 | `node sword-coat-shot.js` | The held sword standing, then a few frames through a jab (`out/sword-coat.png`). |
-| `node sword-afterimage.js` | The sword's swing afterimages, one frame apart through a jab > cross > uppercut (`out/sword-afterimage.png`). |
 | `node sword-parry.js` | The sword parry (hanging guard), frame by frame facing right, and once facing left (`out/sword-parry.png`). |
 | `node sword-dash.js` | The sword's dash stab: dash at the bot and attack; prints the launch and draws frames (`out/sword-dash.png`). |
 | `node stage-shot.js` | The Practice stage with both fighters standing, plus close-ups of the wall corner and the open edge (`out/stage*.png`). |
