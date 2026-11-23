@@ -78,3 +78,6 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `card-full.js`: the full card preview on Select Cards for each card (No Scope, Divine General, a rolled Legendary Sword with mods). Sheet: out/card-full.png; whole screen: out/card-full-screen.png.
 - `dg-adapt.js`: the Divine General's armour (20% cap per hit), regen (20% every 7 s of real time) and speed-up (+10% per 100% damage); frames of the regen animation (out/dg-regen.png).
 - `parry-cancel.js`: parry cancels a swing (a sucker punch parried at several points never lands) but not No Scope (the shot still lands, the parry still runs); frames: out/parry-cancel.png, out/parry-snipe.png.
+- `sword-slash.js`: the sword string (rising slash, overhead) against the bot with the hitbox view on; sheets out/sword-rise.png, out/sword-over.png (env BOTX).
+- `sword-slash-zoom.js`: close-up frame sheets of both slashes on their own, following the fighter (out/sword-rise-zoom.png, out/sword-over-zoom.png).
+- `sword-combos.js`: the sword string as gameplay: reach of each slash vs the jab, rising slash > jump-cancel > aerials (true combos), the escape window before the overhead, the overhead's launch.

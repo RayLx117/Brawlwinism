@@ -78,4 +78,15 @@ While holding a sword, these replace the fist versions (the blade lines up with 
 | Move | Input | Wind | Active | End | Knockback (kb / pop) | Notes |
 |---|---|---|---|---|---|---|
 | dash stab | J during/just after a ground dash | .10 | .10 | .52 | 280 / 115 | A lunge (520) driving the blade straight out. A semi-kill move: it ragdolls at half a full kill's knockback (the sucker punch is 560 / 230); launch still grows with damage. Ends the string. |
+| rising slash | J (standing, first press) | .14 | .09 | .50 | 90 / 520 | Sword string, part 1. Two-handed, from a low guard (tip just off the floor in front) up and through. Pops them to about head height (~80 px) and hit-stuns 0.5 s. Jump-cancels on hit into an air combo. Reach: up to a 200 px gap (the fist jab is 160). |
+| overhead slash | J again (second press) | .50 | .09 | .90 | 560 / −70 | Sword string, part 2, a kill blow. Swung up and cocked behind the rear shoulder, then held, charging: ink gathers on the blade and the arms tremble. Then it's chopped over the top into a deep lunge. It knocks them sideways with a slight downward angle and grows with damage like the sucker punch. Reach: up to a 220 px gap. |
+
+**The sword string (Ray's design):** two presses, rising slash then overhead. It replaces the fists' jab > cross > finisher; holding a direction on the second press only turns you to face that way. Both swings are two-handed: the off hand holds the grip just behind the lead hand (`SWORD_GRIP2`, placed by arm IK each frame). The wrist cocks and whips the blade through (`blade(pt)` per move). The hit test follows the whole arc between frames (`sweep`), only in front of you (`front`).
+
+- **Rising slash > air combo** (verified, `tests/sword-combos.js`; true combos):
+  - Jump-cancel with a full jump drifting in, then the split kick (neutral air): connects from about 8 frames into the jump across a wide window.
+  - The same jump into the flying kick (sideways air): connects from about 6 frames in.
+  - A short hop into the flip kick (up air): connects late in the hop. After a full jump you rise past them.
+- **Rising slash > overhead is not a true combo, on purpose.** Pressed as early as it buffers (the link opens at 0.34 s), the overhead lands about 0.23 s after their hit-stun ends, so they have time to parry or air dash out. The parrying bot parries it. At higher damage the rise pops them higher, so they may still be in the air (the label then reads "2 hit combo"), but their stun has still run out.
+- A crouching low kick also leads into the overhead (it's the second step of the string).
 
