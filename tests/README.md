@@ -51,6 +51,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node weapon-mods.js` | Every weapon modifier in a fight (on the bot, and a set of them against the Divine General); checks the stacking / curse / bless maths, Anchor, and page errors. |
 | `node forge-shot.js` | The forge, start to finish: opens it on the Sword, sets Legendary and four modifiers (one cursed, one stacked), screenshots the forge, the picker and the cards screen, then lands a sword jab. |
 | `node sword-shot.js` | The traced katana in the player's hand: standing and through a jab (`out/sword-hand.png`). |
+| `node export-sword.js` | Exports the in-game sword (ink, pale fill, outline) as a large transparent PNG, blade pointing right: `exports/sword.png`. |
 | `node sword-stances.js` | The sword stances: standing (both facings), walking, sprinting, dashing, jumping, the somersault and a jab (`out/sword-stances.png`). |
 | `node sword-coat-shot.js` | The held sword standing, then a few frames through a jab (`out/sword-coat.png`). |
 | `node sword-afterimage.js` | The sword's swing afterimages, one frame apart through a jab > cross > uppercut (`out/sword-afterimage.png`). |
