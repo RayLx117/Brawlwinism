@@ -11,7 +11,7 @@ const OUT = path.join(__dirname, 'out') + '/'; fs.mkdirSync(OUT, { recursive: tr
   await p.evaluate(() => __startPractice());
   await key('Escape'); await w(150); await key('ArrowDown'); await w(60); await key('ArrowDown'); await w(60); await key('Enter'); await w(250);   // Select Cards
   // focus the Sword in the gallery and select it
-  await p.evaluate(() => { const c = __cardsState(); c.row = 3; c.col = 0; });
+  await p.evaluate(() => { const c = __cardsState(); c.row = 3; c.col = __cards.CARDS.findIndex(x => x.id === 'sword'); });
   await key('Enter'); await w(250);
   console.log('screen', await p.evaluate(() => __menu.screen));
   // set it up through the forge's own actions: Legendary, then pick modifiers into the slots
