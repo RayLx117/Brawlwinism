@@ -78,15 +78,27 @@ While holding a sword, these replace the fist versions (the blade lines up with 
 | Move | Input | Wind | Active | End | Knockback (kb / pop) | Notes |
 |---|---|---|---|---|---|---|
 | dash stab | J during/just after a ground dash | .10 | .10 | .52 | 280 / 115 | A lunge (520) driving the blade straight out. A semi-kill move: it ragdolls at half a full kill's knockback (the sucker punch is 560 / 230); launch still grows with damage. Ends the string. |
-| rising slash | J (standing, first press) | .14 | .09 | .50 | 90 / 520 | Sword string, part 1. Two-handed, from a low guard (tip just off the floor in front) up and through. Pops them to about head height (~80 px) and hit-stuns 0.5 s. Jump-cancels on hit into an air combo. Reach: up to a 200 px gap (the fist jab is 160). |
-| overhead slash | J again (second press) | .50 | .09 | .90 | 560 / −70 | Sword string, part 2, a kill blow. Swung up and cocked behind the rear shoulder, then held, charging: ink gathers on the blade and the arms tremble. Then it's chopped over the top into a deep lunge. It knocks them sideways with a slight downward angle and grows with damage like the sucker punch. Reach: up to a 220 px gap. |
+| rising slash | J (standing, first press) | .15 | .09 | .52 | 90 / 520 | Sword string, part 1. Two-handed underhand cut. It loads into a low rear guard: knees bent deep, chest over the front knee, hands pulled back to the rear hip, the blade turned round behind with the tip just off the floor. Then it sweeps the blade from the ground up: beside the legs, out low in front, up past the face. The body rises, the torso goes from tilted forward to leaning back, and the back heel lifts. Pops them to about head height (~80 px) and hit-stuns 0.5 s. Jump-cancels on hit into an air combo. Reach: up to a 210 px gap (the fist jab is 160). |
+| overhead slash | J again (second press) | .50 | .09 | .92 | 560 / −70 | Sword string, part 2, a kill blow. Raised with bent elbows, the blade cocked up and back over the rear shoulder, leaning back, then held, charging: it sinks lower, ink gathers on the blade and the hands tremble. On release the hands drive up and forward over the head with the blade still cocked back. The wrists whip it over in front of the face, the first moment the blade lines up with the arms (Ray: no full-arm extension over the head). It carries on down through into a deep lunge. Knocks them sideways with a slight downward angle and grows with damage like the sucker punch. Reach: up to a 220 px gap. |
 
-**The sword string (Ray's design):** two presses, rising slash then overhead. It replaces the fists' jab > cross > finisher; holding a direction on the second press only turns you to face that way. Both swings are two-handed: the off hand holds the grip just behind the lead hand (`SWORD_GRIP2`, placed by arm IK each frame). The wrist cocks and whips the blade through (`blade(pt)` per move). The hit test follows the whole arc between frames (`sweep`), only in front of you (`front`).
+**The sword string (Ray's design):** two presses, rising slash then overhead. It replaces the fists' jab > cross > finisher; holding a direction on the second press only turns you to face that way.
+
+**Keyed swings (`swordKeyPose`):** sword swings aren't eased between a few poses; each is a short keyframed path in the move's `keys`. Each key gives:
+- `arm`: the grip's direction from the shoulder (body frame: 0 down, −π/2 forward, ±π up) and its reach as a share of full arm length;
+- `blade`: the blade's angle in the same frame, turned at the wrist, so it can lag behind the hands and whip through;
+- the body: `tl`, `hd`, `dx` and the legs.
+
+How it plays out:
+- Values follow a smooth curve through the keys; `stop` makes one come to rest at that key.
+- Both arms are solved to the grip each frame with the elbows bending the natural way (`armIKn`). The off hand holds the grip just behind the lead hand (`SWORD_GRIP2`).
+- Where a low swing would cut into the floor, the blade is drawn foreshortened, as if turned across the body beside the legs, so the tip skims over the floor (`swordFS`).
+- The hit test follows the whole arc between frames (`sweep`), only in front of you (`front`), and uses the foreshortened tip.
+- Tune the motion by editing the keys; tune timing and launch with the usual fields.
 
 - **Rising slash > air combo** (verified, `tests/sword-combos.js`; true combos):
   - Jump-cancel with a full jump drifting in, then the split kick (neutral air): connects from about 8 frames into the jump across a wide window.
   - The same jump into the flying kick (sideways air): connects from about 6 frames in.
   - A short hop into the flip kick (up air): connects late in the hop. After a full jump you rise past them.
-- **Rising slash > overhead is not a true combo, on purpose.** Pressed as early as it buffers (the link opens at 0.34 s), the overhead lands about 0.23 s after their hit-stun ends, so they have time to parry or air dash out. The parrying bot parries it. At higher damage the rise pops them higher, so they may still be in the air (the label then reads "2 hit combo"), but their stun has still run out.
+- **Rising slash > overhead is not a true combo, on purpose.** Pressed as early as it buffers (the link opens at 0.34 s), the overhead lands about 0.22 s after their hit-stun ends, so they have time to parry or air dash out. The parrying bot parries it. At higher damage the rise pops them higher, so they may still be in the air (the label then reads "2 hit combo"), but their stun has still run out.
 - A crouching low kick also leads into the overhead (it's the second step of the string).
 

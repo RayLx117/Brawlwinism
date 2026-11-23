@@ -223,6 +223,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const KEYS = ['tl', 'hd', 'fa1', 'fa2', 'ba1', 'ba2', 'fl1', 'fl2', 'bl1', 'bl2', 'ff', 'bf', 'dx', 'sp'];
   const lerp = (a, b, t) => a + (b - a) * t;
   const mixPose = (a, b, t) => { const o = {}; for (const k of KEYS) o[k] = lerp(a[k], b[k], t); return o; };
+  const lerpPoseA = (a, b, t) => { const o = mixPose(a, b, t); for (const k of ['fa1', 'fa2', 'ba1', 'ba2']) o[k] = a[k] + wrapA(b[k] - a[k]) * t; return o; };   // between two frames: arm angles the short way round (IK can wrap them)
 
   // two-bone leg IK: hip -> ankle target (rig units), knee bends forward
   function ik(tx, ty) {
@@ -285,7 +286,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       Object.assign(nt, { fa1: Pp.lead[0] - tg.tl + jit, fa2: Pp.lead[1] - Pp.lead[0], ba1: Pp.off[0] - tg.tl + jit, ba2: Pp.off[1] - Pp.off[0] });   // angles given in the body frame, made relative to the torso / the upper arm
       f.swordAim = { abs: Pp.abs, rate: 40 }; f.swordTurnTo = 1; return nt;
     }
-    if (P_.on && P_.A.blade) { f.swordAim = { rel: P_.A.blade(P_.t), rate: P_.A.bladeRate || 30 }; return tg; }   // a slash: the wrist cocks and whips the blade through
+    if (P_.on && P_.A.keys) {   // a keyed swing places the arms and the wrist itself; once its keys are done, it eases back into the guard
+      if (P_.track && P_.t <= P_.track[P_.track.length - 1].t) return tg;
+      const G_ = S_.guard; Object.assign(nt, { fa1: G_.fa1, fa2: G_.fa2 }); f.swordAim = { abs: G_.abs, rate: 11 }; return nt;
+    }
     if (P_.on || f.staggerT > 0 || f.wallSlide) { f.swordAim = { rel: 0, rate: 30 }; return tg; }   // its own pose: the blade along the forearm
     const run = f.onGround && ((f.dashT > 0 && !f.dashAir) || f.slideT > 0 || (f.sprint > 0.55 && Math.abs(f.vx) > 220));
     if (!f.onGround && !(f.dashT > 0 && !f.dashAir)) { f.swordAim = { abs: S_.air, rate: 14 }; return tg; }   // jumps and the somersault: one hand, the arm as it is, blade out forward and a little up (it tumbles with the flip)
@@ -385,41 +389,53 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         // the stab: the arm shot straight out with the blade, body stretched long behind it, the off arm flung back
         tg.tl = 0.62; tg.hd = -0.4; tg.dx = 14; tg.sp = 7; tg.fa1 = -H_ - tg.tl + 0.03; tg.fa2 = -0.03; tg.ba1 = 1.15; tg.ba2 = -0.2;
         tg.fl1 = -1.0; tg.fl2 = 0.6; tg.bl1 = 0.95; tg.bl2 = 0.15; tg.ff = 0; tg.bf = 0.7; return 70; } },
-    // ground string with a sword (replaces jab > cross > finisher): two two-handed slashes, one per press.
-    //  1. rising slash: from a low guard (tip dropped just off the floor in front), up and through. Pops them to about head height and hit-stuns them long enough to
-    //     jump after them into an air combo (jc: jump-cancel on hit).
-    //  2. overhead: cocked high behind the head and held, charging (ink gathers on the blade, the arms tremble), then chopped down
-    //     over the top. A kill blow: knocks them sideways, a little downward. The long, readable charge is on purpose, so they
-    //     have time to parry or air dash out; it isn't a true combo from slash 1.
-    // Sword-move fields: twoHand = the off hand holds the grip (placed by IK), blade(pt) = the wrist angle (blade against the
-    // forearm), front = only hits in front of you, sweep = the hit test also checks where the blade was between frames, so the
-    // whole arc of a fast swing counts (the swing starts as the hit frames open).
-    swordRise: { name: 'rising slash', limb: 'fa', wind: 0.14, act: 0.09, hold: 0.05, link: 0.34, end: 0.5, lunge: 130, lungeT: 0.12, stun: 0.5, dmg: 1.4, damage: 3, kb: 90, pop: 520, up: true, jc: true,
-      twoHand: true, front: true, sweep: true, bladeRate: 34,
-      blade(pt) { return pt < this.wind ? -0.62 : pt < this.wind + this.act + this.hold ? -0.3 : -0.15; },
-      pose(ph, tg, t, pt) { if (ph === 2) return 14;
-        if (ph === 0 && pt < this.wind) {   // load: knees bent, chest over the front knee, both hands dropped to the hip, the tip lowered to just off the floor in front
-          tg.tl = 0.42; tg.hd = -0.3; tg.dx = -3; tg.sp = 0;
-          tg.fl1 = -0.7; tg.fl2 = 1.1; tg.bl1 = 0.62; tg.bl2 = 0.75; tg.ff = 0.1; tg.bf = 0.6;
-          tg.fa1 = -0.1 - tg.tl; tg.fa2 = -0.85 + 0.1; return 26; }
-        // the cut: up and through. The body rises off the back foot and opens up, chest lifting, arms finishing high in front,
-        // elbows still soft, blade whipped up past them
-        tg.tl = -0.18; tg.hd = -0.12; tg.dx = 9; tg.sp = 2;
-        tg.fl1 = -0.4; tg.fl2 = 0.35; tg.bl1 = 0.6; tg.bl2 = 0.2; tg.ff = 0.05; tg.bf = 0.95;
-        tg.fa1 = -2.3 - tg.tl; tg.fa2 = -2.62 + 2.3; return 46; } },
-    swordOver: { name: 'overhead slash', limb: 'fa', wind: 0.5, act: 0.09, hold: 0.1, link: 9, end: 0.9, lunge: 170, lungeT: 0.14, stun: 0.5, dmg: 2.2, damage: 6, kb: 560, pop: -70, ragdoll: true, tele: true, spin: -8,
-      twoHand: true, front: true, sweep: true, bladeRate: 30, raise: 0.13,
-      blade(pt) { return pt < this.wind ? -0.6 : pt < this.wind + this.act + this.hold ? 0.22 : 0.1; },
-      pose(ph, tg, t, pt) { if (ph === 2) return 12;
-        if (ph === 0 && pt < this.wind) {   // swung up over the front and cocked high behind the rear shoulder (elbows back, hands by the back of the head, blade angled up and back), leaning back; then held there, charging
-          const hold = pt >= this.raise, sink = hold ? Math.min(1, (pt - this.raise) / (this.wind - this.raise)) : 0, tr = hold ? 0.03 * Math.sin(pt * 75) * sink : 0;
-          tg.tl = -0.3 - 0.06 * sink; tg.hd = 0.14; tg.dx = -5; tg.sp = 0;
-          tg.fl1 = -0.55; tg.fl2 = 0.6 + 0.25 * sink; tg.bl1 = 0.45; tg.bl2 = 0.75 + 0.25 * sink; tg.ff = 0; tg.bf = 0.5;
-          tg.fa1 = (1.95 - TAU) - tg.tl + tr; tg.fa2 = 2.95 - 1.95 + tr; return hold ? 18 : 22; }   // (upper arm back and a little up, forearm folded up; the angles kept on the far side so the chop comes over the top)
-        // the chop: over the top and down, the body thrown in after it into a deep lunge, head down behind the arms
-        tg.tl = 0.62; tg.hd = -0.38; tg.dx = 13; tg.sp = 3;
-        tg.fl1 = -0.9; tg.fl2 = 1.1; tg.bl1 = 0.9; tg.bl2 = 0.18; tg.ff = 0; tg.bf = 0.6;
-        tg.fa1 = -1.3 - tg.tl; tg.fa2 = -1.15 + 1.3; return 44; } },
+    // ground string with a sword (replaces jab > cross > finisher): two two-handed cuts, one per press. Both are keyed swings
+    // (swordKeyPose): each key places the grip (arm: its direction from the shoulder in the body frame, 0 = down, −π/2 = forward,
+    // ±π = up, and how far out, as a share of full reach), the blade's angle (same frame; the wrist turns it), and the body
+    // (torso, head, legs, shift). Both arms are solved to the grip every frame, elbows bending the natural way. Values ease
+    // through the keys on a smooth curve (stop: comes to rest there). bladeDir = which way the blade turns into the first key.
+    //  1. rising slash: loads into a low rear guard (hands at the back hip, the blade turned round behind, tip just off the
+    //     floor), then sweeps it from the ground up in front and on past the head, rising off bent knees. Pops them to about head
+    //     height and hit-stuns them long enough to jump after them into an air combo (jc: jump-cancel on hit).
+    //  2. overhead: raised with bent elbows, the blade folded back over the rear shoulder, and held, charging (ink gathers on the
+    //     blade, the hands tremble). Then the hands drive forward over the head with the blade still trailing; the wrists whip it
+    //     over only in front of the face, where it first lines up with the arms, and on down through them into a deep lunge.
+    //     A kill blow: sideways, a little downward. The long charge is on purpose, so they can parry or air dash out; it isn't a
+    //     true combo from slash 1.
+    // twoHand = the off hand holds the grip, front = only hits in front of you, sweep = the hit test also checks where the
+    // blade was between frames, so the whole arc of a fast swing counts. lungeAt = when the step-in starts.
+    swordRise: { name: 'rising slash', limb: 'fa', wind: 0.15, act: 0.09, hold: 0.05, link: 0.34, end: 0.52, lunge: 140, lungeT: 0.12, lungeAt: 0.12, stun: 0.5, dmg: 1.4, damage: 3, kb: 90, pop: 520, up: true, jc: true,
+      twoHand: true, front: true, sweep: true, bladeDir: 1, recRate: 12,
+      keys: [
+        // load: knees bent deep, chest over the front knee, hands pulled back to the rear hip, the blade turned round behind
+        { t: 0.11, tl: 0.36, hd: -0.22, dx: -3, fl1: -0.78, fl2: 1.4, bl1: 0.8, bl2: 1.15, ff: 0.15, bf: 0.55, arm: [0.75, 0.7], blade: 1.35, stop: true },
+        // the cut: the blade whips through beside the legs (skimming the floor) and out low in front, the body starting to rise
+        { t: 0.145, tl: 0.3, hd: -0.2, dx: 1, fl1: -0.7, fl2: 1.15, bl1: 0.75, bl2: 0.95, arm: [-0.45, 0.68], blade: -0.6 },
+        // out in front and rising, weight driving onto the front foot
+        { t: 0.18, tl: 0.08, hd: -0.12, dx: 7, fl1: -0.55, fl2: 0.7, bl1: 0.68, bl2: 0.55, ff: 0.1, bf: 0.8, arm: [-1.2, 0.93], blade: -1.55 },
+        // up past the face, the body opened up, back heel off the floor
+        { t: 0.235, tl: -0.18, hd: -0.05, dx: 10, fl1: -0.42, fl2: 0.38, bl1: 0.6, bl2: 0.25, ff: 0.05, bf: 0.95, arm: [-2.35, 0.92], blade: -2.75 },
+        // follow-through: the tip carried just past upright, elbows softening
+        { t: 0.34, tl: -0.22, hd: -0.02, arm: [-2.6, 0.85], blade: -3.05, stop: true },
+      ],
+      pose(ph, tg, t, pt) { return swordKeyPose(this, tg, pt); } },
+    swordOver: { name: 'overhead slash', limb: 'fa', wind: 0.5, act: 0.09, hold: 0.1, link: 9, end: 0.92, lunge: 190, lungeT: 0.14, lungeAt: 0.45, stun: 0.5, dmg: 2.2, damage: 6, kb: 560, pop: -70, ragdoll: true, tele: true, spin: -8,
+      twoHand: true, front: true, sweep: true, bladeDir: -1, recRate: 10, tremble: [0.16, 0.43],
+      keys: [
+        // raised: hands pulled up behind the rear shoulder, elbows bent, the blade cocked up and back over the shoulder, leaning back
+        { t: 0.13, tl: -0.24, hd: 0.1, dx: -5, fl1: -0.58, fl2: 0.62, bl1: 0.45, bl2: 0.8, ff: 0, bf: 0.5, arm: [2.35, 0.62], blade: 2.4, stop: true },
+        // the charge: sinking lower, the sword drawn a touch further back
+        { t: 0.43, tl: -0.3, hd: 0.12, fl2: 0.85, bl2: 1.0, arm: [2.25, 0.6], blade: 2.2, stop: true },
+        // release: the hands drive up and forward over the head, the blade still cocked back behind them
+        { t: 0.475, tl: -0.02, hd: 0, dx: 2, fl1: -0.7, fl2: 0.8, bl1: 0.6, bl2: 0.6, arm: [3.3, 0.8], blade: 2.35 },
+        // in front of the face: the wrists whip it over; only now is the blade in line with the arms
+        { t: 0.5, tl: 0.3, hd: -0.2, dx: 8, fl1: -0.8, fl2: 0.95, bl1: 0.8, bl2: 0.3, arm: [3.95, 0.95], blade: 3.95 },
+        // down through them, into a deep lunge
+        { t: 0.555, tl: 0.62, hd: -0.36, dx: 13, fl1: -0.9, fl2: 1.1, bl1: 0.9, bl2: 0.18, ff: 0, bf: 0.6, arm: [4.75, 0.97], blade: 5.0 },
+        // settle at the bottom
+        { t: 0.7, arm: [4.85, 0.93], blade: 5.1, stop: true },
+      ],
+      pose(ph, tg, t, pt) { return swordKeyPose(this, tg, pt); } },
     crouchPoke: { name: 'low kick', limb: 'fl', r: 7, wind: 0.06, act: 0.07, link: 0.22, end: 0.34, lunge: 120, lungeT: 0.08, stun: 0.4, dmg: 0.9, damage: 2, kb: 100, pop: 0, jc: true, next: 1,
       pose(ph, tg) { guardHand(tg, 'fa'); guardHand(tg, 'ba'); tg.fa1 = -0.55; tg.fa2 = -2.0; if (ph === 2) return 18;
         if (ph === 0) { tg.fl1 = -0.5; tg.fl2 = 1.9; tg.ff = 0.2; tg.tl = 0.45; return 40; }
@@ -1253,6 +1269,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const A = pickMove(chain);
     P_.A = A; P_.arm = A.limb[1] === 'a' ? A.limb[0] : '';
     P_.on = true; P_.t = 0; P_.queued = false; P_.flecked = false; P_.hit = false; P_.ghosted = false; P_.lunged = false; P_.hopped = false; P_.floated = false; P_.trail = [];
+    P_.track = A.keys ? swordTrack(pl, A) : null;
     if (A.slide) pl.slideT = Math.max(pl.slideT, 0.38);
     if (A.key === 'dashPunch') pl.dashT = 0;   // the dash turns into the punch, keeping its speed
     if (A.key === 'dair') { pl.fastFall = false; pl.vy = Math.min(pl.vy, 80); }   // the stomp hangs a beat before it drops
@@ -1531,6 +1548,51 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return [au - tl, wrapA(av - au)];
   }
 
+  // two-bone arm IK with the elbow bending the natural way (the forearm folding toward the front of the upper arm: a negative
+  // elbow angle), whatever direction the arm points. Returns [upper arm against the torso, elbow]
+  function armIKn(f, tl, sx, sy, tx, ty) {
+    const L1 = LEN.upperArm * S, L2 = 19 * S, dx = tx - sx, dy = ty - sy, d = Math.min(L1 + L2 - 0.01, Math.max(Math.abs(L1 - L2) + 0.01, Math.hypot(dx, dy)));
+    const base = Math.atan2(dy, dx), al = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d))));
+    const ang = (vx, vy) => Math.atan2(-f.facing * vx, vy);
+    let best = null;
+    for (const sg of [1, -1]) {
+      const ex = sx + Math.cos(base + sg * al) * L1, ey = sy + Math.sin(base + sg * al) * L1, au = ang(ex - sx, ey - sy), a2 = wrapA(ang(tx - ex, ty - ey) - au);
+      if (!best || (a2 <= 0 && best[1] > 0)) best = [au - tl, a2];
+    }
+    return best;
+  }
+  // ---- keyed sword swings. At the start: where the swing starts from (the pose, the grip's direction / reach from the shoulder,
+  // the blade's angle), then the keys with any missing values carried on from the key before
+  const SWORD_KEYS = ['tl', 'hd', 'dx', 'fl1', 'fl2', 'bl1', 'bl2', 'ff', 'bf'];
+  function swordTrack(f, A) {
+    const R_ = rig(f), [sx, sy] = apply(R_.torso, 1, -21), [hx, hy] = apply(R_.fa.lo, 0, 19), vx = (hx - sx) * f.facing, vy = hy - sy, k0 = A.keys[0];
+    const dir = Math.atan2(-vx, vy), ext = Math.hypot(vx, vy) / ((LEN.upperArm + 19) * S), bl = f.pose.tl + f.pose.fa1 + f.pose.fa2 + (f.swordW || 0);
+    const mod = (a) => ((a % TAU) + TAU) % TAU;
+    const from = { t: 0, stop: true, arm: [dir + TAU * Math.round((k0.arm[0] - dir) / TAU), ext], blade: A.bladeDir > 0 ? k0.blade - mod(k0.blade - bl) : k0.blade + mod(bl - k0.blade) };
+    for (const q of SWORD_KEYS) from[q] = f.pose[q];
+    const tr = [from];
+    for (const k of A.keys) { const p = tr[tr.length - 1], n = { ...k }; for (const q of SWORD_KEYS) if (n[q] === undefined) n[q] = p[q]; tr.push(n); }
+    return tr;
+  }
+  // the pose at time pt: each value on a smooth curve through the keys (Hermite; zero speed at stops, the start and the end).
+  // Sets the body, solves the lead arm to the grip, and leaves the blade's angle for the wrist. Past the last key: back to the guard
+  function swordKeyPose(A, tg, pt) {
+    const P_ = pl.punch, tr = P_.track;
+    if (!tr || pt > tr[tr.length - 1].t) { P_.keyBlade = undefined; return A.recRate || 12; }
+    let i = 0; while (i < tr.length - 2 && pt >= tr[i + 1].t) i++;
+    const a = tr[i], b = tr[i + 1], h = b.t - a.t, u = Math.max(0, Math.min(1, (pt - a.t) / h)), u2 = u * u, u3 = u2 * u;
+    const tan = (j, get) => { const k = tr[j]; if (k.stop || j === 0 || j === tr.length - 1) return 0; return (get(tr[j + 1]) - get(tr[j - 1])) / (tr[j + 1].t - tr[j - 1].t); };
+    const val = (get) => (2 * u3 - 3 * u2 + 1) * get(a) + (u3 - 2 * u2 + u) * h * tan(i, get) + (-2 * u3 + 3 * u2) * get(b) + (u3 - u2) * h * tan(i + 1, get);
+    for (const q of SWORD_KEYS) tg[q] = val(k => k[q]);
+    let dir = val(k => k.arm[0]), ext = val(k => k.arm[1]), blade = val(k => k.blade);
+    if (A.tremble && pt > A.tremble[0] && pt < A.tremble[1]) { const tw = 0.035 * Math.min(1, (pt - A.tremble[0]) / 0.15) * Math.sin(pt * 80); dir += tw; blade += tw * 1.4; }   // charging: the hands tremble
+    tg.sp = 0;
+    const Rp = rig({ ...pl, pose: { ...pl.pose, ...tg } }), [sx, sy] = apply(Rp.torso, 1, -21), reach = (LEN.upperArm + 19) * S * ext;
+    [tg.fa1, tg.fa2] = armIKn(pl, tg.tl, sx, sy, sx + pl.facing * -Math.sin(dir) * reach, sy + Math.cos(dir) * reach);
+    P_.keyBlade = blade;
+    return 1e4;   // placed exactly: the curve is the motion
+  }
+
   function noScopeStep(f, dt) {
     if (!f.noScope) return;
     const S_ = f.snipe; if (!S_) return;
@@ -1762,7 +1824,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       const P_ = pl.punch, A = P_.A, W = pl.wpn;
       P_.t += dt * (W && P_.t < A.wind ? 1 / Math.max(0.4, 1 - W.quick / 100) : 1);   // Quick: the wind-up runs faster (a curse slows it)
       if (A.float && !P_.floated && P_.t >= A.wind - 0.01) { P_.floated = true; A.float(pl); pl.fastFall = false; }   // aerials drift a little toward their direction
-      if (!P_.lunged && P_.t >= A.wind * 0.55) {   // step into it
+      if (!P_.lunged && P_.t >= (A.lungeAt ?? A.wind * 0.55)) {   // step into it
         P_.lunged = true; pl.lungeT = A.lungeT; pl.lungeV = A.lunge * (pl.onGround ? 1 : 0.5);
       }
       if (A.hop && !P_.hopped && P_.t >= A.wind - 0.02) {   // the uppercut drives up off the floor: feet leave the ground
@@ -1963,13 +2025,26 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       pl.bStretch = cur + (want - cur) * (1 - Math.exp(-(want > cur ? 30 : 14) * dt));
     }
 
+    pl.prevSwordW = pl.swordW || 0; pl.prevSwordFS = pl.swordFS || 1;
     if (pl.wpn) {   // the wrist turns the sword toward its stance angle (ABS: in the body frame; REL: against the forearm)
-      const H = pl.swordAim || { rel: 0 }, w = H.abs !== undefined ? H.abs - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2) : H.rel;
-      pl.swordW = (pl.swordW || 0) + wrapA(w - (pl.swordW || 0)) * (1 - Math.exp(-(H.rate || 18) * dt));
+      const P_ = pl.punch;
+      if (P_.on && P_.keyBlade !== undefined) pl.swordW = P_.keyBlade - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2);   // a keyed swing: the wrist turns the blade exactly where the swing has it
+      else {
+        const H = pl.swordAim || { rel: 0 }, w = H.abs !== undefined ? H.abs - (pl.pose.tl + pl.pose.fa1 + pl.pose.fa2) : H.rel;
+        pl.swordW = (pl.swordW || 0) + wrapA(w - (pl.swordW || 0)) * (1 - Math.exp(-(H.rate || 18) * dt));
+      }
       pl.swordTurn = (pl.swordTurn || 0) + ((pl.swordTurnTo || 0) - (pl.swordTurn || 0)) * (1 - Math.exp(-30 * dt));
-      if (pl.punch.on && pl.punch.A.twoHand) {   // two-handed: the off hand on the grip just behind the lead hand, its arm solved to reach it
-        const Rp = rig(), [gx, gy] = apply(swordMat(Rp.fa.lo, pl.swordW, SWORD_HOLD.scale), SWORD_GRIP2[0], SWORD_GRIP2[1]), [sx, sy] = apply(Rp.torso, 1, -21);
-        [pl.pose.ba1, pl.pose.ba2] = armIK(pl, pl.pose.tl, sx, sy, gx, gy, true);
+      const Rp = rig();
+      // swinging low beside you on the ground, the blade turns across your body: it's drawn foreshortened just enough that the
+      // tip skims along over the floor instead of cutting into it
+      pl.swordFS = 1;
+      if (P_.on && P_.A.keys && pl.onGround) {
+        const m = swordMat(Rp.fa.lo, pl.swordW, SWORD_HOLD.scale), fy = apply(m, 0, 19)[1], ty = swordTip(Rp, pl.wpn, pl.swordW)[1], lim = PLAT.y - 5;
+        if (ty > lim && ty > fy + 1) pl.swordFS = Math.max(0.12, (lim - fy) / (ty - fy));
+      }
+      if (P_.on && P_.A.twoHand) {   // two-handed: the off hand on the grip just behind the lead hand, its arm solved to reach it
+        const [gx, gy] = apply(swordMat(Rp.fa.lo, pl.swordW, SWORD_HOLD.scale, 0, pl.swordFS), SWORD_GRIP2[0], SWORD_GRIP2[1]), [sx, sy] = apply(Rp.torso, 1, -21);
+        [pl.pose.ba1, pl.pose.ba2] = armIKn(pl, pl.pose.tl, sx, sy, gx, gy);
       }
     }
     R0 = rig();
@@ -1982,7 +2057,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       pl.wallTouch = glue || over > -3; pl.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
     }
     if (pl.punch.on) {
-      const P_ = pl.punch, A = P_.A, ch = A.limb === 'fa' && pl.wpn ? [swordTip(R0, pl.wpn, pl.swordW), ...limbChain(R0, 'fa')] : limbChain(R0, A.limb), [fx, fy] = ch[0], rr = A.r || HIT_R;
+      const P_ = pl.punch, A = P_.A, ch = A.limb === 'fa' && pl.wpn ? [swordTip(R0, pl.wpn, pl.swordW, pl.swordFS || 1), ...limbChain(R0, 'fa')] : limbChain(R0, A.limb), [fx, fy] = ch[0], rr = A.r || HIT_R;
       const chains = (A.limbs || [A.limb]).map(L => L === A.limb ? ch : limbChain(R0, L)).map(c => A.tip ? c.slice(0, A.tip) : c);   // tip: only the foot and shin hit
       pl.fist = [fx, fy];
       // telegraph: kill blows draw ink in toward the striking fist or foot while they wind up
@@ -1997,7 +2072,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       // swoosh: the path of the fist / foot through the strike
       if (P_.t > A.wind - 0.04 && P_.t < A.wind + A.act + 0.05) {   // kept relative to the body so it rides along
         if (P_.trail.length && pl.prevPose) for (const k of [0.25, 0.5, 0.75]) {   // fast swings move a long way in one frame: fill in the arc between
-          const mid = rig({ ...pl, pose: mixPose(pl.prevPose, pl.pose, k) }), [mx, my] = limbChain(mid, A.limb)[0];
+          const mid = rig({ ...pl, pose: lerpPoseA(pl.prevPose, pl.pose, k) }), [mx, my] = limbChain(mid, A.limb)[0];
           P_.trail.push([mx - pl.x, my - pl.y]);
         }
         const [tx, ty] = pl.wpn && A.limb === 'fa' ? limbChain(R0, 'fa')[0] : [fx, fy];   // the swoosh follows the fist (with a sword, not its tip)
@@ -2008,7 +2083,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       pl.hitShape = active ? chains.map(c => ({ pts: c, r: rr, kill: !!A.ragdoll })) : null;
       if (active && pl.wpn && pl.wpn.has.phantom && !P_.ghosted) { P_.ghosted = true; phantoms.push({ t: 0.3 + A.act / 2, chains: chains.map(c => c.map(p => p.slice())), r: rr, dmg: pl.wpn.dmg }); }   // Phantom: the same swing again in 0.3 s
       // a fast blade swing (A.sweep) is also tested where it was between the last frame and this one, so it can't skip past them
-      const tested = active && A.sweep && pl.prevPose && pl.wpn ? [0.34, 0.67].map(k => { const Rm = rig({ ...pl, pose: mixPose(pl.prevPose, pl.pose, k) }); return [swordTip(Rm, pl.wpn, pl.swordW), ...limbChain(Rm, 'fa')]; }).concat(chains) : chains;
+      const tested = active && A.sweep && pl.prevPose && pl.wpn ? [0.34, 0.67].map(k => { const Rm = rig({ ...pl, pose: lerpPoseA(pl.prevPose, pl.pose, k) }); return [swordTip(Rm, pl.wpn, pl.prevSwordW + wrapA(pl.swordW - pl.prevSwordW) * k, pl.prevSwordFS + ((pl.swordFS || 1) - pl.prevSwordFS) * k), ...limbChain(Rm, 'fa')]; }).concat(chains) : chains;
       const inFront = (qx) => !A.front || (qx - pl.x) * pl.facing > -6;   // front-only moves don't catch anyone behind you
       const tryHit = (hs, onHit) => {
         for (const c of tested) for (let s_ = 0; s_ < c.length - 1; s_++) {
@@ -2348,12 +2423,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const swordLen = (W) => W.blade * Math.max(0.5, 1 + W.long / 100);
   const swordK = (W) => W ? swordLen(W) / SWORD.len : 1;
   // the sword's frame: turned at the wrist by w (radians, against the forearm) and scaled by sc, both about the fist
-  const swordMat = (m, w = 0, sc = 1, turn = 0) => chain(m, T(0, 19), R(w), Sc(sc * (1 - (1 - SWORD_HOLD.parry.turnX) * turn), sc * (1 - (1 - SWORD_HOLD.parry.turnY) * turn)), T(0, -19));   // turn: foreshortened as it turns toward us (the parry)   // (the fist sits at 0,19 in the forearm)
-  const swordTip = (R, W, w = 0) => apply(swordMat(R.fa.lo, w, SWORD_HOLD.scale), SWORD.tip[0], SWORD.guard + (SWORD.tip[1] - SWORD.guard) * swordK(W));
+  const swordMat = (m, w = 0, sc = 1, turn = 0, fs = 1) => chain(m, T(0, 19), R(w), Sc(sc * (1 - (1 - SWORD_HOLD.parry.turnX) * turn), sc * (1 - (1 - SWORD_HOLD.parry.turnY) * turn) * fs), T(0, -19));   // fs: foreshortened along the blade (turned across the body)   // turn: foreshortened as it turns toward us (the parry)   // (the fist sits at 0,19 in the forearm)
+  const swordTip = (R, W, w = 0, fs = 1) => apply(swordMat(R.fa.lo, w, SWORD_HOLD.scale, 0, fs), SWORD.tip[0], SWORD.guard + (SWORD.tip[1] - SWORD.guard) * swordK(W));
   // ink shed off the blade as it moves fast in an attack: small flecks from the outer half, carried a little along the swing
   function swordShed(f, R, dt) {
     if (!f.wpn || !R) return;
-    const C = SWORD_FX, M = swordMat(R.fa.lo, f.swordW || 0, SWORD_HOLD.scale, f.swordTurn || 0), tip = swordTip(R, f.wpn, f.swordW || 0), gd = apply(M, 0, SWORD.guard), prev = f.swordTipPrev;
+    const C = SWORD_FX, M = swordMat(R.fa.lo, f.swordW || 0, SWORD_HOLD.scale, f.swordTurn || 0, f.swordFS || 1), tip = swordTip(R, f.wpn, f.swordW || 0, f.swordFS || 1), gd = apply(M, 0, SWORD.guard), prev = f.swordTipPrev;
     f.swordTipPrev = tip;
     const GH = f.swordGhosts || (f.swordGhosts = []), now = f.time || 0;
     while (GH.length && now - GH[0].t >= C.life) GH.shift();
@@ -2377,7 +2452,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
   }
   function drawSword(m0, W, ink = INK, w = 0, sc = 1, f = null) {
-    const G = SWORD.guard, k = swordK(W), m = swordMat(m0, w, sc, f ? f.swordTurn || 0 : 0);
+    const G = SWORD.guard, k = swordK(W), m = swordMat(m0, w, sc, f ? f.swordTurn || 0 : 0, f ? f.swordFS || 1 : 1);
     if (f) {   // held: afterimages of the swing behind it, then the sword with its outline
       const now = f.time || 0;
       for (const gh of f.swordGhosts || []) { const a = SWORD_FX.alpha * (1 - (now - gh.t) / SWORD_FX.life); if (a <= 0) continue; ctx.save(); ctx.globalAlpha = a; paintSword(gh.m, gh.k, ink, SWORD_FX.outline); ctx.restore(); }
