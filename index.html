@@ -2088,6 +2088,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (glue) { pl.x -= over; if (pl.vx > 0) pl.vx = 0; R0 = rig(); }
       pl.wallTouch = glue || over > -3; pl.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
     }
+    swingTrailStep(pl, R0, dt);   // the weapon's swing trail
     if (pl.punch.on) {
       const P_ = pl.punch, A = P_.A, ch = A.limb === 'fa' && pl.wpn ? [swordTip(R0, pl.wpn, pl.swordW, pl.swordFS || 1, pl.swordTwist ?? 1), ...limbChain(R0, 'fa')] : limbChain(R0, A.limb), [fx, fy] = ch[0], rr = A.r || HIT_R;
       const chains = (A.limbs || [A.limb]).map(L => L === A.limb ? ch : limbChain(R0, L)).map(c => A.tip ? c.slice(0, A.tip) : c);   // tip: only the foot and shin hit
@@ -2470,6 +2471,50 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       const u = 0.45 + 0.55 * Math.random(), x = gd[0] + (tip[0] - gd[0]) * u, y = gd[1] + (tip[1] - gd[1]) * u;
       addMote(x, y, vx * 0.12 * u + (Math.random() - 0.5) * 50, vy * 0.12 * u + (Math.random() - 0.5) * 50, 0.22 + Math.random() * 0.18, 0.7 + Math.random() * 0.9, 260);
     }
+  }
+  // ---- weapon swing trails (Ray's design): invisible points along the centre of the weapon's damaging part (the sword's blade,
+  // guard to tip) each leave a thin, fading ink line along their path while an attack is under way, like the shading hairlines on
+  // the bodies. Fast swings are filled in between frames so the arcs stay smooth; a point that barely moves draws nothing, so
+  // slow wind-ups leave no streaks. n = points, from = where along the blade they start (0 guard, 1 tip), life = how long a line
+  // lasts (s), width (px), alpha, speed = the point's speed (px/s) where its line starts to show and where it's at full strength,
+  // sub = steps a frame
+  const SWING_TRAIL = { n: 7, from: 0.18, life: 0.13, width: 0.9, alpha: 0.5, speed: [700, 1400], sub: 3 };
+  // the sword blade's centre line, guard to tip (sword space, before the blade's stretch): straight, then curving out to the tip
+  const swordCentre = (u) => { const y = SWORD.guard + (SWORD.tip[1] - SWORD.guard) * u, c = Math.max(0, (y - 42) / (SWORD.tip[1] - 42)); return [1.8 + (SWORD.tip[0] - 1.8) * c * c, y]; };
+  function weaponTrailPts(f, R, w, fs, tw) {   // the trail points in the world (each weapon gives its own; the sword's run along its blade)
+    const C = SWING_TRAIL, m = swordMat(R.fa.lo, w, SWORD_HOLD.scale, f.swordTurn || 0, fs, tw), k = swordK(f.wpn), G = SWORD.guard, out = [];
+    for (let i = 0; i < C.n; i++) { const [x, y] = swordCentre(C.from + (1 - C.from) * i / (C.n - 1)); out.push(apply(m, x, G + (y - G) * k)); }
+    return out;
+  }
+  function swingTrailStep(f, R, dt) {
+    const C = SWING_TRAIL, T_ = f.trails || (f.trails = { lines: [], prev: null }), now = f.time || 0;
+    for (const L of T_.lines) while (L.length && (!L[0] || now - L[0].t > C.life)) L.shift();
+    if (!f.wpn || !f.punch.on || !R) { T_.prev = null; return; }
+    const cur = { pose: { ...f.pose }, x: f.x, y: f.y, w: f.swordW || 0, fs: f.swordFS || 1 }, P = T_.prev, tw = f.swordTwist ?? 1, samples = [];
+    if (!P) for (const L of T_.lines) if (L.length) L.push(null);   // a new attack: its lines don't join on to the last one's
+    if (P) for (let s_ = 1; s_ < C.sub; s_++) {   // in between this frame and the last
+      const k = s_ / C.sub, Rk = rig({ ...f, x: P.x + (cur.x - P.x) * k, y: P.y + (cur.y - P.y) * k, pose: lerpPoseA(P.pose, cur.pose, k) });
+      samples.push([now - dt * (1 - k), weaponTrailPts(f, Rk, P.w + wrapA(cur.w - P.w) * k, P.fs + (cur.fs - P.fs) * k, tw)]);
+    }
+    samples.push([now, weaponTrailPts(f, R, cur.w, cur.fs, tw)]);
+    for (const [t, pts] of samples) pts.forEach((q, i) => (T_.lines[i] || (T_.lines[i] = [])).push({ x: q[0], y: q[1], t }));
+    T_.prev = cur;
+  }
+  function drawSwingTrails(f) {
+    const T_ = f.trails; if (!T_) return; const C = SWING_TRAIL, now = f.time || 0;
+    setM(ID); ctx.lineCap = 'round';
+    T_.lines.forEach((L, i) => {
+      const tipK = 0.55 + 0.45 * i / (C.n - 1);   // a touch stronger toward the tip
+      const mid = (p, q) => [(p.x + q.x) / 2, (p.y + q.y) / 2];
+      for (let j = 1; j < L.length; j++) {   // smooth: each piece runs midpoint to midpoint, curving through the sample between
+        const a = L[j - 1], b = L[j]; if (!a || !b) continue;
+        const len = Math.hypot(b.x - a.x, b.y - a.y), age = (now - b.t) / C.life; if (age >= 1 || len < 0.5) continue;
+        const v = len / Math.max(1e-4, b.t - a.t), al = C.alpha * tipK * (1 - age) * Math.max(0, Math.min(1, (v - C.speed[0]) / (C.speed[1] - C.speed[0]))); if (al < 0.02) continue;
+        const pre = L[j - 2], nxt = L[j + 1], [sx, sy] = pre ? mid(pre, a) : [a.x, a.y], [ex, ey] = mid(a, b);
+        ctx.strokeStyle = `rgba(21,18,15,${al.toFixed(3)})`; ctx.lineWidth = C.width * (0.5 + 0.5 * (1 - age)) * (0.7 + 0.3 * tipK);
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(a.x, a.y, ex, ey); if (!nxt) ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+    });
   }
   // one sword at matrix m (blade stretched by k): the outline, the pale fill, the ink, in two halves (the grip as drawn, the blade stretched)
   function paintSword(m, k, ink, outline) {
@@ -2998,7 +3043,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     drawBot();
     drawDrops();
     drawNoScopeShot(pl.paused ? 1 / 60 : lastDt);   // the shot's line, behind the shooter
-    if (!inDrill() && !pl.out) { drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); }
+    if (!inDrill() && !pl.out) { drawSwingTrails(pl); drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); }
     drawDrill();
     drawNoScope();   // the mark sits over the fighters
     drawSparks();

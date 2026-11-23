@@ -83,3 +83,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `sword-cancel.js`: cuts the sword swings short (dash, jump-cancel, parry) or lets them finish, then dash stabs; the sword must be back to normal through the stab. Frames: out/sword-cancel.png.
 - `sword-string.js`: the full sword string on the bot (rising slash straight up, the overhead catching them on the way down), hitbox view on. Sheet: out/sword-string.png.
 - `sword-nair.js`: the sword neutral air (sword spin): knockback direction against a bot above / in front / behind / below (radial, no ragdoll), its 0.5 s reuse delay, the dash stab's 0.3 s reuse delay; frames out/sword-nair.png.
+- `swing-trail.js`: close-ups of the weapon swing trails at the moment of each sword swing (rising slash, overhead chop, sword spin). Sheet: out/swing-trail.png.

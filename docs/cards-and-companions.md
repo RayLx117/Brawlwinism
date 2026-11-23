@@ -47,7 +47,11 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 **The held sword's outline (`SWORD_FX`):**
 - **Outline:** a solid ink outline (1.6 px) round the sword's silhouette, with no lag. It replaced a lagging goo coat that Ray had removed.
 - **Ink flecks:** the blade sheds a few when it moves fast in an attack (over 520 px/s, at most 3 a frame).
-- The swing afterimages were removed (Ray will brief a new swing effect).
+- **Swing trails (Ray's design, replacing the old afterimages):** seven invisible points along the centre of the blade, from just past the guard to the tip (following its curve), each leave a thin, fading ink hairline along their path while an attack is under way, like the shading lines on the bodies.
+  - Each line lasts 0.13 s, thinning and fading as it ages, a touch stronger toward the tip.
+  - Fast swings are filled in between frames and drawn as smooth curves, so the arcs stay clean.
+  - A point only leaves a line while it's moving fast (it starts at 700 px/s and is full strength by 1400), so slow wind-ups like the overhead's lift leave nothing.
+  - Drawn just behind the fighter. Numbers in `SWING_TRAIL`. Each weapon gives its own points (`weaponTrailPts`; the sword's run along `swordCentre`), so new weapons plug straight in.
 
 **Holding a weapon:** the fighter holds it in the lead hand (`drawSword`). Hits from that arm reach out to the blade's tip. **Every** hit they land does the weapon's damage, worked through its modifiers (`wpnHit`), on the bot and on the Divine General (who takes his usual 60%). Ray will design proper weapon movesets later; this is the test setup.
 
