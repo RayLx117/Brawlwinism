@@ -406,7 +406,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     //     dash out.
     // twoHand = the off hand holds the grip, front = only hits in front of you, sweep = the hit test also checks where the
     // blade was between frames, so the whole arc of a fast swing counts. lungeAt = when the step-in starts.
-    swordRise: { name: 'rising slash', limb: 'fa', wind: 0.15, act: 0.09, hold: 0.05, link: 0.34, end: 0.52, lunge: 140, lungeT: 0.12, lungeAt: 0.1, stun: 0.5, dmg: 1.4, damage: 3, kb: 90, pop: 905, fixedPop: true, up: true, jc: true,
+    swordRise: { name: 'rising slash', limb: 'fa', wind: 0.15, act: 0.09, hold: 0.05, link: 0.34, end: 0.52, lunge: 140, lungeT: 0.12, lungeAt: 0.1, stun: 0.5, dmg: 1.4, damage: 3, kb: 0, pop: 860, fixedPop: true, keepVx: true, up: true, jc: true,
       twoHand: true, front: true, sweep: true, bladeDir: 1, recRate: 12,
       keys: [
         // the dip: knees and hips drop fast, chest bent over, the sword down low in front and turned over, edge up, tip near the floor
@@ -1315,7 +1315,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (A.ragdoll) { startRagdoll(b, kd * A.kb * ls * wh.kb, -A.pop * ls * wh.kb, (A.spin ?? -7.5) * (A.spin > 0 ? 1 : 1)); if (A.ragT) b.rag.left = A.ragT(b.damage); if (A.down) b.rag.down = true; shakeT = 0.22; }
     else {
       b.stunT = A.stun + wh.stun; b.stunMax = b.stunT; b.hurtT = 0.24; b.hurtKind = A.pop > 200 ? 1 : 0;
-      b.vx = kd * A.kb * wh.kb * (1 + 0.4 * (ls - 1));
+      b.vx = A.keepVx ? b.vx : kd * A.kb * wh.kb * (1 + 0.4 * (ls - 1));   // keepVx: no sideways push, they keep whatever momentum they had
       if (A.pop) { b.vy = -A.pop * (A.fixedPop ? 1 : 1 + 0.3 * (ls - 1)); b.onGround = false; }   // popped up: juggle them (fixedPop: the same height at any damage)
     }
     // ink splash, scaled with how hard it hit
