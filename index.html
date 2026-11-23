@@ -1252,7 +1252,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const tgtOf = (kind) => kind === 'bot' ? bot : dg;
   function addToTarget(kind, d, pt, num = true) {   // damage straight onto a target (no launch), with ink and a number
     if (kind === 'bot') { if (bot.dead > 0) return; bot.damage = Math.min(MAX_DAMAGE, bot.damage + d); }
-    else { if (!dg) return; d = Math.round(d * DG.take * 10) / 10; dg.damage = Math.min(MAX_DAMAGE, dg.damage + d); dg.shudder = 0.1; }
+    else { if (!dg) return; d = Math.round(d * DG.take * 10) / 10; dg.damage = Math.min(DG.max, dg.damage + d); dg.shudder = 0.1; }
     for (let i = 0; i < 5; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 260, -120 - Math.random() * 200, 0.7 + Math.random() * 0.6, Math.random() < 0.4 ? RED : undefined);
     if (num && showDmg) { for (const n of dmgNums) n.y -= 26; dmgNums.push({ x: pt[0] + 30, y: pt[1] + 6, v: d, kill: false, dir: 1, t: 0 }); }
   }
@@ -1315,7 +1315,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (p.t < -0.22) phantoms.splice(i, 1);
     }
     for (const f of [bot, dg]) if (f && f.bleedT > 0) {   // Bleeding Ink: +1% a second
-      f.bleedT -= dt; f.damage = Math.min(MAX_DAMAGE, f.damage + dt * (f === dg ? DG.take : 1));
+      f.bleedT -= dt; f.damage = Math.min(f === dg ? DG.max : MAX_DAMAGE, f.damage + dt * (f === dg ? DG.take : 1));
       const c = f === dg ? f.R && f.R.centre : f.R && f.R.centre;
       if (c && Math.random() < dt * 8) addDrop(c[0] + (Math.random() - 0.5) * 30, c[1], (Math.random() - 0.5) * 40, 30, 0.6 + Math.random() * 0.5, RED);
     }
@@ -2555,7 +2555,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const DG = {
     S: 2.0,          // rig units -> game px (he's about 3x a fighter's height)
     take: 0.6,       // share of a hit's damage % he actually takes
-    weak: 100,       // from this damage %, kill blows ragdoll him
+    max: 500,        // his damage % tops out here (fighters stop at MAX_DAMAGE)
+    weak: 500,       // from this damage %, kill blows ragdoll him
+    wpnK: 40,        // his hits scale with his owner's weapon: × (1 + the weapon's damage per hit / wpnK); no weapon = ×1
     push: 0.04,      // share of a hit's knockback that shoves him (almost immovable)
     launchLo: 0.55, launchHi: 0.9,   // ragdoll launch as a share of a normal fighter's, at weak% and at max damage
     walk: 115,       // px/s
@@ -2786,13 +2788,17 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     g.trail = [];
     if (k !== 'drop') g.wheelTo += Math.PI / 4;   // the wheel above his head turns a notch before every attack
   }
+  // his hits grow with his owner's weapon (DG.wpnK)
+  const dgPower = () => { const W = dg && dg.owner && dg.owner.wpn; return W ? 1 + W.dmg / DG.wpnK : 1; };
+  const dgDmg = (base) => Math.round(base * dgPower() * 10) / 10;
   // a strike connects with a fighter: every one of his hits is a launch that grows with their damage
   function dgHitFighter(E, A, pt) {
     const g = dg, f = E.f, cx = A.key === 'leap' ? g.leapTo : g.x;
     const dir = A.wave ? (Math.sign(E.x - cx) || g.facing) : A.key === 'backhand' ? -g.facing : g.facing;
     if (dgParried(f, pt, A)) return false;
     const ls = launchScale(f.damage || 0);
-    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
+    const AD = dgDmg(A.dmg);
+    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + AD);
     if (A.stun) {   // popped straight up and hit-stunned, like a regular hit (not a ragdoll)
       const vx = dir * A.kb * (1 + 0.4 * (ls - 1)), vy = -A.pop * (1 + 0.3 * (ls - 1));
       if (f === pl) {
@@ -2800,14 +2806,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         pl.punch.on = false; pl.punch.queued = false;
       } else Object.assign(bot, { stunT: A.stun, stunMax: A.stun, hurtT: 0.24, hurtKind: 1, vx, vy, onGround: false });
       shakeT = Math.max(shakeT, 0.18);
-      if (showDmg) { for (const n of dmgNums) n.y -= 40; dmgNums.push({ x: pt[0] + dir * 30, y: pt[1] + 6, v: A.dmg, kill: false, dir, t: 0 }); }
+      if (showDmg) { for (const n of dmgNums) n.y -= 40; dmgNums.push({ x: pt[0] + dir * 30, y: pt[1] + 6, v: AD, kill: false, dir, t: 0 }); }
       for (let i = 0; i < 8; i++) addDrop(pt[0], pt[1], (Math.random() - 0.5) * 220, -200 - Math.random() * 300, 0.8 + Math.random(), Math.random() < Math.min(1, f.damage / 100) ? RED : undefined);
       return true;
     }
     if (f === pl) plRagdoll(dir * A.kb * ls, -A.pop * ls, -8 * dir);
     else { startRagdoll(bot, dir * A.kb * ls, -A.pop * ls, -8); bot.combo = 0; }
     shakeT = 0.22;
-    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + dir * 34, y: pt[1] + 6, v: A.dmg, kill: true, dir, t: 0 }); }
+    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + dir * 34, y: pt[1] + 6, v: AD, kill: true, dir, t: 0 }); }
     const red = Math.min(1, f.damage / 100);
     for (let i = 0; i < 10; i++) addDrop(pt[0], pt[1], dir * (200 + Math.random() * 320), -150 - Math.random() * 260, 0.9 + Math.random() * 1.1, Math.random() < red ? RED : undefined);
     for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; addMote(pt[0], pt[1], Math.cos(a) * 340 + dir * 200, Math.sin(a) * 340, 0.3, 1 + Math.random() * 1.6, 300); }
@@ -2817,7 +2823,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgParried(f, pt, A) {
     if (!(f.parryT > 0)) return false;
     f.parryOk = true; f.parryCd = 0; f.readyT = 0.3; f.parryOkT = f.time;
-    if (A && f.wpn && f.wpn.has.mirror) { dg.damage = Math.min(MAX_DAMAGE, dg.damage + Math.round(A.dmg * DG.take * 10) / 10); dg.shudder = 0.14; procLabel('Mirror', pt); }
+    if (A && f.wpn && f.wpn.has.mirror) { dg.damage = Math.min(DG.max, dg.damage + Math.round(dgDmg(A.dmg) * DG.take * 10) / 10); dg.shudder = 0.14; procLabel('Mirror', pt); }
     for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; addSpark(pt[0], pt[1], Math.cos(a) * 320, Math.sin(a) * 320 - 120, 0.2 + Math.random() * 0.15); }
     dg.label = 'parried, unshaken'; dg.labelT = 1.1;
     return true;
@@ -3011,11 +3017,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const f = E.f, A = a.A;
     if (dgParried(f, pt, A)) return;
     g.pose.fa1 = w - g.pose.tl; g.pose.fa2 = 0;   // the jab arrives straight: the arm is out along the aim, with no wind-round left in it
-    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.dmg);
+    const AD = dgDmg(A.dmg);
+    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + AD);
     if (f === pl) plRagdoll(0, 0, 0); else { startRagdoll(bot, 0, 0, 0); bot.combo = 0; }
     g.pin = { f }; a.pin0 = a.t; a.w0 = w; a.tl0 = g.pose.tl;
     shakeT = 0.24;
-    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + g.facing * 34, y: pt[1] + 6, v: A.dmg, kill: true, dir: g.facing, t: 0 }); }
+    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x: pt[0] + g.facing * 34, y: pt[1] + 6, v: AD, kill: true, dir: g.facing, t: 0 }); }
     const red = Math.min(1, f.damage / 100), dx = -Math.sin(w), dy = Math.cos(w);   // ink bursts out both sides of the wound
     for (let i = 0; i < 14; i++) { const s = (i % 2 ? 1 : -0.6) * (220 + Math.random() * 300); addDrop(pt[0], pt[1], g.facing * dx * s + (Math.random() - 0.5) * 120, dy * s - 120 - Math.random() * 160, 0.9 + Math.random() * 1.2, Math.random() < 0.4 + 0.6 * red ? RED : undefined); }
     for (let i = 0; i < 10; i++) { const an = Math.random() * TAU; addMote(pt[0], pt[1], Math.cos(an) * 300, Math.sin(an) * 300, 0.3, 1 + Math.random() * 1.4, 300); }
@@ -3050,7 +3057,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!over || !f.box || f.box[3] < PLAT.y - 4) return;
     g.slamWatch = null;
     const A = DG_ATK.pierce, ls = launchScale(f.damage || 0), x = f.x, y = PLAT.y;
-    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + A.impact);
+    const AI = dgDmg(A.impact);
+    f.damage = Math.min(MAX_DAMAGE, (f.damage || 0) + AI);
     f.vy = -A.bounce * (0.75 + 0.25 * ls); f.vx *= A.carry;   // rebound up, still carried on by the throw
     Object.assign(f.rag, { phase: 'air', av: g.facing * 13 });
     shakeT = Math.max(shakeT, 0.42);
@@ -3062,7 +3070,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     for (let i = 0; i < 24; i++) { const an = -Math.PI * Math.random(); addMote(x + (Math.random() - 0.5) * 40, y - 6, Math.cos(an) * (200 + Math.random() * 360), Math.sin(an) * (160 + Math.random() * 300), 0.4, 1 + Math.random() * 1.6, 700); }
     for (const d of [-1, 1]) dgWaves.push({ x: x + d * 20, dir: d, t: 0, life: 0.26 });   // two short ink crests running out from the impact
-    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x, y: y - 40, v: A.impact, kill: false, dir: g.facing, t: 0 }); }
+    if (showDmg) { for (const n of dmgNums) n.y -= 46; dmgNums.push({ x, y: y - 40, v: AI, kill: false, dir: g.facing, t: 0 }); }
   }
 
 
@@ -3072,12 +3080,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     P_.hit = true; pl.lungeT = 0; pl.vx *= 0.3;
     const wh = pl.wpn ? wpnHit(pl, 'dg', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 };
     const before = g.damage, take = Math.round(wh.dmg * DG.take * 10) / 10;
-    g.damage = Math.min(MAX_DAMAGE, g.damage + take);
+    g.damage = Math.min(DG.max, g.damage + take);
     g.shudder = 0.14;
     if (showDmg) { for (const n of dmgNums) n.y -= 34; dmgNums.push({ x: fx + kd * 34, y: fy + 6, v: take, kill: !!A.ragdoll, dir: kd, t: 0 }); }
     for (let i = 0; i < Math.round(5 * A.dmg); i++) { const a = Math.atan2(-0.3, kd) + (Math.random() - 0.5) * 2.4; addMote(fx, fy, Math.cos(a) * (220 + Math.random() * 240), Math.sin(a) * (220 + Math.random() * 240), 0.25, 0.8 + Math.random(), 300); }
     if (A.ragdoll && before >= DG.weak) {   // worn down: kill blows finally send him flying
-      const k = DG.launchLo + (DG.launchHi - DG.launchLo) * Math.min(1, (before - DG.weak) / (MAX_DAMAGE - DG.weak)), ls = launchScale(before) * k;
+      const k = DG.max > DG.weak ? DG.launchLo + (DG.launchHi - DG.launchLo) * Math.min(1, (before - DG.weak) / (DG.max - DG.weak)) : DG.launchHi, ls = launchScale(before) * k;
       g.state = 'rag'; g.rag = { t: 0, left: ragTime(g.damage) * 1.1, av: -kd * g.facing * 3.5, ground: false };
       g.vx = kd * A.kb * wh.kb * ls * 1.6; g.vy = -Math.max(260, A.pop) * ls * wh.kb; shakeT = 0.25;
       g.label = ''; g.labelT = 0;
@@ -3343,7 +3351,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   function drawDG() {
     const g = dg; if (!g || !g.R || g.y < -480) return;
-    const R_ = g.R, t = g.time, d01 = Math.min(1, g.damage / MAX_DAMAGE), layers = dgLayers(R_, g);
+    const R_ = g.R, t = g.time, d01 = Math.min(1, g.damage / DG.max), layers = dgLayers(R_, g);
     // contact shadow
     if (g.x > PLAT.x0 - 40 && g.x < PLAT.x1 + 40 && g.y > PLAT.y - 600) {
       const sc = Math.max(0.3, 1 - Math.max(0, PLAT.y - g.y) / 500);
@@ -3475,7 +3483,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   for (const v of Object.values(DG_HUD)) v.ring = hudRing(v.x, HUD_Y, HUD_R, 91);
   function drawDGPortrait() {
     const g = dg, ht = dgHudT(); if (!g || ht < 0) return;
-    const h = DG_HUD[g.owner === pl ? 'pl' : 'bot'], cx = h.x, cy = HUD_Y, d = g.damage, d01 = Math.min(1, d / MAX_DAMAGE), weak = d >= DG.weak;
+    const h = DG_HUD[g.owner === pl ? 'pl' : 'bot'], cx = h.x, cy = HUD_Y, d = g.damage, d01 = Math.min(1, d / DG.max), weak = d >= DG.weak;
     if (d > (h.last || 0) + 0.01) h.popT = g.time;
     h.last = d;
     // flying in from the outside edge, accelerating into the slot; a little recoil after the hit

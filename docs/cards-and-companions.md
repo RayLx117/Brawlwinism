@@ -157,10 +157,11 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 - He takes 60% of a hit's damage. A jab, cross, uppercut string does 7.2% to him.
 - Hits shove him only 4% as far as they'd shove a fighter.
 - Nothing stuns him: no hitstun, no parry stun, no knockdowns, no pops. Parrying one of his hits blocks it ("parried, unshaken"), but he keeps going.
-- Below **100%** a kill blow just shows "unshaken". From 100% on, kill blows ragdoll him at 0.55× a fighter's launch, rising to 0.9× at 150%.
+- His damage goes up to **500%** (`DG.max`), not 150%. Below 500% a kill blow just shows "unshaken"; at 500%, kill blows ragdoll him at 0.9× a fighter's launch (Ray raised both from 100% / 150%).
 - His ragdoll is one heavy body that tumbles, bounces off the floor and wall, and gets up. He doesn't recover in the air.
 - He dies only by leaving the screen.
-- From 100% on, red goo drips off him. Red rises up his border with damage, and his HUD portrait number turns red and pulses.
+- At 500%, red goo drips off him. Red rises up his border with damage (scaled to 500%), and at 500% his HUD portrait number turns fully red and pulses.
+- **His damage scales with his owner's weapon** (Ray's request): each of his hits does × (1 + the owner's weapon damage per hit / 40) (`DG.wpnK`). No weapon is ×1; a common sword (about 10%) about ×1.25; a mythic (about 45%) about ×2.1; an Ancient (65%) ×2.6. The pierce's ground impact scales too.
 
 **Attacks (`DG_ATK`).** Each one shows a red watercolour zone that fills toward the moment it hits, hatched with red brush lines and outlined in heavier red in the last 0.1 s. Every hit launches, and the launch grows with the target's damage, except the Quake, which pops you up and hit-stuns you instead.
 

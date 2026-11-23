@@ -40,6 +40,7 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 | `node dg-hud-entrance.js` | His HUD entrance for both owners: his portrait flies in and knocks the owner's out (`out/dg-hud-entrance-*.png`). |
 | `node dg-flash-shot.js` | Close-up frames of the pierce's flash jab and its sound-barrier burst (`out/flash.png`). `node dg-pierce.js` covers the hits from every angle; `BOXES=0` renders it without the hitbox view. |
 | `node dg-rounds.js` | Four Divine General rounds back to back: checks his portrait's number stays normal size after each respawn, and that nothing from the last round lingers (`out/dg-rounds.png`). |
+| `node dg-power.js` | His hits scaling with his owner's weapon (one cleave per weapon tier), and kill blows ragdolling him only at 500%. |
 | `node weapon-rolls.js` | Rolls 2000 weapons of each rarity: prints the damage spread and modifier slots, and checks every roll is in range. |
 | `node weapon-mods.js` | Every weapon modifier in a fight (on the bot, and a set of them against the Divine General); checks the stacking / curse / bless maths, Anchor, and page errors. |
 | `node forge-shot.js` | The forge, start to finish: opens it on the Sword, sets Legendary and four modifiers (one cursed, one stacked), screenshots the forge, the picker and the cards screen, then lands a sword jab. |
