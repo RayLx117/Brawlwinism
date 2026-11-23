@@ -1373,7 +1373,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
   }
 
-  // ---- No Scope (passive card): when an enemy is ragdolled and it's ready, a red X marks them; X whips out a sniper and shoots them,
+  // ---- No Scope (passive card): when an enemy is ragdolled and it's ready, a red crosshair marks them; X whips out a sniper and shoots them,
   // through the ragdoll (an exception: ragdolls can't normally be hit). Numbers in NOSCOPE. kb / pop: half a full horizontal kill
   // (the sucker punch's 560 / 230), scaled by their damage as usual; the shot restarts their ragdoll
   // the shot takes `anim` s: the rifle whipped from over the back (whip), swung down onto the target and tracking their torso right up to
@@ -1407,12 +1407,17 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function stepCardCds(f, dt) { if (f.cds) for (const id in f.cds) { const c = f.cds[id]; c.t -= dt; if (c.t <= 0) delete f.cds[id]; } }
   const clearCardCds = (f) => { f.cds = {}; };
   const noScopeFx = [];   // tracers and the rifle out: { kind, ... , t }
-  let noScopeMark = null;   // the red X, built once (local coords, centred)
+  let noScopeMark = null;   // the red crosshair, built once (local coords, centred)
   const hasNoScope = (side) => (LOADOUT[side].passives || []).includes('noScope');
-  function noScopeMarkPath() {   // the red X: two bristle-brush strokes, built once
+  function noScopeMarkPath() {   // the red crosshair: a bristle-brush ring, four ticks crossing it and a dab in the middle, built once
     if (!noScopeMark) {
-      const a = bristleStroke([[-17, -19], [0, 1], [18, 20]], 9, 1490, { dry: 0.6 }), b = bristleStroke([[17, -18], [0, 0], [-18, 19]], 8, 1491, { dry: 0.62 });
-      noScopeMark = new Path2D(); for (const st of [a, b]) { noScopeMark.addPath(st.body); noScopeMark.addPath(st.hairs); }
+      const ring = [];   // laid round from the top-left, the end lapping just past the start so it reads as one loaded stroke
+      for (let i = 0; i <= 26; i++) { const a = -2.2 + (TAU + 0.35) * i / 26, rr = 13 + 0.6 * Math.sin(i * 0.9); ring.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+      const strokes = [bristleStroke(ring, 4.6, 1490, { dry: 0.72 }),
+        bristleStroke([[0, -22], [0.3, -14], [0, -6]], 4.2, 1491, { dry: 0.6 }), bristleStroke([[0, 22], [-0.3, 14], [0, 6]], 4.2, 1492, { dry: 0.6 }),
+        bristleStroke([[-22, 0], [-14, 0.3], [-6, 0]], 4.2, 1493, { dry: 0.6 }), bristleStroke([[22, 0], [14, -0.3], [6, 0]], 4.2, 1494, { dry: 0.6 })];
+      noScopeMark = new Path2D(); for (const st of strokes) { noScopeMark.addPath(st.body); noScopeMark.addPath(st.hairs); }
+      noScopeMark.moveTo(2, 0); noScopeMark.arc(0, 0, 2, 0, TAU);   // the dab in the middle
     }
     return noScopeMark;
   }
@@ -1576,7 +1581,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
   }
   function drawNoScope() {
-    // the mark: a red X painted over the ragdolled enemy while the card is ready
+    // the mark: a red crosshair painted over the ragdolled enemy while the card is ready
     const T_ = noScopeReady(pl) ? noScopeTarget(pl) : pl.snipe && !pl.snipe.fired ? (() => { const t2 = snipeTargetOf(pl.snipe.kind); return t2 && { kind: pl.snipe.kind, c: t2.c }; })() : null;
     if (T_) {
       noScopeMarkPath();
@@ -4222,7 +4227,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   window.__weapons = { WEAPON_RARITY, WEAPONS, MODS, MOD_CHANCE, rollWeapon, weaponStats };   // test hook
   const CARDS = [
     { id: 'noScope', name: 'No Scope', type: 'passive', rarity: 'uncommon', art: 'noScope',
-      text: 'When an enemy is ragdolled, a red X marks them. Press X to whip out a sniper and shoot them (X takes priority over attacking while the mark is up): 20% damage and a fresh launch at half a kill blow’s knockback. It can hit ragdolls. 10 s cooldown.' },
+      text: 'When an enemy is ragdolled, a red crosshair marks them. Press X to whip out a sniper and shoot them (X takes priority over attacking while the mark is up): 20% damage and a fresh launch at half a kill blow’s knockback. It can hit ragdolls. 10 s cooldown.' },
     { id: 'sword', name: 'Sword', type: 'weapon', rarity: 'common', art: 'sword', weapon: 'sword',
       text: 'A straight blade held in the lead hand: it carries that arm’s hits further. Its rarity, damage and modifiers are rolled per copy.' },
     { id: 'divineGeneral', name: 'Divine General', type: 'companion', rarity: 'ancient', art: 'divineGeneral',
@@ -4356,7 +4361,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // card faces and the cooldown badges round the HUD portraits
   function cardArt(c, cx, y0, ch, s, t) {
     if (c.art === 'divineGeneral') dgBust(cx, y0 + ch * 0.66, s / 255, t, 1);
-    if (c.art === 'noScope') {   // the rifle across the card, the red X over it
+    if (c.art === 'noScope') {   // the rifle across the card, the red crosshair over it
       const k = s / 120, cy = y0 + ch * 0.5, o = s >= 60 ? 1 : k / 0.8;   // (the offsets shrink with it on a small badge)
       setM(chain(T(cx - 4 * o, cy + 10 * o), R(-0.35), Sc(k, k), T(-24, 0))); paintRifle();
       setM(chain(T(cx + 4 * o, cy - 10 * o), Sc(k * 1.15, k * 1.15))); ctx.fillStyle = `rgb(${RED})`; ctx.fill(noScopeMarkPath()); setM(ID);

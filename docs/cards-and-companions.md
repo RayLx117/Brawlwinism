@@ -128,7 +128,7 @@ The player can now be hit, so the player has a damage % too, shown on the HUD. D
 
 ## No Scope (passive, Uncommon)
 
-While the holder's enemy is ragdolled (the bot, or the Divine General when he's knocked flying) and the card is ready, a red X painted with the bristle brush marks them, pulsing slightly.
+While the holder's enemy is ragdolled (the bot, or the Divine General when he's knocked flying) and the card is ready, a red crosshair painted with the bristle brush marks them, pulsing slightly.
 - **Firing:** while the mark is up, pressing **X** (or the controller's X) whips the rifle out at once. It takes priority over attacking, so that press doesn't attack, and it cuts short any attack already under way. Otherwise X attacks as usual; J only attacks. No new attacks while the rifle is out.
 - **The animation (0.7 s: the target has to time a parry or a dodge):**
   1. The fighter drops onto one knee: the front foot is planted forward, the back knee is on the floor and the body holds still.
@@ -147,7 +147,7 @@ While the holder's enemy is ragdolled (the bot, or the Divine General when he's 
 - **Muzzle flash:** tapered brush-stroke flame petals, red outside with a yellow core, bursting and shrinking back in `NOSCOPE.flash` (0.09 s).
 - **Fill:** a medium-dark grey (`RIFLE_FILL_COL`) under the ink lines, from the silhouette made by `tests/sniper-fill.py`.
 
-Numbers in `NOSCOPE`. **The rifle** is Ray's ink drawing (`reference/sniper-ink.webp`), traced to vector by `tests/sniper-trace.py` (`reference/sniper-trace.svg`), with the pistol grip in the hand and the muzzle at the tip of the barrel. The card shows it with the red X.
+Numbers in `NOSCOPE`. **The rifle** is Ray's ink drawing (`reference/sniper-ink.webp`), traced to vector by `tests/sniper-trace.py` (`reference/sniper-trace.svg`), with the pistol grip in the hand and the muzzle at the tip of the barrel. The card shows it with the red crosshair.
 
 ## Divine General (companion, Ancient)
 
