@@ -1463,20 +1463,25 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // the pose while the rifle is out, in the body frame (0 = down, −π/2 = forward, ±π = up): whipped over the back, then shouldered on the aim
   function snipePose(f, tg) {
     const S_ = f.snipe; if (!S_ || S_.wait) return tg;
-    const A = NOSCOPE, sx = f.x, sy = f.y - 55, [tx, ty] = S_.at;
-    const aim = -Math.PI / 2 - Math.atan2(sy - ty, Math.max(1, Math.abs(tx - sx)));   // the arm along the line to the target
-    const BACK = 2.7;   // over the shoulder, behind the head
+    const A = NOSCOPE, K = A.kneel, sx = f.x, sy = f.y - 50, [tx, ty] = S_.at;
+    const phi = Math.atan2(sy - ty, Math.max(1, Math.abs(tx - sx)));   // how far above level the target is
+    // the chest turns to face the target: the torso tips back to aim up, forward to aim down (within what a body can do). The arms
+    // and head then hold the rifle the same way every time, relative to the torso; past the torso's range the arms make up the rest
+    const tl = Math.max(-1.1, Math.min(0.9, (f.onGround ? K.tl : 0.1) - phi)), aimAbs = -Math.PI / 2 - phi;
+    const hold = aimAbs - tl;   // the lead arm's angle against the torso (straight out from the chest when the torso covers it all)
+    const BACK = 2.7 - tl;      // the whip starts with the rifle behind the shoulder
     let u;
-    if (S_.t < A.whip) { const e = S_.t / A.whip, s = e * e * (3 - 2 * e); u = BACK + (aim + TAU - BACK) * s; }   // the whip: from over the back, up over the head and down onto the target (the long way round)
-    else u = aim + TAU;   // (kept on the far side of the turn so the easing doesn't swing it back under)
+    if (S_.t < A.whip) { const e = S_.t / A.whip, s = e * e * (3 - 2 * e); u = BACK + (hold + TAU - BACK) * s; }   // from over the back, up over the head and down onto the target (the long way round)
+    else u = hold + TAU;   // (kept on the far side of the turn so the easing doesn't swing it back under)
     const kick = S_.fired ? 0.25 * Math.max(0, 1 - (S_.t - A.anim) / 0.12) : 0;
-    const out = { ...tg, fa1: u - kick - tg.tl, fa2: -0.05, ba1: Math.max(-2.6, u + 0.55) - tg.tl, ba2: -1.0, hd: 0.05 };
+    const out = { ...tg, tl, hd: 0.08, fa1: u - kick, fa2: -0.05, ba1: Math.max(-2.6 - tl, u + 0.55), ba2: -1.0 };
     if (f.onGround) {   // down on one knee to take the shot: front foot planted forward with its knee up, back knee on the floor, shin flat behind
-      const [fl1, fl2] = ik(A.kneel.fx, A.kneel.fy);
-      Object.assign(out, { fl1, fl2, ff: 0, bl1: A.kneel.bl1, bl2: A.kneel.bl2, bf: A.kneel.bf, tl: A.kneel.tl, fa1: u - kick - A.kneel.tl, ba1: Math.max(-2.6, u + 0.55) - A.kneel.tl, dx: 0 });
+      const [fl1, fl2] = ik(K.fx, K.fy);
+      Object.assign(out, { fl1, fl2, ff: 0, bl1: K.bl1, bl2: K.bl2, bf: K.bf, dx: 0 });
     }
     return out;
   }
+
   function drawNoScope(dt) {
     setM(ID);
     for (let i = noScopeFx.length - 1; i >= 0; i--) {   // the shot: a hard ink streak from the muzzle to the target, thinning away fast

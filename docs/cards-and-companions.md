@@ -133,6 +133,7 @@ While the holder's enemy is ragdolled (the bot, or the Divine General when he's 
 - **The animation (0.7 s, so the target has time to parry or dash):**
   1. The fighter drops onto one knee: the front foot is planted forward, the back knee is on the floor and the body holds still.
   2. The rifle whips out from behind the shoulder, up over the head and down onto the target (0.32 s), then tracks them.
+  - **Aiming (Ray's rule):** the torso turns so the chest faces the target, tipping back for high targets and forward for low ones. The arms and head hold the rifle the same way every time, relative to the torso. Only past the torso's range (about 63° back or 52° forward) do the arms make up the rest.
   3. For the last 0.15 s the aim locks, and a thin red dashed sight line shows exactly where it will go.
   4. At 0.7 s it fires straight down the barrel, with a muzzle blast, an ink tracer and recoil. The rifle stays up 0.25 s more.
 - **The shot:** whatever is on that line is hit, and it goes through ragdolls as an exception. A parry blocks it; dashing off the line dodges it. A hit does 20% (the Divine General takes his usual 60% of that). It relaunches them at half a full horizontal kill's knockback (280 / 115, scaled by their damage), added to how they're already flying, and restarts their ragdoll.
