@@ -3962,7 +3962,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     cards.passScroll = Math.max(0, Math.min(cards.passScroll, passN - PASS_VIS));
   }
   function cardsActivate(row, col) {
-    if (row === R_GEAR || row === R_PASS) {   // a slot: show its cards in the gallery
+    if (row === R_GEAR && equipped[CARD_SLOTS[col].key]) {   // a filled slot: unequip it
+      const k = CARD_SLOTS[col].key; equipped[k] = null; if (k === 'weapon') equipped.weaponSpec = null; return;
+    }
+    if (row === R_PASS && col < equipped.passives.length) { equipped.passives.splice(col, 1); return; }   // a filled passive slot: take it off (the row closes up)
+    if (row === R_GEAR || row === R_PASS) {   // an empty slot: show its cards in the gallery
       if (row === R_PASS) { cards.passSlot = col; cards.passPick = true; }
       setTab(tabOf(row === R_GEAR ? CARD_SLOTS[col].key : 'passive'));
       if (galleryCards().length) cardsFocus(R_GAL, 0); else cardsFocus(R_TABS, cards.tab);
