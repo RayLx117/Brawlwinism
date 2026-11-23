@@ -569,7 +569,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // ---------------------------------------------------------------- input
   const down = new Set();
   const MAP = { KeyA: ['left'], ArrowLeft: ['left'], KeyD: ['right'], ArrowRight: ['right'], KeyS: ['down'], ArrowDown: ['down'],
-    KeyW: ['jump', 'up'], ArrowUp: ['jump', 'up'], Space: ['jump'], KeyJ: ['punch'], KeyX: ['punch'], ShiftLeft: ['shift'], ShiftRight: ['shift'], KeyP: ['botmode'], KeyH: ['boxes'],
+    KeyW: ['jump', 'up'], ArrowUp: ['jump', 'up'], Space: ['jump'], KeyJ: ['punch'], KeyX: ['punch', 'snipe'], ShiftLeft: ['shift'], ShiftRight: ['shift'], KeyP: ['botmode'], KeyH: ['boxes'],
     Escape: ['pause'], Enter: ['ok'], NumpadEnter: ['ok'], Backspace: ['back'] };
   MAP.Space = ['jump', 'ok'];   // Space also confirms in the pause menu
   const pressed = new Set();
@@ -595,6 +595,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (ay > 0.5 || b(13)) now.add('down');
       if (b(0) || b(3)) now.add('jump');
       if (b(1) || b(2)) now.add('punch');
+      if (b(2)) now.add('snipe');   // controller X: also No Scope's trigger
       if (b(4) || b(5) || b(6) || b(7)) now.add('shift');
       if (b(8)) now.add('botmode');
       if (b(9)) now.add('pause');
@@ -1372,6 +1373,88 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
   }
 
+  // ---- No Scope (passive card): when an enemy is ragdolled and it's ready, a red X marks them; X whips out a sniper and shoots them,
+  // through the ragdoll (an exception: ragdolls can't normally be hit). Numbers in NOSCOPE. kb / pop: half a full horizontal kill
+  // (the sucker punch's 560 / 230), scaled by their damage as usual; the shot restarts their ragdoll
+  const NOSCOPE = { cd: 10, dmg: 20, kb: 280, pop: 115, spin: 8, aim: 0.38 };
+  const noScopeFx = [];   // tracers and the rifle out: { kind, ... , t }
+  let noScopeMark = null;   // the red X, built once (local coords, centred)
+  const hasNoScope = (side) => (LOADOUT[side].passives || []).includes('noScope');
+  function noScopeMarkPath() {   // the red X: two bristle-brush strokes, built once
+    if (!noScopeMark) {
+      const a = bristleStroke([[-17, -19], [0, 1], [18, 20]], 9, 1490, { dry: 0.6 }), b = bristleStroke([[17, -18], [0, 0], [-18, 19]], 8, 1491, { dry: 0.62 });
+      noScopeMark = new Path2D(); for (const st of [a, b]) { noScopeMark.addPath(st.body); noScopeMark.addPath(st.hairs); }
+    }
+    return noScopeMark;
+  }
+  // the sniper rifle in its own frame (x along the barrel, the grip at 0,0)
+  function paintRifle() {
+    ctx.fillStyle = INK;
+    ctx.fill(brushPath([[-30, 4], [-10, 2], [8, 0]], 9, 0.25, 0.05, 0.4, 1495));       // stock
+    ctx.fill(brushPath([[0, -1], [40, -1], [78, -1.5]], 3.6, 0.02, 0.05, 0.2, 1496));   // barrel
+    ctx.fill(brushPath([[6, -7], [22, -7]], 5, 0.15, 0.15, 0.2, 1497));                 // scope
+    ctx.fill(brushPath([[8, -4], [8, -1]], 1.6, 0.1, 0.1, 0, 1498)); ctx.fill(brushPath([[20, -4], [20, -1]], 1.6, 0.1, 0.1, 0, 1499));
+    ctx.fill(brushPath([[-2, 1], [0, 9]], 3, 0.1, 0.4, 0, 1500));                       // grip
+  }
+  // the enemy it would shoot: whoever the holder is fighting, while they're ragdolled (the bot, or the Divine General)
+  function noScopeTarget(f) {
+    if (f !== pl) return null;
+    if (dg && dg.owner !== pl && dg.state === 'rag' && dg.R) return { kind: 'dg', c: dg.R.centre, f: dg };
+    if (bot.rag && !(bot.dead > 0) && !bot.out && bot.R) return { kind: 'bot', c: bot.R.centre, f: bot };
+    return null;
+  }
+  const noScopeReady = (f) => f.noScope && (f.nsCd || 0) <= 0 && !f.rag && !f.out;
+  function noScopeFire(f) {
+    if (!noScopeReady(f)) return false;
+    const T_ = noScopeTarget(f); if (!T_) return false;
+    f.nsCd = NOSCOPE.cd;
+    const [tx, ty] = T_.c, dir = Math.sign(tx - f.x) || f.facing; f.facing = dir;
+    f.snipeT = NOSCOPE.aim; f.snipeAt = [tx, ty];
+    const Rg = f === pl ? R0 : f.R, [mx, my] = Rg ? apply(Rg.fa.lo, 0, 19) : [f.x, f.y - 40];
+    noScopeFx.push({ kind: 'tracer', x0: mx, y0: my, x1: tx, y1: ty, t: 0 });
+    shakeT = Math.max(shakeT, 0.2);
+    for (let i = 0; i < 12; i++) { const a = Math.atan2(ty - my, tx - mx) + (Math.random() - 0.5) * 0.9; addMote(mx, my, Math.cos(a) * (300 + Math.random() * 300), Math.sin(a) * (300 + Math.random() * 300), 0.25, 1 + Math.random() * 1.4, 100); }
+    addToTarget(T_.kind, NOSCOPE.dmg, [tx, ty]);
+    for (let i = 0; i < 16; i++) addDrop(tx, ty, dir * (200 + Math.random() * 400), -100 - Math.random() * 300, 0.8 + Math.random() * 1.2, Math.random() < 0.5 ? RED : undefined);
+    const T = T_.f, ls = launchScale(T.damage || 0, maxDmg(T));
+    // the launch is added to how they're already flying, so a shot never slows a fast ragdoll down
+    if (T_.kind === 'bot') { startRagdoll(bot, bot.vx + dir * NOSCOPE.kb * ls, Math.min(bot.vy, 0) - NOSCOPE.pop * ls, dir * NOSCOPE.spin); bot.combo = 0; }
+    else { dg.vx += dir * NOSCOPE.kb * ls * 1.6; dg.vy = Math.min(dg.vy, 0) - NOSCOPE.pop * ls; dg.rag.left = Math.max(dg.rag.left, ragTime(dg.damage, DG.max)); dg.rag.ground = false; dg.rag.av = -dir * 3; }
+    procLabel('No Scope', [tx, ty]);
+    return true;
+  }
+  function noScopeStep(f, dt) {
+    if (!f.noScope) return;
+    f.nsCd = Math.max(0, (f.nsCd || 0) - dt); f.snipeT = Math.max(0, (f.snipeT || 0) - dt);
+  }
+  function drawNoScope(dt) {
+    setM(ID);
+    for (let i = noScopeFx.length - 1; i >= 0; i--) {   // the shot: a hard ink streak from the muzzle to the target, thinning away fast
+      const e = noScopeFx[i]; e.t += dt; const k = e.t / 0.18; if (k >= 1) { noScopeFx.splice(i, 1); continue; }
+      ctx.fillStyle = `rgba(21,18,15,${0.95 * (1 - k)})`; ctx.fill(brushPath([[e.x0, e.y0], [(e.x0 + e.x1) / 2, (e.y0 + e.y1) / 2], [e.x1, e.y1]], 5 * (1 - k) + 1, 0.02, 0.5, 0.2, 1480));
+      ctx.fillStyle = `rgba(${RED},${0.8 * (1 - k)})`; ctx.fill(brushPath([[e.x0, e.y0], [e.x1, e.y1]], 1.6 * (1 - k) + 0.4, 0.05, 0.3, 0, 1481));
+    }
+    // the mark: a red X painted over the ragdolled enemy while the card is ready
+    const T_ = noScopeReady(pl) ? noScopeTarget(pl) : null;
+    if (T_) {
+      noScopeMarkPath();
+      const t = pl.time, sc = (T_.kind === 'dg' ? 2.2 : 1) * (1 + 0.06 * Math.sin(t * 9));
+      setM(chain(T(T_.c[0], T_.c[1]), R(0.12 * Math.sin(t * 2.3)), Sc(sc, sc)));
+      ctx.fillStyle = 'rgba(243,236,221,0.75)'; ctx.save(); ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(243,236,221,0.75)'; ctx.lineWidth = 4; ctx.stroke(noScopeMark); ctx.restore();
+      ctx.fillStyle = `rgb(${RED})`; ctx.fill(noScopeMark);
+    }
+  }
+  // the sniper, while it's out: an ink rifle held up to the shoulder, aimed at where the shot went, with a kick of recoil
+  function drawRifle(f, Rg) {
+    if (!(f.snipeT > 0) || !Rg) return;
+    const e = 1 - f.snipeT / NOSCOPE.aim, [hx, hy] = apply(Rg.fa.lo, 0, 19), [tx, ty] = f.snipeAt, a = Math.atan2(ty - hy, tx - hx);
+    const kick = 7 * Math.max(0, 1 - e * 5), al = Math.min(1, f.snipeT / 0.08);
+    setM(chain(T(hx, hy), R(a), T(-kick, 0)));
+    ctx.save(); ctx.globalAlpha = al; paintRifle();
+    if (e < 0.25) { const k2 = 1 - e / 0.25; ctx.fillStyle = `rgba(21,18,15,${k2})`; ctx.fill(brushPath([[80, -1.5], [92, -6], [100, -1], [92, 4], [80, -1.5]], 4 * k2, 0.1, 0.1, 1.5, 1501)); }   // muzzle blast
+    ctx.restore();
+  }
+
   // Both walls face left: the big wall on the right (x WALL, any height) and the cliff face under the open edge
   // (x PLAT.x0, below floor level). wallXAt gives the wall face a point at height y would run into.
   const CLIFF_Y = PLAT.y + 4;   // a few px of grace so feet standing on the floor never count as being in the cliff
@@ -1465,6 +1548,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     pl.crouchK += ((crouching ? 1 : 0) - pl.crouchK) * (1 - Math.exp(-18 * dt));
 
     // punch
+    if (pressed.has('snipe')) noScopeFire(pl);   // No Scope: X attacks as normal and, while the mark is up, also fires the shot (an extra hit on a combo)
     if (pressed.has('punch')) B.punch = 0.16;
     if (B.punch > 0 && !shielding && pl.staggerT <= 0 && pl.landT <= 0 && !(pl.dashT > 0 && pl.dashAir)) {
       if (!pl.punch.on) { startPunch(); B.punch = 0; }
@@ -1636,6 +1720,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     else if (pl.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
     if (pl.landT > 0) target = mixPose(target, idlePose(pl.time, 0.8), Math.min(1, pl.landT / 0.06));   // landing squat
     if (pl.wpn) target = swordHold(pl, target);   // holding a sword: the arms take its stance
+    if (pl.snipeT > 0 && pl.snipeAt) {   // No Scope: shouldering the rifle, both arms out along the aim
+      const [tx, ty] = pl.snipeAt, sx = pl.x, sy = pl.y - 55;
+      const up = Math.max(-2.9, Math.min(-0.3, -Math.PI / 2 - Math.atan2(sy - ty, Math.abs(tx - sx))));
+      target = { ...target, fa1: up - target.tl, fa2: -0.15, ba1: up - target.tl + 0.35, ba2: -0.9, hd: 0.05 };
+    }
     let atkRate = 0, atkPh = -1;
     if (pl.punch.on) {
       const P_ = pl.punch, A = P_.A, t = P_.t;
@@ -1744,6 +1833,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     botUpdate(dt);
     dgUpdate(dt);
     wpnWorldStep(dt);
+    noScopeStep(pl, dt);
     roundUpdate(dt);
     for (const [f, R] of [[pl, R0], [bot, bot.R]]) { const e = PARRY_WIN - f.parryT; parrySparks(f, R, dt, e >= 0.05 && e - dt < 0.05); }   // big burst once the arms are crossed
     stepSparks(dt);
@@ -2038,7 +2128,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       drawPart(PARTS.upperArm, r.ba.up, false, st, ink);
       drawPart(PARTS.lowerArm, r.ba.lo, false, st, ink);
     }
-    if (f.wpn) drawSword(r.fa.lo, f.wpn, INK, f.swordW || 0, SWORD_HOLD.scale, f);   // the weapon, under the lead hand: the fist wraps over its grip
+    if (f.wpn && !(f.snipeT > 0)) drawSword(r.fa.lo, f.wpn, INK, f.swordW || 0, SWORD_HOLD.scale, f);   // (put away while the No Scope rifle is out)   // the weapon, under the lead hand: the fist wraps over its grip
     drawPart(PARTS.upperArm, r.fa.up, false, st, ink);
     drawPart(PARTS.lowerArm, r.fa.lo, false, st, ink);
   }
@@ -2524,8 +2614,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     drawRagTrail();
     drawBot();
     drawDrops();
-    if (!inDrill() && !pl.out) { drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); }
+    if (!inDrill() && !pl.out) { drawInkBody(); drawFighter(r); drawParryTint(pl, 'core', 'liq', pl.x, pl.y); drawRifle(pl, r); }
     drawDrill();
+    drawNoScope(pl.paused ? 1 / 60 : lastDt);   // the mark and the shot sit over the fighters
     drawSparks();
     if (!pl.out) drawCooldown(r);
     if ((pl.staggerT > 0 || pl.stunT > 0) && r && !inDrill()) {   // stunned (a parry, or a hit): the same circling ink dots as the bot
@@ -3549,6 +3640,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
     for (const l of [echoes, phantoms, inkPools, wpnWaves, procs]) l.length = 0;
     pl.wpn = weaponStats(LOADOUT.pl.weapon && LOADOUT.pl.weaponSpec); bot.wpn = weaponStats(LOADOUT.bot.weapon && LOADOUT.bot.weaponSpec);   // the weapons each side holds this round
+    pl.noScope = hasNoScope('pl'); pl.nsCd = 0; pl.snipeT = 0; noScopeFx.length = 0;
     for (const f of [pl, bot]) Object.assign(f, { anchorUsed: false, lastHitT: -99, parryOkT: -99, hits: 0, gbT: 0, bleedT: 0 });
     Object.assign(pl, { x: GW / 2, y: PLAT.y, vx: 0, vy: 0, onGround: true, facing: 1, rag: null, out: false, launched: false, damage: 0, rot: 0, roll: 1,
       staggerT: 0, stunT: 0, lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false,
@@ -3938,6 +4030,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   window.__weapons = { WEAPON_RARITY, WEAPONS, MODS, MOD_CHANCE, rollWeapon, weaponStats };   // test hook
   const CARDS = [
+    { id: 'noScope', name: 'No Scope', type: 'passive', rarity: 'uncommon', art: 'noScope',
+      text: 'When an enemy is ragdolled, a red X marks them. Press X (it still attacks too) to whip out a sniper and shoot them: 20% damage and a fresh launch at half a kill blow’s knockback. It can hit ragdolls. 10 s cooldown.' },
     { id: 'sword', name: 'Sword', type: 'weapon', rarity: 'common', art: 'sword', weapon: 'sword',
       text: 'A straight blade held in the lead hand: it carries that arm’s hits further. Its rarity, damage and modifiers are rolled per copy.' },
     { id: 'divineGeneral', name: 'Divine General', type: 'companion', rarity: 'ancient', art: 'divineGeneral',
@@ -4081,6 +4175,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - 4); ctx.clip();
     ctx.globalAlpha = ra.gold ? 0.32 : 0.42; ctx.fillStyle = ra.stain; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
     if (c.art === 'divineGeneral') dgBust(x + w / 2, y + top + (h - top - 26) * 0.66, Math.min(w, h) / 255, t, 1);
+    if (c.art === 'noScope') {   // the rifle across the card, the red X over it
+      const k = Math.min(w, h) / 120, cx = x + w / 2, cy = y + top + (h - top - 26) * 0.5;
+      setM(chain(T(cx - 4, cy + 10), R(-0.35), Sc(k, k), T(-24, 0))); paintRifle();
+      setM(chain(T(cx + 4, cy - 10), Sc(k * 1.15, k * 1.15))); ctx.fillStyle = `rgb(${RED})`; ctx.fill(noScopeMarkPath()); setM(ID);
+    }
     if (c.art === 'sword') { const k = Math.min(w, h) / 72, cx = x + w / 2, cy = y + top + (h - top - 26) * 0.52; drawSword(chain(T(cx, cy), R(-2.25), Sc(k, k), T(0, -40)), null); }
     ctx.restore();
     if (ra.gold) {   // gold brush strokes laid over the ink border

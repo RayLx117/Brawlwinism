@@ -72,7 +72,7 @@ Controls:
 - A/D or arrows: move. A short guarded walk ramps into a speedster sprint.
 - W/Up/Space: jump. Jumping again in the air does a somersault double jump.
 - S/Down: crouch, slide at full run, or fast fall in the air.
-- J/X or left click: attack. Right click: ability button (for abilities, aimed with the mouse crosshair).
+- J/X or left click: attack (X also fires the No Scope passive when it has a target). Right click: ability button (for abilities, aimed with the mouse crosshair).
 - Shift: with a direction it dashes, any of 8 ways in the air. With no direction it is an instant parry.
 - P: toggles bot parry. H: toggles the hitbox view.
 - A controller is supported.

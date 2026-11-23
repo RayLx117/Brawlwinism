@@ -126,6 +126,16 @@ Starting a round puts both fighters back at their start, fresh, at 0%.
 
 The player can now be hit, so the player has a damage % too, shown on the HUD. Divine General hits launch the player with the same ragdoll as the bot: limp, no control, and the launch grows with damage. Leaving the screen still means death. While the General is in play, a fighter knocked off the screen sits the round out instead of respawning.
 
+## No Scope (passive, Uncommon)
+
+While the holder's enemy is ragdolled (the bot, or the Divine General when he's knocked flying) and the card is ready, a red X painted with the bristle brush marks them, pulsing slightly.
+- **Firing:** pressing **X** (or the controller's X) attacks as normal *and* fires the shot, as an extra hit on a combo. J only attacks.
+- **The shot:** the fighter whips out a sniper rifle, shouldered and aimed at the target, with recoil and a muzzle blast. An ink tracer runs to the target, and "No Scope" floats up.
+- **Effect:** the shot is an exception that hits through the ragdoll. It does 20% (the Divine General takes his usual 60% of that). It relaunches them at half a full horizontal kill's knockback (280 / 115, scaled by their damage), added to how they're already flying, and restarts their ragdoll.
+- **Cooldown:** 10 s from the shot, during which there's no mark.
+
+Numbers in `NOSCOPE`. The rifle and card art are placeholders until Ray sends designs.
+
 ## Divine General (companion, Ancient)
 
 Redrawn in v52 from Ray's second reference sketch (a horned, faceless god with a gold wheel) in the ink style, seen three-quarters from the front:
