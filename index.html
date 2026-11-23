@@ -1190,6 +1190,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     f.dashV = [dx, dy]; f.dashAir = air; f.dashDur = air ? AIR_DASH_T : DASH_T; f.dashT = f.dashDur;
     f.dashCd = 0.28; f.sinceDash = 0; f.flipT = 0; f.slideT = 0;
     if (Math.abs(dx) > 0.2) { f.dashDir = Math.sign(dx); f.facing = f.dashDir; }
+    fireHook(f, 'onDash', { dx, dy, air });
     f.moveT = Math.max(f.moveT, 0.6);           // come out of it already sprinting
     f.punch.on = false; f.punch.queued = false; f.punch.next = 0; f.lungeT = 0;   // dashing starts the combo over
     if (air) {   // ink swirl wraps the dash, with a splash ring where it starts
@@ -1266,11 +1267,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const b = tgt, P_ = att.punch;
     window.__hitPt = [fx, fy];   // test hook: where the last hit connected
     P_.hit = true;
-    if (b.parryT > 0 && att.wpn && att.wpn.has.guardbreak && att.time >= (att.gbT || 0)) {   // Guard Breaker: straight through the parry
-      b.parryT = 0; att.gbT = att.time + 5; procLabel('Guard Breaker', [fx, fy]);
-    }
+    if (b.parryT > 0 && anyHook(att, 'breakParry', { tgt: b.side, A, pt: [fx, fy] })) b.parryT = 0;   // a card that goes straight through a parry
     if (b.parryT > 0) {   // parried: the attacker is knocked off balance
-      if (b.wpn && b.wpn.has.mirror) { const back = att.wpn ? att.wpn.dmg : A.damage; addDmg(att, back); procLabel('Mirror', [fx, fy]); }
+      fireHook(b, 'onParry', { att: att.side, A, pt: [fx, fy] }); fireHook(att, 'onParried', { tgt: b.side, A, pt: [fx, fy] });
       b.parryOkT = b.time;
       // a successful parry: the attacker is stunned for 1.5 s, and the parry recharges at once
       att.staggerT = PARRY_STUN; att.vx = -att.facing * 220; att.lungeT = 0;
@@ -1288,7 +1287,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     b.moveLab = A.name; b.moveLabT = 1.4;
     const ls = 1 + (launchScale(b.damage, maxDmg(b)) - 1) * (A.lsK ?? 1);   // knockback uses the damage they had going in (lsK: how much damage grows it)
     const kd = A.limbs || A.radial ? (Math.sign(b.x - att.x) || att.facing) : att.facing;   // two-sided moves knock them away from you
-    const wh = att.wpn ? wpnHit(att, b.side, A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 }, dmg = wh.dmg;   // holding a weapon: its damage, through its modifiers
+    const wh = cardHit(att, b.side, A, [fx, fy]), dmg = wh.dmg;   // the hit, after the attacker's cards (a weapon: its damage, through its modifiers)
     addDmg(b, dmg);
     if (showDmg) {   // older numbers still showing step up out of the way, so a string reads as a little stack
       const step = (A.ragdoll ? 34 : 24 + Math.min(12, dmg) * 1.2) * 1.15 + 6;   // roughly the new number's height
@@ -1448,7 +1447,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   let noItemCd = false;   // practice switch (pause menu): card cooldowns off
   function cardCdMult(f) {   // how long this fighter's card cooldowns run, as a share of their base length
     if (noItemCd && f === pl) return 0;
-    const m = 1;   // (cooldown-cutting cards multiply in here)
+    const m = cardStat(f, 'cardCd');   // cooldown-cutting cards (stats.cardCd)
     return m;
   }
   function startCardCd(f, id, base) {
@@ -1460,7 +1459,6 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const clearCardCds = (f) => { f.cds = {}; };
   const noScopeFx = [];   // tracers and the rifle out: { kind, ... , t }
   let noScopeMark = null;   // the red crosshair, built once (local coords, centred)
-  const hasNoScope = (side) => (LOADOUT[side].passives || []).includes('noScope');
   function noScopeMarkPath() {   // the red crosshair: a bristle-brush ring, four ticks crossing it and a dab in the middle, built once
     if (!noScopeMark) {
       const ring = [];   // laid round from the top-left, the end lapping just past the start so it reads as one loaded stroke
@@ -1494,7 +1492,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     return null;
   }
   const sniping = (f) => !!(f.snipe && !f.snipe.wait);   // No Scope's rifle is out (its animation has priority over a parry's pose)
-  const noScopeReady = (f) => f.noScope && cardCdLeft(f, 'noScope') <= 0 && !f.rag && !f.out;
+  const noScopeReady = (f) => hasCard(f, 'noScope') && cardCdLeft(f, 'noScope') <= 0 && !f.rag && !f.out;
   // X with the mark up: the shot starts (after any attack that same press started has finished)
   function noScopeFire(f) {
     if (!noScopeReady(f) || f.snipe) return false;
@@ -1589,7 +1587,6 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
 
   function noScopeStep(f, dt) {
-    if (!f.noScope) return;
     const S_ = f.snipe; if (!S_) return;
     if (S_.wait) { if (f.punch.on) return; S_.wait = false; f.pose.fa1 = NOSCOPE_BACK; f.pose.fa2 = -0.05; }   // the rifle starts up behind the shoulder
     S_.t += dt;
@@ -1808,7 +1805,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
     // punch
     // No Scope: X with the mark up whips the rifle out at once, instead of attacking (and cutting short any attack under way)
-    if (pressed.has('snipe') && noScopeFire(f)) { f.punch.on = false; f.punch.queued = false; f.lungeT = 0; f.snipe.wait = false; f.pose.fa1 = NOSCOPE_BACK; f.pose.fa2 = -0.05; }
+    anyHook(f, 'onInput', I);   // cards that act on a press (No Scope's X)
     if (f.snipe && !f.snipe.wait) { pressed.delete('punch'); B.punch = 0; }   // the rifle is out: no attacks   // No Scope: X attacks as normal and, while the mark is up, also fires the shot (an extra hit on a combo)
     if (pressed.has('punch')) B.punch = 0.16;
     if (B.punch > 0 && !shielding && f.staggerT <= 0 && f.landT <= 0 && !(f.dashT > 0 && f.dashAir)) {
@@ -1819,7 +1816,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (f.punch.on && f.punch.A.cd) (f.moveReady || (f.moveReady = {}))[f.punch.A.key] = f.time + f.punch.A.cd;   // a move with a cooldown: ready again cd after it last ran (however it ended)
     if (f.punch.on) {
       const P_ = f.punch, A = P_.A, W = f.wpn;
-      P_.t += dt * (W && P_.t < A.wind ? 1 / Math.max(0.4, 1 - W.quick / 100) : 1);   // Quick: the wind-up runs faster (a curse slows it)
+      P_.t += dt * (P_.t < A.wind ? cardStat(f, 'windSpeed') : 1);   // cards can make wind-ups run faster (a weapon's Quick) or slower (its curse)
       if (A.float && !P_.floated && P_.t >= A.wind - 0.01) { P_.floated = true; A.float(f); f.fastFall = false; }   // aerials drift a little toward their direction
       if (!P_.lunged && P_.t >= (A.lungeAt ?? A.wind * 0.55)) {   // step into it
         P_.lunged = true; f.lungeT = A.lungeT; f.lungeV = A.lunge * (f.onGround ? 1 : 0.5);
@@ -1829,7 +1826,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         if (f.onGround) { f.vy = -A.hop; f.onGround = false; f.coyote = 0; splash(f.x, PLAT.y, 3); }
       }
       if (P_.queued && !A.air && P_.t >= A.link) startPunch(f, true);   // chain straight into the next hit
-      else if (P_.t >= (W && !P_.hit ? A.wind + A.act + (A.end - A.wind - A.act) * Math.max(0.2, 1 - W.steady / 100) : A.end)) {   // Steady: less recovery after a miss
+      else if (P_.t >= (!P_.hit && cardStat(f, 'missRecovery') !== 1 ? A.wind + A.act + (A.end - A.wind - A.act) * cardStat(f, 'missRecovery') : A.end)) {   // cards can cut the recovery after a miss (a weapon's Steady)
         P_.on = false; P_.lastEnd = f.time;
         if (P_.queued) startPunch(f);
       }
@@ -1843,7 +1840,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     f.moveT = dir && f.onGround ? f.moveT + dt : dir ? f.moveT : Math.max(0, f.moveT - 3 * dt);
     const sprint = Math.min(1, Math.max(0, (f.moveT - 0.16) / 0.42));
     f.sprint = sprint;
-    const top = RUN * (f.punch.on && f.onGround ? 0.45 : f.onGround ? 0.5 + 0.5 * sprint : 1) * (f.wpn ? 1 + f.wpn.light / 100 : 1) * (f.onGround && inPool(f.x, f.y) ? 0.6 : 1);
+    const top = RUN * (f.punch.on && f.onGround ? 0.45 : f.onGround ? 0.5 + 0.5 * sprint : 1) * cardStat(f, 'runSpeed') * (f.onGround && inPool(f.x, f.y) ? 0.6 : 1);
     const toward = (v, target, rate) => v > target ? Math.max(target, v - rate) : Math.min(target, v + rate);
     if (f.dashT > 0) {
       const sp = f.dashCarry + (f.dashBurst - f.dashCarry) * (f.dashT / f.dashDur);   // burst easing into the carried speed
@@ -1957,7 +1954,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (f.onGround && !over) f.onGround = false;
     if (f.onGround) f.launched = false;
     if (f.knocked && f.onGround && Math.abs(f.vx) < 1 && !(f.stunT > 0)) f.knocked = false;
-    if (offScreen(f.x, f.y - 50) && !anchorSave(f)) { koFighter(f); if (f.out || f.dead > 0) return; }
+    if (offScreen(f.x, f.y - 50) && !anyHook(f, 'onKO')) { koFighter(f); if (f.out || f.dead > 0) return; }
 
     // animation target
     f.run += Math.abs(f.vx) * dt * (0.055 + 0.022 * f.sprint);   // the legs turn over faster than the body travels
@@ -1988,7 +1985,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     else if (f.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
     if (f.landT > 0) target = mixPose(target, idlePose(f.time, 0.8), Math.min(1, f.landT / 0.06));   // landing squat
     if (f.wpn) target = swordHold(f, target);   // holding a sword: the arms take its stance
-    target = snipePose(f, target);   // No Scope: the rifle whipped out and aimed (over a parry's pose: the shot animation has priority)
+    target = hookPose(f, target);   // cards with their own animation (No Scope's rifle, over a parry's pose: the shot has priority)
     let atkRate = 0, atkPh = -1;
     if (f.punch.on) {
       const P_ = f.punch, A = P_.A, t = P_.t;
@@ -2171,7 +2168,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const f of FIGHTERS) stepCardCds(f, dt);   // card cooldowns run on, ragdolled or not
     dgUpdate(dt);
     wpnWorldStep(dt);
-    for (const f of FIGHTERS) noScopeStep(f, dt);
+    for (const f of FIGHTERS) fireHook(f, 'onStep', dt);   // cards that run every frame
     roundUpdate(dt);
     for (const f of FIGHTERS) { const R = f.R, e = PARRY_WIN - f.parryT; parrySparks(f, R, dt, e >= 0.05 && e - dt < 0.05); }   // big burst once the arms are crossed
     stepSparks(dt);
@@ -2466,7 +2463,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       drawPart(PARTS.upperArm, r.ba.up, false, st, ink);
       drawPart(PARTS.lowerArm, r.ba.lo, false, st, ink);
     }
-    if (f.snipe && !f.snipe.wait) drawRifle(f, r);   // No Scope's rifle: under the near arm, over the far one
+    fireHook(f, 'draw', r);   // cards drawn with the fighter (No Scope's rifle): under the near arm, over the far one
     if (f.wpn && !(f.snipe && !f.snipe.wait)) drawSword(r.fa.lo, f.wpn, INK, f.swordW || 0, SWORD_HOLD.scale, f);   // (put away while the No Scope rifle is out)   // the weapon, under the lead hand: the fist wraps over its grip
     drawPart(PARTS.upperArm, r.fa.up, false, st, ink);
     drawPart(PARTS.lowerArm, r.fa.lo, false, st, ink);
@@ -3411,7 +3408,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgParried(f, pt, A) {
     if (!(f.parryT > 0)) return false;
     f.parryOk = true; f.parryCd = 0; f.readyT = 0.3; f.parryOkT = f.time;
-    if (A && f.wpn && f.wpn.has.mirror) { dg.damage = Math.min(DG.max, dg.damage + dgTake(dgDmg(A.dmg))); dg.shudder = 0.14; procLabel('Mirror', pt); }
+    if (A) fireHook(f, 'onParry', { att: 'dg', A, pt });
     for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; addSpark(pt[0], pt[1], Math.cos(a) * 320, Math.sin(a) * 320 - 120, 0.2 + Math.random() * 0.15); }
     dg.label = 'parried, unshaken'; dg.labelT = 1.1;
     return true;
@@ -3666,7 +3663,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function dgTakeHit(att, A, fx, fy) {
     const g = dg, P_ = att.punch, kd = A.limbs ? (Math.sign(g.x - att.x) || att.facing) : att.facing;
     P_.hit = true; att.lungeT = 0; att.vx *= 0.3;
-    const wh = att.wpn ? wpnHit(att, 'dg', A, [fx, fy]) : { dmg: A.damage, kb: 1, stun: 0 };
+    const wh = cardHit(att, 'dg', A, [fx, fy]);
     const before = g.damage, take = dgTake(wh.dmg);
     g.damage = Math.min(DG.max, g.damage + take);
     g.shudder = 0.14;
@@ -4192,7 +4189,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     dg = null; dgWaves.length = 0; dgBooms.length = 0; dmgNums.length = 0;
     for (const l of [echoes, phantoms, inkPools, wpnWaves, procs]) l.length = 0;
     for (const f of FIGHTERS) {   // each side's cards for this round: its weapon, its passives
-      const L = LOADOUT[f.side]; f.wpn = weaponStats(L.weapon && L.weaponSpec); f.noScope = hasNoScope(f.side); clearCardCds(f); f.snipe = null;
+      const L = LOADOUT[f.side]; f.wpn = weaponStats(L.weapon && L.weaponSpec); f.cards = cardIdsFor(f.side); clearCardCds(f); f.snipe = null;
     }
     noScopeFx.length = 0;
     for (const f of [pl, bot]) Object.assign(f, { anchorUsed: false, lastHitT: -99, parryOkT: -99, hits: 0, gbT: 0, bleedT: 0 });
@@ -4207,8 +4204,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     auraReady = false; forming.length = 0;
     for (const f of FIGHTERS) { f.R = rig(f); f.box = rigBox(f.R); }
     R0 = pl.R; auraUpdate(R0, 0); botInk(bot.R);
-    const own = LOADOUT.pl.companion === 'divineGeneral' ? pl : LOADOUT.bot.companion === 'divineGeneral' ? bot : null;
-    if (own) spawnDG(own);
+    for (const f of FIGHTERS) fireHook(f, 'onRoundStart');   // (the Divine General drops in)
   }
   function drawRoundMsg() {
     if (round.msgT <= 0) return;
@@ -4226,7 +4222,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ragdollStep(f, dt);
     f.R = rig(f); f.box = rigBox(f.R);
     if (f.rag && ragdollGround(f)) { f.R = rig(f); f.box = rigBox(f.R); }
-    if (offScreen(f.R.centre[0], f.R.centre[1]) && !anchorSave(f)) koFighter(f);
+    if (offScreen(f.R.centre[0], f.R.centre[1]) && !anyHook(f, 'onKO')) koFighter(f);
   }
   function koFighter(f) {   // off the screen: an ink blast from that edge, then out of the round, or back in after respawnDelay
     const [cx, cy] = f.R ? f.R.centre : [f.x, f.y - 50];
@@ -4600,6 +4596,59 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   ];
   const newLoadout = () => ({ weapon: null, weaponSpec: null, companion: null, airDash: null, parry: null, ability: null, passives: [] });   // card ids (weaponSpec: the rolled weapon)
   const LOADOUT = { pl: newLoadout(), bot: newLoadout() };   // yours (Select Cards) and the bot's (Bot's Cards)
+  // ---- card hooks: a card is data. It says what it changes (stats) and what it does when things happen (hooks); the game calls
+  // the hooks at fixed points, so no card is a special case anywhere else in the code. Each fighter carries the ids of its cards
+  // for the round (f.cards, from its loadout); a new card only needs an entry here (and its own functions).
+  //   stats: { name: multiplier or (f) => multiplier }, folded together by cardStat(f, name):
+  //     runSpeed (top run speed), windSpeed (how fast attack wind-ups run), missRecovery (recovery after a miss), cardCd (card cooldowns)
+  //   onRoundStart(f)          the round begins
+  //   onInput(f, I) -> true    before attacks, with this frame's input packet; true = it used the press
+  //   onStep(f, dt)            every frame, ragdolled or not
+  //   pose(f, target)          its own animation laid over the fighter's -> the new target pose
+  //   onHit(f, ctx)            one of f's attacks lands: ctx = { kind, A, pt, dmg, kb, stun } (kind: whose side, or 'dg'); it may change dmg / kb / stun
+  //   breakParry(f, ctx) -> true   f's attack goes straight through a parry
+  //   onParry(f, ctx)          f parries an attack: ctx = { att: the attacker's side or 'dg', A, pt }
+  //   onParried(f, ctx)        f's attack is parried: ctx = { tgt, A, pt }
+  //   onDash(f, ctx)           f dashes: ctx = { dx, dy, air }
+  //   onKO(f) -> true          f is about to be knocked out (off the screen); true = saved
+  //   draw(f, R)               drawn with the fighter (between the far arm and the near arm)
+  const WEAPON_FX = {   // every weapon card: its damage and modifiers come from the rolled copy (f.wpn)
+    stats: { runSpeed: (f) => 1 + f.wpn.light / 100, windSpeed: (f) => 1 / Math.max(0.4, 1 - f.wpn.quick / 100), missRecovery: (f) => Math.max(0.2, 1 - f.wpn.steady / 100) },
+    onHit: (f, ctx) => Object.assign(ctx, wpnHit(f, ctx.kind, ctx.A, ctx.pt)),
+    breakParry(f, ctx) {   // Guard Breaker: once every 5 s
+      if (!f.wpn.has.guardbreak || f.time < (f.gbT || 0)) return false;
+      f.gbT = f.time + 5; procLabel('Guard Breaker', ctx.pt); return true;
+    },
+    onParry(f, ctx) {   // Mirror: the attacker takes your weapon's damage back
+      if (!f.wpn.has.mirror) return;
+      if (ctx.att === 'dg') { dg.damage = Math.min(DG.max, dg.damage + dgTake(dgDmg(ctx.A.dmg))); dg.shudder = 0.14; }
+      else { const A_ = tgtOf(ctx.att); addDmg(A_, A_.wpn ? A_.wpn.dmg : ctx.A.damage); }
+      procLabel('Mirror', ctx.pt);
+    },
+    onKO: (f) => anchorSave(f),   // Anchor: the first launch off the screen stops dead instead
+  };
+  const CARD_FX = {
+    noScope: {   // passive: with an enemy ragdolled, X whips out a sniper and shoots them (see NOSCOPE)
+      onInput(f, I) {
+        if (!I.p.has('snipe') || !noScopeFire(f)) return false;
+        f.punch.on = false; f.punch.queued = false; f.lungeT = 0; f.snipe.wait = false; f.pose.fa1 = NOSCOPE_BACK; f.pose.fa2 = -0.05;   // at once, instead of attacking
+        return true;
+      },
+      onStep: (f, dt) => noScopeStep(f, dt),
+      pose: (f, target) => snipePose(f, target),
+      draw: (f, R) => { if (f.snipe && !f.snipe.wait) drawRifle(f, R); },
+    },
+    divineGeneral: { onRoundStart: (f) => spawnDG(f) },   // companion: he drops in as the round starts
+  };
+  for (const id of Object.keys(WEAPONS)) CARD_FX[id] = WEAPON_FX;
+  const cardIdsFor = (side) => { const L = LOADOUT[side]; return [L.weapon && L.weaponSpec ? L.weapon : null, L.companion, L.ability, L.airDash, L.parry, ...(L.passives || [])].filter(id => id && CARD_FX[id]); };
+  const hasCard = (f, id) => (f.cards || []).includes(id);
+  const cardsOf = (f) => (f.cards || []).map(id => CARD_FX[id]);
+  function fireHook(f, name, ...a) { for (const c of cardsOf(f)) if (c[name]) c[name](f, ...a); }
+  function anyHook(f, name, ...a) { for (const c of cardsOf(f)) if (c[name] && c[name](f, ...a)) return true; return false; }
+  function cardStat(f, key, base = 1) { let v = base; for (const c of cardsOf(f)) { const m = c.stats && c.stats[key]; if (m !== undefined) v *= typeof m === 'function' ? m(f) : m; } return v; }
+  function hookPose(f, target) { for (const c of cardsOf(f)) if (c.pose) target = c.pose(f, target); return target; }
+  function cardHit(f, kind, A, pt) { const ctx = { kind, A, pt, dmg: A.damage, kb: 1, stun: 0 }; fireHook(f, 'onHit', ctx); return ctx; }   // what a landed hit does, after the attacker's cards
   let equipped = LOADOUT.pl;
   const loadoutSig = () => JSON.stringify(LOADOUT);
   window.__hudDeath = (who) => hudDeath(who === 'bot' ? bot : pl);   // test hook: play the death icon

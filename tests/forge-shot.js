@@ -30,7 +30,7 @@ const OUT = path.join(__dirname, 'out') + '/'; fs.mkdirSync(OUT, { recursive: tr
     Object.assign(__bot, { x: 700, damage: 0 }); Object.assign(__fighter, { x: 600, facing: 1, damage: 40 });
     __step(1 / 60, 30);
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' })); window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyJ' }));
-    __step(1 / 60, 8);
+    __step(1 / 60, 20);   // (with a sword, J is the rising slash: a longer wind-up, slower still when cursed)
     window.__jab = { botDmg: __bot.damage, plDmg: +__fighter.damage.toFixed(2), wpn: __fighter.wpn && __fighter.wpn.dmg };
     __step(1 / 60, 1);
     return window.__jab;
