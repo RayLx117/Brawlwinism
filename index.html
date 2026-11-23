@@ -1376,10 +1376,11 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   // ---- No Scope (passive card): when an enemy is ragdolled and it's ready, a red X marks them; X whips out a sniper and shoots them,
   // through the ragdoll (an exception: ragdolls can't normally be hit). Numbers in NOSCOPE. kb / pop: half a full horizontal kill
   // (the sucker punch's 560 / 230), scaled by their damage as usual; the shot restarts their ragdoll
-  // the shot takes `anim` s: the rifle whipped from over the back (whip), swung down onto the target and tracking it, the aim frozen for the
-  // last `lock` s (a red sight line shows it), then the shot along that line at `anim`; the rifle stays up `hold` s more. Whatever is on
-  // the line then is hit (a parry blocks it, dashing off the line dodges it). scale = the rifle's size; range = how far the shot reaches
-  const NOSCOPE = { cd: 10, dmg: 20, kb: 280, pop: 115, spin: 8, anim: 0.7, whip: 0.32, lock: 0.15, hold: 0.25, scale: 1.7, range: 1500,
+  // the shot takes `anim` s: the rifle whipped from over the back (whip), swung down onto the target and tracking their torso right up to
+  // the shot (the mark stays on them; it's on them to time a parry or a dodge), then the shot at `anim`; the rifle stays up `hold` s more.
+  // The shot is a faded black line straight through their torso and on across the whole screen: that line is the hitbox, and it fades
+  // in `fade` s. scale = the rifle's size; range = how far the line runs
+  const NOSCOPE = { cd: 10, dmg: 20, kb: 280, pop: 115, spin: 8, anim: 0.7, whip: 0.32, hold: 0.25, fade: 0.22, scale: 1.7, range: 2600,
     kneel: { fx: 10, fy: 16, bl1: 0.12, bl2: 1.5, bf: 1.35, tl: 0.18 } };   // on one knee (on the ground): the front foot's place from the hip, the back thigh / shin / foot angles, the body's lean
   const noScopeFx = [];   // tracers and the rifle out: { kind, ... , t }
   let noScopeMark = null;   // the red X, built once (local coords, centred)
@@ -1416,8 +1417,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     f.snipe = { t: 0, wait: true, kind: T_.kind, at: T_.c.slice(), fired: false };
     return true;
   }
-  const snipeTargetOf = (kind) => kind === 'dg' ? (dg && dg.R ? { f: dg, c: dg.R.centre, shapes: () => dgHurtShapes(dg.R) } : null)
-    : (bot.R && !(bot.dead > 0) && !bot.out ? { f: bot, c: bot.R.centre, shapes: () => hurtShapes(bot.R) } : null);
+  // the target, and where on them it aims: the middle of the torso
+  const snipeTargetOf = (kind) => kind === 'dg' ? (dg && dg.R ? { f: dg, c: apply(dg.R.torso, 2, -35), shapes: () => dgHurtShapes(dg.R) } : null)
+    : (bot.R && !(bot.dead > 0) && !bot.out ? { f: bot, c: apply(bot.R.torso, 0.5, -14), shapes: () => hurtShapes(bot.R) } : null);
   // the rifle's muzzle and the direction it points, from the lead forearm (the rifle lies along it)
   function rifleFrame(Rg) {
     const m = Rg.fa.lo, [hx, hy] = apply(m, 0, 19), d = Math.hypot(m[2], m[3]) || 1, ux = m[2] / d, uy = m[3] / d, L = 92 * NOSCOPE.scale;
@@ -1430,15 +1432,20 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (S_.wait) { if (f.punch.on) return; S_.wait = false; f.pose.fa1 = 2.7 - f.pose.tl; f.pose.fa2 = -0.05; }   // the rifle starts up behind the shoulder
     S_.t += dt;
     const A = NOSCOPE, T_ = snipeTargetOf(S_.kind);
-    if (T_ && S_.t < A.anim - A.lock) S_.at = T_.c.slice();   // tracking, until the aim locks
+    if (T_ && !S_.fired) { S_.at = T_.c.slice(); f.facing = Math.sign(S_.at[0] - f.x) || f.facing; }   // tracking their torso right up to the shot, turning to face them
     const Rg = f === pl ? R0 : f.R;
     if (!S_.fired && S_.t >= A.anim && Rg) {   // the shot, straight down the barrel
       S_.fired = true;
-      const fr = rifleFrame(Rg), dir = Math.sign(fr.ux) || f.facing;
+      const fr = rifleFrame(Rg), [ax, ay] = S_.at, dl = Math.hypot(ax - fr.mx, ay - fr.my) || 1, ux = (ax - fr.mx) / dl, uy = (ay - fr.my) / dl, dir = Math.sign(ux) || f.facing;
+      fr.ux = ux; fr.uy = uy;   // the round goes from the muzzle straight through the target's torso
       let hit = null;
-      if (T_) { const sh = T_.shapes(); for (let d = 0; d <= A.range && !hit; d += 8) { const x = fr.mx + fr.ux * d, y = fr.my + fr.uy * d; if (hurtHit(sh, x, y, 6)) hit = [x, y]; } }
-      const end = hit || [fr.mx + fr.ux * A.range, fr.my + fr.uy * A.range];
-      noScopeFx.push({ kind: 'tracer', x0: fr.mx, y0: fr.my, x1: end[0], y1: end[1], t: 0 });
+      let exit = null;
+      if (T_) {
+        const sh = T_.shapes(); let d = 0;
+        for (; d <= A.range && !hit; d += 6) { const x = fr.mx + ux * d, y = fr.my + uy * d; if (hurtHit(sh, x, y, 6)) hit = [x, y]; }
+        if (hit) { for (; d <= A.range; d += 4) { const x = fr.mx + ux * d, y = fr.my + uy * d; if (!hurtHit(sh, x, y, 0)) { exit = [x, y]; break; } } }   // where the round comes out the other side
+      }
+      noScopeFx.push({ kind: 'line', x0: fr.mx, y0: fr.my, x1: fr.mx + ux * A.range, y1: fr.my + uy * A.range, t: 0 });   // across the whole screen
       shakeT = Math.max(shakeT, 0.2);
       for (let i = 0; i < 12; i++) { const a = Math.atan2(fr.uy, fr.ux) + (Math.random() - 0.5) * 0.9; addMote(fr.mx, fr.my, Math.cos(a) * (300 + Math.random() * 300), Math.sin(a) * (300 + Math.random() * 300), 0.25, 1 + Math.random() * 1.4, 100); }
       if (hit) {
@@ -1455,6 +1462,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
           if (S_.kind === 'bot') { startRagdoll(bot, (bot.rag ? bot.vx : 0) + dir * A.kb * ls, Math.min(bot.rag ? bot.vy : 0, 0) - A.pop * ls, dir * A.spin); bot.combo = 0; }
           else if (dg.state === 'rag') { dg.vx += dir * A.kb * ls * 1.6; dg.vy = Math.min(dg.vy, 0) - A.pop * ls; dg.rag.left = Math.max(dg.rag.left, ragTime(dg.damage, DG.max)); dg.rag.ground = false; dg.rag.av = -dir * 3; }
           procLabel('No Scope', hit);
+          const ex = exit || hit;   // ink blown out of the exit wound, along the line of the shot
+          for (let i = 0; i < 26; i++) { const a = Math.atan2(uy, ux) + (Math.random() - 0.5) * 0.9, v = 300 + Math.random() * 650; addDrop(ex[0], ex[1], Math.cos(a) * v, Math.sin(a) * v - 60, 0.6 + Math.random() * 1.6, Math.random() < 0.35 + 0.4 * dmgShare(T) ? RED : undefined); }
+          for (let i = 0; i < 14; i++) { const a = Math.atan2(uy, ux) + (Math.random() - 0.5) * 0.6, v = 400 + Math.random() * 500; addMote(ex[0], ex[1], Math.cos(a) * v, Math.sin(a) * v, 0.3, 0.8 + Math.random() * 1.5, 200); }
         }
       }
     }
@@ -1484,10 +1494,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
   function drawNoScope(dt) {
     setM(ID);
-    for (let i = noScopeFx.length - 1; i >= 0; i--) {   // the shot: a hard ink streak from the muzzle to the target, thinning away fast
-      const e = noScopeFx[i]; e.t += dt; const k = e.t / 0.18; if (k >= 1) { noScopeFx.splice(i, 1); continue; }
-      ctx.fillStyle = `rgba(21,18,15,${0.95 * (1 - k)})`; ctx.fill(brushPath([[e.x0, e.y0], [(e.x0 + e.x1) / 2, (e.y0 + e.y1) / 2], [e.x1, e.y1]], 5 * (1 - k) + 1, 0.02, 0.5, 0.2, 1480));
-      ctx.fillStyle = `rgba(${RED},${0.8 * (1 - k)})`; ctx.fill(brushPath([[e.x0, e.y0], [e.x1, e.y1]], 1.6 * (1 - k) + 0.4, 0.05, 0.3, 0, 1481));
+    for (let i = noScopeFx.length - 1; i >= 0; i--) {   // the shot: a faded black line across the screen, thinning and fading away fast
+      const e = noScopeFx[i]; e.t += dt; const k = e.t / NOSCOPE.fade; if (k >= 1) { noScopeFx.splice(i, 1); continue; }
+      ctx.save(); ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(21,18,15,${0.28 * (1 - k)})`; ctx.lineWidth = 9 * (1 - k * 0.6); ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke();
+      ctx.strokeStyle = `rgba(21,18,15,${0.75 * (1 - k)})`; ctx.lineWidth = 2.4 * (1 - k) + 0.4; ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke();
+      ctx.restore();
     }
     // the mark: a red X painted over the ragdolled enemy while the card is ready
     const T_ = noScopeReady(pl) ? noScopeTarget(pl) : pl.snipe && !pl.snipe.fired ? (() => { const t2 = snipeTargetOf(pl.snipe.kind); return t2 && { kind: pl.snipe.kind, c: t2.c }; })() : null;
@@ -1503,10 +1515,6 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function drawRifle(f, Rg) {
     const S_ = f.snipe; if (!S_ || S_.wait || !Rg) return;
     const A = NOSCOPE, fr = rifleFrame(Rg), al = Math.min(1, S_.t / 0.06, (A.anim + A.hold - S_.t) / 0.08);
-    if (S_.t >= A.anim - A.lock && !S_.fired) {   // locked: a thin red sight line out along the barrel, so it can be read and dodged
-      setM(ID); ctx.save(); ctx.setLineDash([10, 8]); ctx.strokeStyle = `rgba(${RED},0.7)`; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.moveTo(fr.mx, fr.my); ctx.lineTo(fr.mx + fr.ux * A.range, fr.my + fr.uy * A.range); ctx.stroke(); ctx.restore();
-    }
     let px = -fr.uy, py = fr.ux; if (py < 0) { px = -px; py = -py; }   // the rifle's 'down' side: whichever side of the barrel faces down, so the scope stays on top
     setM([fr.ux * A.scale, fr.uy * A.scale, px * A.scale, py * A.scale, fr.hx, fr.hy]);
     ctx.save(); ctx.globalAlpha = Math.max(0, al); paintRifle();

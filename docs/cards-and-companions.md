@@ -130,14 +130,16 @@ The player can now be hit, so the player has a damage % too, shown on the HUD. D
 
 While the holder's enemy is ragdolled (the bot, or the Divine General when he's knocked flying) and the card is ready, a red X painted with the bristle brush marks them, pulsing slightly.
 - **Firing:** pressing **X** (or the controller's X) attacks as normal *and* starts the shot, as an extra hit on a combo. If that press started an attack, the rifle comes out when the attack ends. J only attacks. No new attacks while the rifle is out.
-- **The animation (0.7 s, so the target has time to parry or dash):**
+- **The animation (0.7 s: the target has to time a parry or a dodge):**
   1. The fighter drops onto one knee: the front foot is planted forward, the back knee is on the floor and the body holds still.
-  2. The rifle whips out from behind the shoulder, up over the head and down onto the target (0.32 s), then tracks them.
-  - **Aiming (Ray's rule):** the torso turns so the chest faces the target, tipping back for high targets and forward for low ones. The arms and head hold the rifle the same way every time, relative to the torso. Only past the torso's range (about 63° back or 52° forward) do the arms make up the rest.
-  3. For the last 0.15 s the aim locks, and a thin red dashed sight line shows exactly where it will go.
-  4. At 0.7 s it fires straight down the barrel, with a muzzle blast, an ink tracer and recoil. The rifle stays up 0.25 s more.
-- **The shot:** whatever is on that line is hit, and it goes through ragdolls as an exception. A parry blocks it; dashing off the line dodges it. A hit does 20% (the Divine General takes his usual 60% of that). It relaunches them at half a full horizontal kill's knockback (280 / 115, scaled by their damage), added to how they're already flying, and restarts their ragdoll.
-- **Cooldown:** 10 s from the press, during which there's no new mark. The mark stays on the target until the shot fires.
+  2. The rifle whips out from behind the shoulder, up over the head and down onto the target (0.32 s).
+  - **Aiming (Ray's rule):** the aim tracks the middle of the target's torso right up to the shot, with no lock, so just moving won't get out of it. The shooter turns to face them if they cross behind. The torso turns so the chest faces the target, tipping back for high targets and forward for low ones. The arms and head hold the rifle the same way every time, relative to the torso. Only past the torso's range (about 63° back or 52° forward) do the arms make up the rest.
+  3. At 0.7 s it fires with a muzzle blast and recoil. The rifle stays up 0.25 s more.
+- **The shot:** a faded black line from the muzzle straight through the target's torso and on across the whole screen. That line is the hitbox, and it thins and fades in 0.22 s.
+  - It goes through ragdolls as an exception, and a parry blocks it.
+  - A hit does 20% (the Divine General takes his usual 60% of that) and blows ink out of the exit wound along the line of the shot.
+  - It relaunches them at half a full horizontal kill's knockback (280 / 115, scaled by their damage), added to how they're already flying, and restarts their ragdoll.
+- **Cooldown:** 10 s from the press. The mark stays on the target until the shot fires.
 - **Size:** the rifle is drawn 1.7× bigger than its first version.
 
 Numbers in `NOSCOPE`. The rifle and card art are placeholders until Ray sends designs.
