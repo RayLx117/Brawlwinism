@@ -5340,16 +5340,27 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
 
   // ---------------------------------------------------------------- loop
   R0 = rig(); auraUpdate(R0, 0); bot.R = rig(bot); botInk(bot.R);
-  let last = performance.now();
+  // The simulation runs at a fixed 60 Hz, apart from drawing: each display frame runs as many whole 1/60 s steps as the real time
+  // that's passed calls for (at most MAX_CATCHUP, so a stall doesn't snowball), then draws once. Every step is the same size, so the
+  // same inputs always give the same game (what rollback netcode needs). Menus and the home screen aren't the game: they keep real
+  // time. Drawing-only effects use the real time too (lastDt).
+  const SIM_HZ = 60, SIM_DT = 1 / SIM_HZ, MAX_CATCHUP = 4;
+  let last = performance.now(), simAcc = 0;
   function frame(now) {
-    const dt = Math.min(0.033, (now - last) / 1000); last = now; lastDt = menu.open ? 0 : dt;
+    const dt = Math.min(0.1, (now - last) / 1000); last = now; lastDt = menu.open ? 0 : Math.min(0.033, dt);
     if (!pl.paused) {   // paused = a test is stepping frames by hand
-      if (game.mode === 'home') { pollPad(); homeStep(dt); drawHome(); }
-      else { if (menu.open) { pollPad(); menuStep(dt); } else update(dt); draw(); }
+      if (game.mode === 'home') { simAcc = 0; pollPad(); homeStep(Math.min(0.033, dt)); drawHome(); }
+      else if (menu.open) { simAcc = 0; pollPad(); menuStep(Math.min(0.033, dt)); draw(); }
+      else {
+        simAcc = Math.min(simAcc + dt, MAX_CATCHUP * SIM_DT);
+        while (simAcc >= SIM_DT - 1e-6) { simStep(); simAcc -= SIM_DT; }
+        draw();
+      }
     }
     updateCursor();
     requestAnimationFrame(frame);
   }
+  function simStep() { update(SIM_DT); }   // one fixed step of the game
   requestAnimationFrame(frame);
 })();
 </script>
