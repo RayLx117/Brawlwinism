@@ -900,7 +900,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const canBeHit = (f) => !f.rag && !(f.dead > 0);   // ragdolled (incl. getting up) or knocked out: hits pass through
   const KO_DAMAGE = MAX_DAMAGE;   // the goo is fully red at max
   const ragTime = (d) => 0.2 + 1.3 * Math.pow(Math.min(1, d / MAX_DAMAGE), 1.2);
-  const launchScale = (d) => 1 + 1.35 * Math.pow(Math.min(1, d / MAX_DAMAGE), 1.1);
+  const LAUNCH_GROW = 1.755;   // how much damage adds to knockback (at max damage launches are 1 + this times as strong). Raised 30% from 1.35
+  const launchScale = (d) => 1 + LAUNCH_GROW * Math.pow(Math.min(1, d / MAX_DAMAGE), 1.1);
   function kickJoints(b, amt) { for (const k of KEYS) if (k !== 'dx' && k !== 'sp') b.rag.pv[k] = (b.rag.pv[k] || 0) + (Math.random() - 0.5) * amt; }
   function startRagdoll(b, vx, vy, av) {
     b.rag = { t: 0, av, pv: {}, phase: 'air', left: ragTime(b.damage), gt: 0, trail: [] };
