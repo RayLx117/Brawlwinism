@@ -184,7 +184,7 @@ Part detail is drawn with `strokes` in `DG_SRC`: tapered brush marks as `[[point
 - His ragdoll is one heavy body that tumbles, bounces off the floor and wall, and gets up. He doesn't recover in the air.
 - He dies only by leaving the screen.
 - At 500%, red goo drips off him. Red rises up his border with damage (scaled to 500%), and at 500% his HUD portrait number turns fully red and pulses.
-- **His damage scales with his owner's weapon** (Ray's request): each of his hits does × (1 + the owner's weapon damage per hit / 40) (`DG.wpnK`). No weapon is ×1; a common sword (about 10%) about ×1.25; a mythic (about 45%) about ×2.1; an Ancient (65%) ×2.6. The pierce's ground impact scales too.
+- **His damage scales with his owner's weapon** (Ray's request): every hit he lands, on all his attacks (the pierce's slam too), adds 125% of the owner's weapon damage per hit (`DG.wpnScale`). A 24% sword adds +30% to each hit. His card shows it as DMG: 9–15% (+125% and a small sword).
 
 **Attacks (`DG_ATK`).** Each one shows a red watercolour zone that fills toward the moment it hits, hatched with red brush lines and outlined in heavier red in the last 0.1 s. Every hit launches, and the launch grows with the target's damage, except the Quake, which pops you up and hit-stuns you instead.
 

@@ -2908,7 +2908,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     take: 0.6,       // share of a hit's damage % he actually takes
     max: 500,        // his damage % tops out here (fighters stop at MAX_DAMAGE)
     weak: 500,       // from this damage %, kill blows ragdoll him
-    wpnK: 40,        // his hits scale with his owner's weapon: × (1 + the weapon's damage per hit / wpnK); no weapon = ×1
+    wpnScale: 1.25,  // his hits scale with his owner's weapon: every hit adds 125% of the weapon's damage per hit (Ray); no weapon = +0
     push: 0.04,      // share of a hit's knockback that shoves him (almost immovable)
     launchLo: 0.55, launchHi: 0.9,   // ragdoll launch as a share of a normal fighter's, at weak% and at max damage
     walk: 115,       // px/s
@@ -3139,9 +3139,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     g.trail = [];
     if (k !== 'drop') g.wheelTo += Math.PI / 4;   // the wheel above his head turns a notch before every attack
   }
-  // his hits grow with his owner's weapon (DG.wpnK)
-  const dgPower = () => { const W = dg && dg.owner && dg.owner.wpn; return W ? 1 + W.dmg / DG.wpnK : 1; };
-  const dgDmg = (base) => Math.round(base * dgPower() * 10) / 10;
+  // his hits grow with his owner's weapon: every hit he lands (the pierce's slam too) adds DG.wpnScale × the weapon's damage per hit
+  const dgWpnBonus = () => { const W = dg && dg.owner && dg.owner.wpn; return W ? W.dmg * DG.wpnScale : 0; };
+  const dgDmg = (base) => Math.round((base + dgWpnBonus()) * 10) / 10;
   // a strike connects with a fighter: every one of his hits is a launch that grows with their damage
   function dgHitFighter(E, A, pt) {
     const g = dg, f = E.f, cx = A.key === 'leap' ? g.leapTo : g.x;
@@ -4416,8 +4416,19 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (ws) { const st = weaponStats(ws); return [['DMG:', st.dmg + '% per hit'], ...(ws.mods.length ? [['MODS:', ws.mods.map(modLabel).join(', ')]] : [])]; }
       const r = WEAPON_RARITY[c.rarity] || WEAPON_RARITY.common; return [['DMG:', r.dmg[0] + '–' + r.dmg[1] + '% per hit']];
     }
-    if (c.id === 'divineGeneral') { const d = Object.values(DG_ATK).map(a => a.dmg).filter(v => v > 0); return [['DMG:', Math.min(...d) + '–' + Math.max(...d) + '%']]; }
+    if (c.id === 'divineGeneral') { const d = Object.values(DG_ATK).map(a => a.dmg).filter(v => v > 0); return [['DMG:', Math.min(...d) + '–' + Math.max(...d) + '%', { wpn: Math.round(DG.wpnScale * 100) }]]; }
     return [['DMG:', '—']];
+  }
+  // a generic sword icon for stat rows ("scales with your weapon"): bristle-brush blade, crossguard, grip and pommel, upright, built once
+  let swordIcon = null;
+  function swordIconPath() {
+    if (!swordIcon) {
+      const st = [bristleStroke([[0, 5], [0.2, -5], [0, -15]], 4.2, 1801, { dry: 0.92 }), bristleStroke([[-6.5, 6], [0, 6.6], [6.5, 5.8]], 3, 1802, { dry: 0.9 }),
+        bristleStroke([[0, 7.5], [0.1, 10], [0, 12]], 2.8, 1803, { dry: 0.95 })];
+      swordIcon = new Path2D(); for (const b of st) { swordIcon.addPath(b.body); swordIcon.addPath(b.hairs); }
+      swordIcon.moveTo(1.8, 13.6); swordIcon.arc(0, 13.6, 1.8, 0, TAU);   // the pommel
+    }
+    return swordIcon;
   }
   // the full card (the preview on the card screen): the title at the top, a banner of the card's art, then a stat sheet (CD, DMG)
   // and the one-line description; rarity and type along the foot. Inked like the small cards: rarity wash, brush frame, gold for Ancient
@@ -4438,12 +4449,17 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.font = 'italic 700 12px Georgia, serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(21,18,15,0.6)';
     ctx.fillText((CARD_TYPES.find(q => q.key === c.type) || { label: c.type }).label.replace(/s$/, ''), x + w - 11, y + 17);
     // measure the stat sheet and the description first, so the banner gives up height when there's a lot to list (a weapon's mods)
-    const rows = cardStats(c).map(([k, v]) => {
+    const rows = cardStats(c).map(([k, v, extra]) => {
       ctx.font = 'italic 700 17px Georgia, serif'; const kw = Math.max(54, ctx.measureText(k).width + 10);
       const long = k === 'MODS:';   // a list: it runs under its label, smaller, across the card
       ctx.font = long ? 'italic 600 13px Georgia, serif' : 'italic 600 16px Georgia, serif';
       const lines = long ? wrapText(v, w - 32) : wrapText(v, w - 32 - kw).slice(0, 2);
-      return { k, kw, long, lines, hgt: 26 + (long ? lines.length * 15 : (lines.length - 1) * 18) };
+      let wb = null;   // a weapon-damage bonus after the value: (+125% and a little sword), on the same line if it fits, else the next
+      if (extra && extra.wpn) { ctx.font = 'italic 600 16px Georgia, serif'; const vw = ctx.measureText(lines[lines.length - 1]).width; ctx.font = 'italic 600 13px Georgia, serif';
+        const tx = '(+' + extra.wpn + '%', bw2 = ctx.measureText(tx).width + 29 + ctx.measureText(')').width, same = vw + 8 + bw2 <= w - 32 - kw;
+        wb = { tx, dx: same ? vw + 8 : 0, line: same ? lines.length - 1 : lines.length }; }
+      const nl = Math.max(lines.length, wb ? wb.line + 1 : 0);
+      return { k, kw, long, lines, wb, hgt: 26 + (long ? lines.length * 15 : (nl - 1) * 18) };
     });
     ctx.font = 'italic 500 15px Georgia, serif'; const dl = wrapText(c.desc || '', w - 26).slice(0, 3);
     const below = 27 + rows.reduce((q, r) => q + r.hgt, 0) + dl.length * 17 + 24;
@@ -4466,6 +4482,13 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       ctx.fillStyle = 'rgba(21,18,15,0.8)';
       if (r.long) { ctx.font = 'italic 600 13px Georgia, serif'; r.lines.forEach((l, j) => ctx.fillText(l, x + 16, ry + 17 + j * 15)); }
       else { ctx.font = 'italic 600 16px Georgia, serif'; r.lines.forEach((l, j) => ctx.fillText(l, x + 16 + r.kw, ry + j * 18)); }
+      if (r.wb) {   // (+125% [sword]): scales with your weapon's damage
+        const bx2 = x + 16 + r.kw + r.wb.dx, by2 = ry + r.wb.line * 18;
+        ctx.font = 'italic 600 13px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.7)'; ctx.fillText(r.wb.tx, bx2, by2);
+        const ix = bx2 + ctx.measureText(r.wb.tx).width + 12;
+        setM(chain(T(ix + 1, by2 - 5), R(0.62), Sc(0.7, 0.7))); ctx.fillStyle = INK; ctx.fill(swordIconPath()); setM(ID);
+        ctx.fillStyle = 'rgba(21,18,15,0.7)'; ctx.fillText(')', ix + 12, by2);
+      }
       const rb = ry + r.hgt - 26;
       ctx.fillStyle = 'rgba(21,18,15,0.3)'; ctx.fill(brushPath([[x + 14, rb + 8], [cx, rb + 9], [x + w - 14, rb + 7]], 1.3, 0.05, 0.4, 0.3, seed + 20 + i));
       ry += r.hgt;
