@@ -70,3 +70,12 @@ Damage was halved for every unarmed hit in v48 (Ray's plan: weapons and enhancem
 | `hop`, `up`, `slide`, `keep` | Special movement. |
 | `lsK`, `down`, `tip`, `stretchAt(pt)` | Launch-scale softening, knockdown, foot/shin-only hitbox, rear-leg stretch over time. |
 | `pose(ph, tg, t, pt)` | Sets the body for phase 0 (wind), 1 (strike) or 2 (recovery) and returns how fast it snaps there. `pt` is the move's own time. |
+
+## Sword moves
+
+While holding a sword, these replace the fist versions (the blade lines up with the forearm in attacks, and every hit does the weapon's damage through its modifiers).
+
+| Move | Input | Wind | Active | End | Knockback (kb / pop) | Notes |
+|---|---|---|---|---|---|---|
+| dash stab | J during/just after a ground dash | .10 | .10 | .52 | 280 / 115 | A lunge (520) driving the blade straight out. A semi-kill move: it ragdolls at half a full kill's knockback (the sucker punch is 560 / 230); launch still grows with damage. Ends the string. |
+

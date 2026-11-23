@@ -373,6 +373,17 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
           tg.fl1 = -0.9; tg.fl2 = 1.3; tg.bl1 = 0.7; tg.bl2 = 0.9; tg.ff = 0.3; tg.bf = 0.6; return 40; }
         tg.tl = 0.5; tg.hd = -0.35; tg.dx = 12; tg.sp = 7; tg.fa1 = -H_ - tg.tl + 0.02; tg.fa2 = -0.02; tg.ba1 = 1.0; tg.ba2 = -0.3;
         tg.fl1 = -0.85; tg.fl2 = 0.7; tg.bl1 = 0.85; tg.bl2 = 0.25; tg.ff = 0; tg.bf = 0.6; return 60; } },
+    // ---- sword moves (used instead of the fist versions while holding a sword; the blade lines up with the forearm in attacks)
+    // dash stab: out of a ground dash, a lunge that drives the blade straight out. A semi-kill move: it ragdolls, at half a full kill
+    // blow's knockback (a full horizontal kill like the sucker punch is 560 / 230). Ends the string.
+    swordDash: { name: 'dash stab', limb: 'fa', wind: 0.1, act: 0.1, hold: 0.12, link: 9, end: 0.52, lunge: 520, lungeT: 0.2, stun: 0.5, dmg: 1.8, damage: 5, kb: 280, pop: 115, ragdoll: true, spin: -5,
+      pose(ph, tg) { if (ph === 2) { guardHand(tg, 'ba'); return 14; }
+        if (ph === 0) {   // drawn back: the sword hand pulled in to the hip, blade level, weight dropping onto the front leg
+          tg.tl = 0.7; tg.hd = -0.45; tg.fa1 = 0.75 - tg.tl; tg.fa2 = -2.15; tg.ba1 = -0.6; tg.ba2 = -1.6;
+          tg.fl1 = -0.95; tg.fl2 = 1.35; tg.bl1 = 0.75; tg.bl2 = 0.85; tg.ff = 0.3; tg.bf = 0.6; return 40; }
+        // the stab: the arm shot straight out with the blade, body stretched long behind it, the off arm flung back
+        tg.tl = 0.62; tg.hd = -0.4; tg.dx = 14; tg.sp = 7; tg.fa1 = -H_ - tg.tl + 0.03; tg.fa2 = -0.03; tg.ba1 = 1.15; tg.ba2 = -0.2;
+        tg.fl1 = -1.0; tg.fl2 = 0.6; tg.bl1 = 0.95; tg.bl2 = 0.15; tg.ff = 0; tg.bf = 0.7; return 70; } },
     crouchPoke: { name: 'low kick', limb: 'fl', r: 7, wind: 0.06, act: 0.07, link: 0.22, end: 0.34, lunge: 120, lungeT: 0.08, stun: 0.4, dmg: 0.9, damage: 2, kb: 100, pop: 0, jc: true, next: 1,
       pose(ph, tg) { guardHand(tg, 'fa'); guardHand(tg, 'ba'); tg.fa1 = -0.55; tg.fa2 = -2.0; if (ph === 2) return 18;
         if (ph === 0) { tg.fl1 = -0.5; tg.fl2 = 1.9; tg.ff = 0.2; tg.tl = 0.45; return 40; }
@@ -1178,7 +1189,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const idx = P_.next;
     if (idx === 0) {
       P_.next = 1;
-      if (pl.dashT > 0 || pl.sinceDash < 0.12) return MOVES.dashPunch;
+      if (pl.dashT > 0 || pl.sinceDash < 0.12) { if (pl.wpn) { P_.next = 0; return MOVES.swordDash; } return MOVES.dashPunch; }
       if (pl.crouchK > 0.5 && dn) return MOVES.crouchPoke;
       return MOVES.jab;
     }
