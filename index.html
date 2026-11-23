@@ -1040,7 +1040,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     b.time += dt;
     b.koT = Math.max(0, (b.koT || 0) - dt);
     if (b.dead > 0) { b.dead -= dt; if (b.dead <= 0) botRespawn(b); else return; }
-    if (b.R && offScreen(b.R.centre[0], b.R.centre[1]) && !anchorSave(b)) { koBurst(b); if (roundTakesOut(b)) { b.dead = Infinity; b.out = true; } return; }
+    if (b.R && offScreen(b.R.centre[0], b.R.centre[1]) && !anchorSave(b)) { koBurst(b); hudDeath(b); if (roundTakesOut(b)) { b.dead = Infinity; b.out = true; } return; }
     b.moveT = Math.max(0, (b.moveT || 0) - dt);
     b.invK = Math.max(0, Math.min(1, (b.invK || 0) + (canBeHit(b) ? -14 : 12) * dt));   // can't-be-hit shimmer: quick in, quicker out
     b.stunT = Math.max(0, b.stunT - dt); b.hurtT = Math.max(0, b.hurtT - dt); b.parryT = Math.max(0, b.parryT - dt); b.lockT = Math.max(0, (b.lockT || 0) - dt);
@@ -2717,8 +2717,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.restore();
     setM(M0);
     for (const g of h.ring) { ctx.fillStyle = `rgba(21,18,15,${g.a})`; ctx.fill(g.p); }
-    if (out && !(ht >= DGH.fly)) { ctx.fillStyle = 'rgba(221,211,191,0.7)'; ctx.beginPath(); ctx.arc(cx, cy, HUD_R + 9, 0, TAU); ctx.fill(); }   // knocked out: washed back into the page until the respawn
-    else if (!out || ht >= DGH.fly) {   // the number sits over the bottom of the portrait, cut out of it with a paper halo
+    if (!out || ht >= DGH.fly) {   // the number sits over the bottom of the portrait, cut out of it with a paper halo
       const big = 30 * (1 + 0.35 * pop) * (d >= maxDmg(f) ? 1 + 0.05 * Math.sin(t * 9) : 1), num = String(Math.round(d));
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
       ctx.font = `italic 700 ${big.toFixed(1)}px Georgia, serif`; const wN = ctx.measureText(num).width;
@@ -2729,9 +2728,63 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       ctx.font = `italic 700 ${(big * 0.55).toFixed(1)}px Georgia, serif`; ctx.lineWidth = 5; ctx.strokeText('%', x0 + wN + 2, by); ctx.fillText('%', x0 + wN + 2, by);
     }
     ctx.restore();
-    if (!(ht >= DGH.fly)) drawCdBadges(h, f, M0);   // card cooldowns round the portrait (not while it's knocked out of its slot)
+    if (!(ht >= DGH.fly)) { drawDeathSkull(h, M0, out); drawCdBadges(h, f, M0); }   // card cooldowns round the portrait (not while it's knocked out of its slot)
   }
-  function drawHud() { for (const h of HUD) drawPortrait(h); }
+  function drawHud() {
+    for (const h of HUD) drawPortrait(h);
+    drawHudDrops();
+  }
+  // ---- the death icon: on a KO a red bristle-brush skull slams onto the fighter's portrait, throwing red ink off it. It stays while
+  // they're out (at least DEATH.hold), then fades as they come back
+  const DEATH = { slam: 0.15, from: 2.1, hold: 1.1, fade: 0.35, drops: 26, size: 1.05 };
+  let skullP = null;
+  function skullPath() {   // built once, centred, about 44 px across: cranium, jaw, two sockets, the nose and the teeth, all brush strokes
+    if (skullP) return skullP;
+    const st = [
+      bristleStroke([[-14, 9], [-19, -3], [-16, -15], [-6, -22], [6, -22], [16, -15], [19, -3], [14, 9]], 5.2, 1701, { dry: 0.75 }),   // the cranium, over the top
+      bristleStroke([[-14, 8], [-11, 13], [-10, 20], [0, 21.5], [10, 20], [11, 13], [14, 8]], 4.4, 1702, { dry: 0.7 }),   // cheeks and jaw
+      bristleStroke([[-12, -2], [-9, -4.5], [-5, -2], [-8, 1.5]], 7.5, 1703, { dry: 0.9 }), bristleStroke([[12, -2], [9, -4.5], [5, -2], [8, 1.5]], 7.5, 1704, { dry: 0.9 }),   // the sockets
+      bristleStroke([[0, 4], [-1.8, 9]], 2.8, 1705, { dry: 0.9 }), bristleStroke([[0, 4], [1.8, 9]], 2.8, 1706, { dry: 0.9 }),   // the nose
+      bristleStroke([[-9, 14.5], [0, 15.5], [9, 14.5]], 2, 1707, { dry: 0.8 }),   // the teeth: the bite line, then the gaps
+      bristleStroke([[-4.5, 13], [-4.5, 20]], 1.8, 1708, { dry: 0.9 }), bristleStroke([[0, 13], [0, 21]], 1.8, 1709, { dry: 0.9 }), bristleStroke([[4.5, 13], [4.5, 20]], 1.8, 1710, { dry: 0.9 }),
+    ];
+    skullP = new Path2D(); for (const b of st) { skullP.addPath(b.body); skullP.addPath(b.hairs); }
+    const r = rng(1711);   // flecks flicked off as it lands (no paper halo on these): drawn out along the way they flew
+    skullP.flecks = new Path2D();
+    for (let i = 0; i < 10; i++) { const a = r() * TAU, d = 23 + r() * 13, rr = 0.7 + r() * 1.6, x = Math.cos(a) * d, y = Math.sin(a) * d; skullP.flecks.moveTo(x + rr * 1.8 * Math.cos(a), y + rr * 1.8 * Math.sin(a)); skullP.flecks.ellipse(x, y, rr * 1.8, rr, a, 0, TAU); }
+    return skullP;
+  }
+  function hudDeath(f) { const h = HUD.find(q => q.f() === f); if (h) { h.deathT = performance.now() / 1000; h.burst = false; h.deathFade = 0; } }
+  const hudDrops = [];
+  function drawDeathSkull(h, M0, out) {
+    if (h.deathT === undefined) return;
+    const now = performance.now() / 1000, el = now - h.deathT, dt = Math.min(0.1, now - (h.dkT || now)); h.dkT = now;
+    if (!(out || el < DEATH.hold)) { h.deathFade += dt / DEATH.fade; if (h.deathFade >= 1) { h.deathT = undefined; return; } }
+    const [cx, cy] = apply(M0, h.x, HUD_Y - 4), e = Math.min(1, el / DEATH.slam);
+    // slammed on from big and faint, a squash on the hit, then a little wobble settling out
+    let sc = el < DEATH.slam ? DEATH.from + (1 - DEATH.from) * e * e : 1 + 0.14 * Math.exp(-(el - DEATH.slam) * 14) * Math.cos((el - DEATH.slam) * 40);
+    sc *= DEATH.size;
+    if (el >= DEATH.slam && !h.burst) {   // the hit: red ink thrown off the portrait
+      h.burst = true;
+      for (let i = 0; i < DEATH.drops; i++) { const a = Math.random() * TAU, v = 140 + Math.random() * 260, r0 = 14 + Math.random() * 16;
+        hudDrops.push({ x: cx + Math.cos(a) * r0, y: cy + Math.sin(a) * r0, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, r: 1 + Math.random() * 2.4, life: 0.5 + Math.random() * 0.5, t: 0 }); }
+    }
+    const al = Math.min(1, el / 0.05) * (1 - h.deathFade);
+    ctx.save(); setM(chain(T(cx, cy), R(-0.08), Sc(sc, sc))); ctx.globalAlpha = al;
+    ctx.lineJoin = 'round'; ctx.strokeStyle = PAPER; ctx.lineWidth = 3.5 / sc; ctx.stroke(skullPath());   // a paper halo so it reads over the portrait
+    ctx.fillStyle = 'rgb(170,26,20)'; ctx.fill(skullPath()); ctx.fill(skullP.flecks);
+    ctx.restore();
+  }
+  function drawHudDrops() {   // the red ink thrown off a portrait: drops that fly, fall and shrink away (screen space)
+    const now = performance.now() / 1000, dt = Math.min(0.05, now - (drawHudDrops.t || now)); drawHudDrops.t = now;
+    setM(ID); ctx.fillStyle = 'rgb(170,26,20)';
+    for (let i = hudDrops.length - 1; i >= 0; i--) {
+      const d = hudDrops[i]; d.t += dt; if (d.t >= d.life) { hudDrops.splice(i, 1); continue; }
+      d.vy += 900 * dt; d.x += d.vx * dt; d.y += d.vy * dt;
+      const k = 1 - d.t / d.life, sp = Math.hypot(d.vx, d.vy) || 1, st = 1 + Math.min(2.2, sp / 260);   // stretched along its flight
+      ctx.beginPath(); ctx.ellipse(d.x, d.y, d.r * k * st, d.r * k, Math.atan2(d.vy, d.vx), 0, TAU); ctx.fill();
+    }
+  }
   // card cooldown badges: a small round portrait of each card on cooldown, orbiting its owner's portrait from the top round to the
   // outside (and on round it, as more stack up). A dry-brush ring round each one unwinds back to the top as the cooldown runs out;
   // when it's done the badge pops and the rest slide round to close the gap
@@ -3878,7 +3931,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   }
   function plKO() {
     const [cx, cy] = R0 ? R0.centre : [pl.x, pl.y - 50];
-    blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(pl));
+    blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(pl)); hudDeath(pl);
     if (roundTakesOut(pl)) { pl.out = true; pl.rag = null; pl.vx = pl.vy = 0; return; }
     plReturn();
   }
@@ -4237,6 +4290,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const LOADOUT = { pl: newLoadout(), bot: newLoadout() };   // yours (Select Cards) and the bot's (Bot's Cards)
   let equipped = LOADOUT.pl;
   const loadoutSig = () => JSON.stringify(LOADOUT);
+  window.__hudDeath = (who) => hudDeath(who === 'bot' ? bot : pl);   // test hook: play the death icon
   window.__cards = { CARDS, LOADOUT, cdLeft: (who, id) => cardCdLeft(who === 'bot' ? bot : pl, id) };
   // focus rows: 0 = gear slots, 1 = passive slots (+ at the end), 2 = tabs, 3 = gallery
   const R_GEAR = 0, R_PASS = 1, R_TABS = 2, R_GAL = 3;
