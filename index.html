@@ -293,7 +293,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       Object.assign(nt, { fa1: Pp.lead[0] - tg.tl + jit, fa2: Pp.lead[1] - Pp.lead[0], ba1: Pp.off[0] - tg.tl + jit, ba2: Pp.off[1] - Pp.off[0] });   // angles given in the body frame, made relative to the torso / the upper arm
       f.swordAim = { abs: Pp.abs, rate: 40 }; f.swordTurnTo = 1; return nt;
     }
-    if ((P_.on && P_.A.bladeAbs !== undefined) || f.stuckT > 0) { f.swordAim = { abs: P_.on && P_.A.bladeAbs !== undefined ? P_.A.bladeAbs : 0, rate: 40 }; return tg; }   // the blade held at a fixed angle (point down)
+    if ((P_.on && P_.A.bladeAbs !== undefined) || (f.stuckT > 0 && !f.stuckOut)) { f.swordAim = { abs: P_.on && P_.A.bladeAbs !== undefined ? P_.A.bladeAbs : 0, rate: 90 }; return tg; }   // the blade held at a fixed angle (point down)
     if (P_.on && P_.A.keys) {   // a keyed swing places the arms and the wrist itself; once its keys are done, it eases back into the guard
       if (P_.track && P_.t <= P_.track[P_.track.length - 1].t) return tg;
       if (!f.onGround) { f.swordAim = { abs: S_.air, rate: 11 }; return tg; }
@@ -450,20 +450,21 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // round it, top going forward, after a small cock back. Hits all round you (above, in front, behind, below) and knocks them
     // straight away from you, whichever side they're on (radial), with no ragdoll. Short range: the spin is centred on you.
     // Keys use spin (the blade's turn from wherever it started) instead of blade. cd = how long after it ends before it's ready again.
-    // sword down air (down + attack in the air): the blade turned point-down in both hands and driven under you as you plunge.
-    // It stays out as long as down + attack are held (parry or air dash cancel it as usual). The first enemy the blade meets is
-    // impaled and carried down with you; when the point hits the floor it sends a small shock along it (swordShock): whoever is
-    // impaled comes off with a little pop, and anyone standing in the zone is popped too. Both hits are combo hits (half the
-    // weapon's damage). Stabbing the floor with nobody hit leaves the sword stuck: 0.7 s pulling it out (stuckT).
-    // plunge = the fall speed while it's out (px/s); zone = the shock's reach either side of the point (px)
+    // sword down air (down + attack in the air): the blade turned straight point-down in both hands and driven under you as you
+    // plunge. It stays out as long as down + attack are held (parry or air dash cancel it as usual). The first enemy the blade
+    // meets is impaled through the torso, on their back, and carried down with you (a combo hit). When the point is half its length
+    // into the floor (bury, px) it sticks there: always a 1.5 s pull-out (stuck), with two tugs before it comes free. With nobody
+    // on it you heave it out bent over the grip; with someone pinned on it you put a foot on their chest, tug twice, wrench it
+    // free and kick them off (swordPullKick: a kill blow at half strength, a combo amount of damage on top of the impale's).
+    // plunge = the fall speed while it's out (px/s)
     swordDair: { name: 'plunge stab', limb: 'fa', air: true, wind: 0.12, act: 0.1, hold: 0, link: 9, end: 0.36, stun: 0.5, dmg: 1.3, damage: 3, kb: 0, pop: 0,
-      twoHand: true, plunge: 1150, impale: true, zone: 95, stuck: 0.7, bladeAbs: 0, gravW: 0.4, landLag: 0.1,
+      twoHand: true, plunge: 1150, impale: true, bury: 41, stuck: 1.5, bladeAbs: 0, gravW: 0.4, landLag: 0.1,
       pose(ph, tg) { if (ph === 2) return 14;
         if (ph === 0) {   // drawn up: both hands at the chest, the point already turned down, knees tucked up
           tg.tl = 0.05; tg.hd = 0.15; tg.fa1 = -1.6 - tg.tl; tg.fa2 = -1.4; tg.fl1 = -1.4; tg.fl2 = 2.1; tg.bl1 = -0.8; tg.bl2 = 2.0; tg.ff = 0.5; tg.bf = 0.5; return 26; }
         // driven down: arms pushing the hilt below the hips, the blade leading, legs still tucked, head down after it
         tg.tl = 0.25; tg.hd = 0.35; tg.fa1 = -0.25 - tg.tl; tg.fa2 = -0.1; tg.fl1 = -1.2; tg.fl2 = 1.9; tg.bl1 = -0.5; tg.bl2 = 1.8; tg.ff = 0.6; tg.bf = 0.6; return 40; } },
-    swordShock: { name: 'ground shock', limb: 'fa', wind: 0, act: 0, link: 9, end: 0, stun: 0.45, dmg: 1.2, damage: 3, kb: 60, pop: 330, fixedPop: true, pose() { return 0; } },
+    swordPullKick: { name: 'pull-out kick', limb: 'fl', wind: 0, act: 0, link: 9, end: 0, stun: 0.5, dmg: 1.8, damage: 3, kb: 280, pop: 115, ragdoll: true, wpnShare: 0.5, spin: -6, pose() { return 0; } },
     swordNair: { name: 'sword spin', limb: 'fa', air: true, wind: 0.07, act: 0.2, hold: 0, link: 9, end: 0.4, cd: 0.5, stun: 0.42, dmg: 1.2, damage: 3, kb: 430, pop: 0, radial: true,
       gravW: 0.55, gravK: 0.55, landLag: 0.07, sweep: true, recRate: 14,
       keys: [
@@ -1971,7 +1972,6 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (f.vy > 500) splash(f.x, PLAT.y, 4 + Math.round(f.vy / 400));
       f.y = PLAT.y; f.vy = 0; f.onGround = true; f.flipT = 0; f.airCarry = false;
       if (f.knocked) f.stunT = Math.max(f.stunT, 0.12);   // knocked down onto the floor: a beat before they can act
-      if (f.punch.on && f.punch.A.plunge && f.punch.t >= f.punch.A.wind && !f.punch.letGo) f.stab = true;   // landed mid-plunge: resolveStabs sends the shock if the point hasn't yet, and decides if it's stuck
       if (f.punch.on && f.punch.A.air) { f.landT = f.punch.A.landLag || 0.08; f.punch.on = false; f.punch.queued = false; f.punch.lastEnd = f.time; }
       if (f.dashT > 0 && f.dashAir) { f.dashAir = false; f.dashV = [Math.sign(f.vx) || f.facing, 0]; }   // a downward air dash turns into a ground dash
     }
@@ -2010,12 +2010,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     else if (f.hurtT > 0) target = mixPose(target, { ...target, ...(f.hurtKind ? LAUNCH : RECOIL) }, Math.min(1, f.hurtT / 0.12));   // just hit: a flinch
     else if (f.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
     if (f.landT > 0) target = mixPose(target, idlePose(f.time, 0.8), Math.min(1, f.landT / 0.06));   // landing squat
-    if (f.stuckT > 0) {   // the sword stuck in the floor: bent over it, both hands on the grip, heaving it out over the last part
-      const e = 1 - f.stuckT / MOVES.swordDair.stuck, pull = Math.max(0, (e - 0.55) / 0.45), tug = 0.06 * Math.sin(f.time * 40) * (1 - pull);
-      target = { ...target, tl: 0.85 - 0.6 * pull + tug, hd: -0.2 + 0.25 * pull, dx: 2, fl1: -0.7, fl2: 1.4 - 0.6 * pull, bl1: 0.7, bl2: 1.0 - 0.4 * pull, ff: 0.1, bf: 0.5,
-        fa1: -0.15 - (0.85 - 0.6 * pull) - 0.5 * pull, fa2: -0.15 - 0.6 * pull };
-      f.vx = 0;
-    }
+    if (f.stuckT > 0) target = stuckPose(f, target);   // the sword planted in the floor: the pull-out
     if (f.wpn) target = swordHold(f, target);   // holding a sword: the arms take its stance
     target = hookPose(f, target);   // cards with their own animation (No Scope's rifle, over a parry's pose: the shot has priority)
     let atkRate = 0, atkPh = -1;
@@ -2077,7 +2072,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         const m = swordMat(Rp.fa.lo, f.swordW, SWORD_HOLD.scale, 0, 1, f.swordTwist), fy = apply(m, 0, 19)[1], ty = swordTip(Rp, f.wpn, f.swordW, 1, f.swordTwist)[1], lim = PLAT.y - 5;
         if (ty > lim && ty > fy + 1) f.swordFS = Math.max(0.12, (lim - fy) / (ty - fy));
       }
-      if (P_.on && P_.A.twoHand) {   // two-handed: the off hand on the grip just behind the lead hand, its arm solved to reach it
+      if ((P_.on && P_.A.twoHand) || (f.stuckT > 0 && f.stuckGrip)) {   // two-handed: the off hand on the grip just behind the lead hand, its arm solved to reach it
         const [gx, gy] = apply(swordMat(Rp.fa.lo, f.swordW, SWORD_HOLD.scale, 0, f.swordFS, f.swordTwist), SWORD_GRIP2[0], SWORD_GRIP2[1]), [sx, sy] = apply(Rp.torso, 1, -21);
         [f.pose.ba1, f.pose.ba2] = armIKn(f, f.pose.tl, sx, sy, gx, gy);
       }
@@ -2144,36 +2139,63 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function resolveStabs() {
     for (const f of FIGHTERS) {
       const P_ = f.punch, A = P_.A;
-      if (P_.on && A && A.plunge && P_.t >= A.wind && !P_.letGo && !P_.stabbed && f.R) {   // the point reaches the floor: the shock goes out from it
+      if (P_.on && A && A.plunge && P_.t >= A.wind && !P_.letGo && f.R) {   // the point half its length into the floor: it sticks
         const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1);
-        if (tip[0] > PLAT.x0 && tip[0] < PLAT.x1 && tip[1] >= PLAT.y - 2) stabShock(f, tip[0]);
-      }
-      if (f.stab) {   // landed mid-plunge
-        f.stab = false;
-        if (!P_.stabbed) stabShock(f, f.x + f.facing * 20);
-        if (!P_.hit) { f.stuckT = MOVES.swordDair.stuck; f.landT = 0; }   // nobody hit by the stab or the shock: the sword's stuck in the floor
+        if (tip[0] > PLAT.x0 && tip[0] < PLAT.x1 && tip[1] >= PLAT.y + A.bury) {
+          Object.assign(f, { stuckT: A.stuck, stuckX: tip[0], stuckOn: f.impaleOn, stuckOut: false, stuckKicked: false, stuckGrip: true, landT: 0 });
+          f.impaleOn = null; P_.on = false; P_.queued = false; P_.lastEnd = f.time;
+          shakeT = Math.max(shakeT, 0.12); stabRubble(tip[0]);
+        }
       }
       if (f.impaleOn && !(P_.on && A.impale && !P_.letGo)) releaseImpale(f, 0.35);   // let go mid-air (or cancelled)
-      if (f.impaleOn) {   // carried on the point
-        const t = fighterBySide(f.impaleOn);
-        if (!t.R || !canBeHit(t) || t.dead > 0) { releaseImpale(f, 0); continue; }
-        const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1), c = apply(t.R.torso, 0, -12);
-        t.x += tip[0] - c[0]; t.y += tip[1] - 22 - c[1]; t.vx = f.vx; t.vy = f.vy; t.onGround = false;   // run through the middle, the point just out of them
-        if (t.x > PLAT.x0 && t.x < PLAT.x1) t.y = Math.min(t.y, PLAT.y);
-        t.R = rig(t); t.box = rigBox(t.R);
+      if (f.stuckOn && !(f.stuckT > 0)) { const t = fighterBySide(f.stuckOn); f.stuckOn = null; if (t.impaledBy === f.side) { t.impaledBy = null; t.stunT = Math.min(t.stunT, 0.35); } }   // knocked off it
+      if (f.impaleOn) pinOn(fighterBySide(f.impaleOn), f, null);   // carried on the point, on their back
+      if (f.stuckOn) {
+        const t = fighterBySide(f.stuckOn), e = 1 - f.stuckT / MOVES.swordDair.stuck;
+        if (!f.stuckKicked && e >= PULL.kick) {   // the sword's out: kick them off it
+          f.stuckKicked = true; f.stuckOn = null; t.impaledBy = null;
+          const c = t.R ? t.R.centre : [t.x, t.y - 20]; landHit(f, t, MOVES.swordPullKick, c[0], c[1]);
+        } else pinOn(t, f, [f.stuckX, PLAT.y - 13]);   // pinned to the floor
       }
     }
   }
-  function stabShock(f, x) {
-    const A = MOVES.swordShock; f.punch.stabbed = true;
-    if (f.impaleOn) { const t = fighterBySide(f.impaleOn); releaseImpale(f, 0); landHit(f, t, A, x, PLAT.y - 30); }   // off the blade with a little pop
-    else {
-      const E = foeOf(f);
-      if (E.R && canBeHit(E) && E.onGround && Math.abs(E.x - x) < MOVES.swordDair.zone) landHit(f, E, A, E.x, PLAT.y - 20);   // standing in the zone
-    }
-    if (dgCanBeHit() && dg.owner !== f && dg.y >= PLAT.y - 2 && Math.abs(dg.x - x) < MOVES.swordDair.zone + 60) dgTakeHit(f, A, dg.x, PLAT.y - 40);
-    shakeT = Math.max(shakeT, 0.12);
-    stabRubble(x);
+  // someone run through on the blade, lying on their back, their middle on the blade (at = where their middle goes: under the
+  // point while falling; a spot on the floor once pinned)
+  function pinOn(t, f, at) {
+    if (!t || !t.R || !canBeHit(t) || t.dead > 0) { if (f.impaleOn) releaseImpale(f, 0); return; }
+    let cx, cy;
+    if (at) [cx, cy] = at; else { const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1); cx = tip[0]; cy = tip[1] - 16; }
+    t.rot = -Math.PI / 2; t.facing = f.facing; t.stunT = 9; t.vx = f.impaleOn ? f.vx : 0; t.vy = f.impaleOn ? f.vy : 0; t.onGround = false; t.knocked = true;
+    for (const k of KEYS) t.pose[k] += (PINNED[k] - t.pose[k]) * 0.3;
+    t.R = rig(t); const c = apply(t.R.torso, 0, -12); t.x += cx - c[0]; t.y += cy - c[1]; t.R = rig(t); t.box = rigBox(t.R);
+  }
+  const PINNED = { tl: 0.1, hd: -0.35, fa1: -1.2, fa2: -0.5, ba1: 1.3, ba2: -0.4, fl1: -0.5, fl2: 0.7, bl1: 0.2, bl2: 0.5, ff: 0.2, bf: 0.3, dx: 0, sp: 0 };   // on their back: arms flung out, knees up a little
+  // the pull-out, as shares of the 1.5 s: the foot going on (with someone pinned), two tugs (their peaks), the sword wrenched
+  // free (free > out), the kick (with someone pinned)
+  const PULL = { foot: [0.06, 0.18], tug1: 0.36, tug2: 0.56, free: 0.7, out: 0.78, kick: 0.8, kickEnd: 0.92 };
+  function stuckPose(f, tg) {
+    const e = 1 - f.stuckT / MOVES.swordDair.stuck, on = !!f.stuckOn || f.stuckKicked, D = MOVES.swordDair;
+    const bump = (c, w) => Math.max(0, 1 - Math.abs(e - c) / w);
+    const tug = Math.max(bump(PULL.tug1, 0.07), bump(PULL.tug2, 0.07)), dip = Math.max(bump(PULL.tug1 - 0.09, 0.04), bump(PULL.tug2 - 0.09, 0.04));   // a little crouch, then the heave
+    const free = Math.min(1, Math.max(0, (e - PULL.free) / (PULL.out - PULL.free)));
+    f.stuckOut = e >= PULL.out; f.stuckGrip = e < (on ? PULL.kickEnd : PULL.out + 0.08);
+    if (f.onGround) { const want = f.stuckX - f.facing * 30; f.x += (want - f.x) * 0.3; }   // standing just behind the blade
+    f.vx = 0;
+    const t = { ...tg, dx: 0, sp: 0, ff: 0, bf: 0.4 };
+    if (on) {   // the back leg planted, the front foot up on their chest; heave back against it, then kick them off
+      const fo = Math.min(1, Math.max(0, (e - PULL.foot[0]) / (PULL.foot[1] - PULL.foot[0])));
+      const kick = e >= PULL.kick ? Math.min(1, (e - PULL.kick) / 0.035) * (e < PULL.kickEnd ? 1 : Math.max(0, 1 - (e - PULL.kickEnd) / 0.06)) : 0;
+      const [cf1, cf2] = ik(21, 9), [kf1, kf2] = ik(29, -10);   // the foot on their chest / shot straight out
+      Object.assign(t, { tl: 0.15 + 0.15 * dip - 0.4 * tug - 0.3 * free - 0.2 * kick, hd: 0.05 + 0.15 * tug, bl1: 0.12 + 0.12 * tug, bl2: 0.12 + 0.35 * dip, bf: 0.15 });
+      const sf1 = -0.15, sf2 = 0.35;   // (standing)
+      t.fl1 = sf1 + (cf1 - sf1) * fo + (kf1 - cf1) * kick; t.fl2 = sf2 + (cf2 - sf2) * fo + (kf2 - cf2) * kick; t.ff = -0.2 * fo - 0.3 * kick;
+    } else Object.assign(t, { tl: 0.6 + 0.15 * dip - 0.45 * tug - 0.5 * free, hd: -0.1 + 0.2 * tug, fl1: -0.6 + 0.25 * tug, fl2: 1.25 + 0.3 * dip - 0.6 * tug - 0.4 * free, bl1: 0.6 - 0.2 * tug, bl2: 1.0 + 0.3 * dip - 0.5 * tug - 0.4 * free });
+    if (!f.stuckGrip) return t;
+    // the lead hand on the grip: half the blade in the floor, lifted on each tug, then all the way as it comes free
+    const lift = 12 * tug - 3 * dip + (D.bury + 22) * free, gx = f.stuckX, gy = PLAT.y + D.bury - (SWORD.tip[1] - 19) * SWORD_HOLD.scale * S - lift;   // (fist to point, px)
+    const Rp = rig({ ...f, pose: { ...f.pose, ...t } }), [sx, sy] = apply(Rp.torso, 1, -21);
+    [t.fa1, t.fa2] = armIKn(f, t.tl, sx, sy, gx, gy);
+    return t;
   }
   // rubble thrown up where the point went in, in the floor's own colour (read off the drawn stage, so any map's floor works)
   function stabRubble(x) {
@@ -4405,7 +4427,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const f of FIGHTERS) {
       Object.assign(f, { vx: 0, vy: 0, onGround: true, rag: null, out: false, dead: 0, launched: false, damage: 0, rot: 0, roll: 1, staggerT: 0, stunT: 0, hurtT: 0, knocked: false,
         lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false, wallT: 0, wallSlide: false, wallTouch: false, fastFall: false,
-        landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, hitTest: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0, moveReady: {}, combo: 0, stuckT: 0, impaleOn: null, impaledBy: null, stab: null });
+        landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, hitTest: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0, moveReady: {}, combo: 0, stuckT: 0, impaleOn: null, impaledBy: null, stuckOn: null, stuckOut: false, stuckGrip: false });
       f.punch.on = false; f.punch.queued = false; f.pose = idlePose(f.time);
       BRAIN[f.side] = { react: -1 };
     }
