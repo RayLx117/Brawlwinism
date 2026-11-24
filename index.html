@@ -4727,10 +4727,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     common:    { dmg: [8, 12],  mods: 0 },
     uncommon:  { dmg: [10, 15], mods: 1 },
     rare:      { dmg: [13, 25], mods: 2 },
-    epic:      { dmg: [20, 33], mods: 3 },
-    legendary: { dmg: [30, 43], mods: 4 },
-    mythic:    { dmg: [40, 50], mods: 5 },
-    ancient:   { dmg: [65, 65], mods: 6 },   // hard set, and very rare
+    epic:      { dmg: [20, 30], mods: 3 },   // weapons top out at 30% (Ray: longer fights, fewer one-shots); past Epic a rarity
+    legendary: { dmg: [25, 30], mods: 4 },   // brings more modifiers and better odds of a high roll, not more damage
+    mythic:    { dmg: [30, 30], mods: 5 },   // always the cap
+    ancient:   { dmg: [35, 35], mods: 6 },   // the one exception, since it's so rare
   };
   // the weapon types. mult scales the rolled damage (the sword does exactly the rolled damage); blade = its length past the fist (rig units)
   const WEAPONS = {

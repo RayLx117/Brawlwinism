@@ -30,10 +30,12 @@ Weapons use rarity differently from other cards. Every weapon is equal; a weapon
 | Common | 8–12% | 0 |
 | Uncommon | 10–15% | 1 |
 | Rare | 13–25% | 2 |
-| Epic | 20–33% | 3 |
-| Legendary | 30–43% | 4 |
-| Mythic | 40–50% | 5 |
-| Ancient | 65%, fixed (very rare) | 6 |
+| Epic | 20–30% | 3 |
+| Legendary | 25–30% | 4 |
+| Mythic | 30%, fixed | 5 |
+| Ancient | 35%, fixed (very rare) | 6 |
+
+Weapons top out at 30% per hit (Ray: longer fights, fewer future one-shots). Past Epic, a higher rarity brings more modifiers and better odds of a high roll, not more damage. Ancient is the one exception, at 35%. Common to Rare are unchanged. Modifiers can still push a hit above the rolled number (Keen, Executioner, Opener and so on).
 
 **The sword asset** is Ray's ink katana (`reference/sword-ink.png`), traced to vector with potrace (`reference/sword-trace.svg`) and embedded as `SWORD.d`: a Path2D in lower-arm space, with the grip in the fist, the guard just past it, and the blade running on along the arm with its curve. Long stretches only the blade. Under the ink sits a pale grey fill (`SWORD.fill`, made by `tests/sword-fill.py`) so it reads as a solid object: the ink's silhouette with its gaps closed, the guard's disc filled in and the tassel left out. The sword is drawn under the front arm, so the lead fist wraps over the grip.
 

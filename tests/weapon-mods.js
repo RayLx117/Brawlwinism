@@ -17,7 +17,7 @@ const { chromium } = require('playwright'); const path = require('path');
       out[m.key] = +(__bot.damage - d0).toFixed(1);
     }
     // stacking / curse / bless
-    const s1 = weaponStats({ id: 'sword', rarity: 'ancient', base: 65, mods: [{ key: 'keen' }, { key: 'keen' }, { key: 'lifesteal' }, { key: 'lifesteal' }, { key: 'long', blessed: true }, { key: 'heavy', curse: 'light' }] });
+    const s1 = weaponStats({ id: 'sword', rarity: 'ancient', base: 35, mods: [{ key: 'keen' }, { key: 'keen' }, { key: 'lifesteal' }, { key: 'lifesteal' }, { key: 'long', blessed: true }, { key: 'heavy', curse: 'light' }] });
     return { dmg: out, stack: { keen: s1.keen, lifesteal: s1.lifesteal, long: s1.long, heavy: s1.heavy, light: s1.light } };
   });
   console.log('damage dealt in 4 s, per modifier:', JSON.stringify(r.dmg));

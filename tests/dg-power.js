@@ -6,7 +6,7 @@ const { chromium } = require('playwright'); const path = require('path');
   await p.goto('file://' + path.resolve(__dirname, '../index.html')); await p.waitForTimeout(300);
   const r = await p.evaluate(() => {
     const L = __cards.LOADOUT, out = {}; __startPractice();
-    for (const [name, spec] of [['none', null], ['common 10', { rarity: 'common', base: 10 }], ['mythic 45', { rarity: 'mythic', base: 45 }], ['ancient 65', { rarity: 'ancient', base: 65 }]]) {
+    for (const [name, spec] of [['none', null], ['common 10', { rarity: 'common', base: 10 }], ['mythic 30', { rarity: 'mythic', base: 30 }], ['ancient 35', { rarity: 'ancient', base: 35 }]]) {
       L.pl.companion = null; L.bot.companion = 'divineGeneral'; L.bot.weapon = spec ? 'sword' : null; L.bot.weaponSpec = spec ? { id: 'sword', mods: [], ...spec } : null;
       __resetRound(); __step(1 / 60, 200);
       const g = __dg(); Object.assign(g, { x: 560, y: 540, state: 'idle', gapT: 999, facing: 1 }); Object.assign(__fighter, { x: 760, y: 540, vx: 0, vy: 0, rag: null, onGround: true, damage: 0, parryT: 0 });
