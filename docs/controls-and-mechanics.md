@@ -145,6 +145,8 @@ Input buffers: jump 0.13 s, punch 0.16 s, and dash 0.14 s (the dash buffer also 
   - **Abilities and channels are NOT cancelled** (No Scope's shot now, every ability later). The ability carries on and its animation keeps priority over the parry pose. The parry still runs underneath: the window, the white flash and the cling, and a success still stuns the attacker. In code, the parry pose, its arm snap and the arms-in-front layering all stand aside while `sniping(f)`. New abilities should do the same.
 - **Removed by Ray:** feint (v24), shield / hold-to-shield (v25) and the chest-pump/back-arch pose. Don't bring them back.
 
+- **Walls:** the body is kept out of the walls by its outline. The cliff face under the left edge only pushes a fighter who is actually beside it (their position left of the edge), and wall slides only happen on the big right wall. Before this, a body over the floor with a limb below the floor line could be shoved to the left edge, and touching the cliff could glue a fighter across the stage to the right wall.
+
 ## Damage, ragdolls, death
 
 - **Damage:** a "damaged" percentage that only goes up, to a 150% maximum. The jab adds 5 and the cross 7; see `moveset.md` for the rest.

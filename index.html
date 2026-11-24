@@ -2081,10 +2081,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     swordShed(f, f.R, dt);
     // the wall is solid for the whole body: no fist, foot or head pokes into it. Push back out by however far the outline goes in.
     {
-      const [ov, my, wx] = wallOverlap(f.R, !f.onGround), over = ov + 2;
-      const glue = over > 0 || f.wallSlide;   // sliding: stay glued to the wall while the pose settles
+      // (the cliff face under the left edge only counts for someone actually beside it, not for a body over the floor with a limb
+      // dipping below the floor line; and wall slides are only on the big right wall, so the glue never reaches across the stage)
+      const [ov, my, wx] = wallOverlap(f.R, !f.onGround && f.x < PLAT.x0 + 20), over = ov + 2, right = wx === WALL;
+      const glue = over > 0 || (f.wallSlide && right);   // sliding: stay glued to the wall while the pose settles
       if (glue) { f.x -= over; if (f.vx > 0) f.vx = 0; f.R = rig(f); }
-      f.wallTouch = glue || over > -3; f.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
+      f.wallTouch = right && (glue || over > -3); f.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
     }
     swingTrailStep(f, f.R, dt);   // the weapon's swing trail
     if (f.punch.on) {
@@ -4456,7 +4458,14 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (f.rag && ragdollGround(f)) { f.R = rig(f); f.box = rigBox(f.R); }
     if (offScreen(f.R.centre[0], f.R.centre[1]) && !anyHook(f, 'onKO')) koFighter(f);
   }
+  function clearPins(f) {   // a knockout or respawn ends any impale / pin this fighter is part of, either way round
+    if (f.impaleOn) releaseImpale(f, 0);
+    if (f.stuckOn) { const t = fighterBySide(f.stuckOn); if (t && t.impaledBy === f.side) { t.impaledBy = null; t.stunT = Math.min(t.stunT, 0.35); } }
+    if (f.impaledBy) { const a = fighterBySide(f.impaledBy); if (a.impaleOn === f.side) a.impaleOn = null; if (a.stuckOn === f.side) a.stuckOn = null; }
+    Object.assign(f, { impaleOn: null, stuckOn: null, impaledBy: null, stuckT: 0, stuckOut: false, stuckGrip: false });
+  }
   function koFighter(f) {   // off the screen: an ink blast from that edge, then out of the round, or back in after respawnDelay
+    clearPins(f);
     const [cx, cy] = f.R ? f.R.centre : [f.x, f.y - 50];
     blastSplash(cx, cy, 0.2 + 0.6 * dmgShare(f)); hudDeath(f);
     f.koPos = [Math.max(260, Math.min(GW - 160, cx)), Math.max(190, Math.min(PLAT.y - 60, cy))]; f.koT = 1.4; f.labelT = 0;
@@ -4465,6 +4474,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     f.dead = f.respawnDelay; if (!(f.dead > 0)) respawnFighter(f);
   }
   function respawnFighter(f) {   // fresh, undamaged, dropped back in from above its home spot
+    clearPins(f);
     Object.assign(f, { x: f.home[0], y: f.home[1], vx: 0, vy: 0, onGround: false, dashT: 0, slideT: 0, flipT: 0, rot: 0, roll: 1, wallT: 0, wallSlide: false, wallTouch: false,
       staggerT: 0, lungeT: 0, airCarry: false, rag: null, out: false, dead: 0, launched: false, damage: 0, stunT: 0, hurtT: 0, parryT: 0, combo: 0, knocked: false });
     f.punch.on = false;
