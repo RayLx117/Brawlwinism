@@ -2082,11 +2082,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // the wall is solid for the whole body: no fist, foot or head pokes into it. Push back out by however far the outline goes in.
     {
       // (the cliff face under the left edge only counts for someone actually beside it, not for a body over the floor with a limb
-      // dipping below the floor line; and wall slides are only on the big right wall, so the glue never reaches across the stage)
-      const [ov, my, wx] = wallOverlap(f.R, !f.onGround && f.x < PLAT.x0 + 20), over = ov + 2, right = wx === WALL;
-      const glue = over > 0 || (f.wallSlide && right);   // sliding: stay glued to the wall while the pose settles
+      // dipping below the floor line. Both faces can be slid down and jumped off; while sliding, the glue only holds to the same
+      // face as last frame, so rising past the top of the cliff can't drag you across the stage to the big wall)
+      const [ov, my, wx] = wallOverlap(f.R, !f.onGround && f.x < PLAT.x0 + 20), over = ov + 2, same = f.wallPt && f.wallPt[0] === wx;
+      const glue = over > 0 || (f.wallSlide && same && over > -40);   // sliding: stay glued to the wall while the pose settles
       if (glue) { f.x -= over; if (f.vx > 0) f.vx = 0; f.R = rig(f); }
-      f.wallTouch = right && (glue || over > -3); f.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
+      f.wallTouch = glue || over > -3; f.wallPt = [wx, my];   // judged after the push, so the slide can't drop out for a frame
     }
     swingTrailStep(f, f.R, dt);   // the weapon's swing trail
     if (f.punch.on) {
