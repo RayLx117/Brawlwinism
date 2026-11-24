@@ -2167,7 +2167,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (!t || !t.R || !canBeHit(t) || t.dead > 0) { if (f.impaleOn) releaseImpale(f, 0); return; }
     let cx, cy;
     if (at) [cx, cy] = at; else { const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1); cx = tip[0]; cy = tip[1] - 16; }
-    t.rot = -Math.PI / 2; t.facing = f.facing; t.stunT = 9; t.vx = f.impaleOn ? f.vx : 0; t.vy = f.impaleOn ? f.vy : 0; t.onGround = false; t.knocked = true;
+    t.rot = -Math.PI / 2; t.facing = -f.facing;   // (on their back, head out in front of the attacker)
+    t.stunT = 9; t.vx = f.impaleOn ? f.vx : 0; t.vy = f.impaleOn ? f.vy : 0; t.onGround = false; t.knocked = true;
     for (const k of KEYS) t.pose[k] += (PINNED[k] - t.pose[k]) * 0.3;
     t.R = rig(t); const c = apply(t.R.torso, 0, -12); t.x += cx - c[0]; t.y += cy - c[1]; t.R = rig(t); t.box = rigBox(t.R);
   }
