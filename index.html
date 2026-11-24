@@ -2068,7 +2068,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       // swinging low beside you on the ground, the blade turns across your body: it's drawn foreshortened just enough that the
       // tip skims along over the floor instead of cutting into it
       f.swordFS = 1;
-      if (((P_.on && (P_.A.keys || P_.A.plunge)) || f.stuckT > 0) && f.x > PLAT.x0 && f.x < PLAT.x1 && f.y <= PLAT.y + 1) {   // (on the floor, or low over it)
+      if (P_.on && P_.A.keys && f.x > PLAT.x0 && f.x < PLAT.x1 && f.y <= PLAT.y + 1) {   // (on the floor, or low over it)
         const m = swordMat(Rp.fa.lo, f.swordW, SWORD_HOLD.scale, 0, 1, f.swordTwist), fy = apply(m, 0, 19)[1], ty = swordTip(Rp, f.wpn, f.swordW, 1, f.swordTwist)[1], lim = PLAT.y - 5;
         if (ty > lim && ty > fy + 1) f.swordFS = Math.max(0.12, (lim - fy) / (ty - fy));
       }
@@ -2603,7 +2603,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       drawPart(PARTS.lowerArm, r.ba.lo, false, st, ink);
     }
     fireHook(f, 'draw', r);   // cards drawn with the fighter (No Scope's rifle): under the near arm, over the far one
-    if (f.wpn && !(f.snipe && !f.snipe.wait)) drawSword(r.fa.lo, f.wpn, INK, f.swordW || 0, SWORD_HOLD.scale, f);   // (put away while the No Scope rifle is out)   // the weapon, under the lead hand: the fist wraps over its grip
+    if (f.wpn && !(f.snipe && !f.snipe.wait)) drawHeldSword(f, r);   // (put away while the No Scope rifle is out)   // the weapon, under the lead hand: the fist wraps over its grip
     drawPart(PARTS.upperArm, r.fa.up, false, st, ink);
     drawPart(PARTS.lowerArm, r.fa.lo, false, st, ink);
   }
@@ -2710,6 +2710,21 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     setM(chain(m, T(0, G), Sc(1, k), T(0, -G))); ctx.save(); ctx.beginPath(); ctx.rect(-60, G, 120, 200); ctx.clip(); ctx.fillStyle = SWORD_FILL_COL; ctx.fill(SWORD_FILL); ctx.fillStyle = ink; ctx.fill(SWORD_PATH); ctx.restore();   // the blade, stretched by Long
   }
 
+  // the held sword. While it's plunging or planted in the floor (the plunge stab), it's cut off at the walk line, so the point goes
+  // into the floor, with a dark slit where it went in
+  function drawHeldSword(f, r) {
+    const P_ = f.punch, inFloor = ((P_.on && P_.A && P_.A.plunge) || (f.stuckT > 0 && !f.stuckOut)) && f.x > PLAT.x0 - 40 && f.x < PLAT.x1 + 40;
+    if (!inFloor) { drawSword(r.fa.lo, f.wpn, INK, f.swordW || 0, SWORD_HOLD.scale, f); return; }
+    ctx.save(); setM(ID); ctx.beginPath(); ctx.rect(-200, -400, GW + 400, PLAT.y + 1 + 400); ctx.clip();
+    drawSword(r.fa.lo, f.wpn, INK, f.swordW || 0, SWORD_HOLD.scale, f);
+    ctx.restore();
+    if (f.stuckT > 0 && !f.stuckOut) {   // the slit in the floor round the blade, and two little cracks off it
+      const x = f.stuckX; setM(ID); ctx.fillStyle = INK;
+      ctx.fill(brushPath([[x - 10, PLAT.y + 1], [x, PLAT.y + 3], [x + 10, PLAT.y + 1]], 3.6, 0.2, 0.2, 0.3, 1621));
+      ctx.fill(brushPath([[x - 6, PLAT.y + 2], [x - 13, PLAT.y + 5], [x - 18, PLAT.y + 6]], 1, 0.1, 0.6, 0.4, 1622));
+      ctx.fill(brushPath([[x + 6, PLAT.y + 2], [x + 11, PLAT.y + 6]], 0.9, 0.1, 0.6, 0.4, 1623));
+    }
+  }
   // tapered brush polygon through points (game px)
   function catmull(pts, n) {
     const p = [pts[0], ...pts, pts[pts.length - 1]], out = [];
