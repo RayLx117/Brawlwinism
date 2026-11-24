@@ -88,4 +88,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `sync-test.js`: the rollback sync test: random inputs for both players, run twice and saved/loaded every frame, compared by state hash (PASS/FAIL per setup). `sync-test-packs.js` holds its input generator.
 - `rollback.js`: the Rollback Test against four fake networks (typical to awful, parrying bot and busy bot): rollbacks counted, each run checked against a straight replay; also drives the page (type a ping, drag a slider, arrows, Esc). Frames: out/rollback.png, page: out/rbtest-menu.png.
 - `before-after.js`: the same inputs on the published main (`git show origin/main:index.html > out/before-main.html`) and on this build, before above after. Sheets: out/ba-*.png.
-
+- `sword-dair.js`: the sword's plunge stab: impale in the air and ride them down to the shock, the shock on a standing enemy, the shock alone (enemy beside you), a whiff (0.7 s stuck), letting go mid-air. Frames: out/sword-dair.png.

@@ -293,6 +293,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       Object.assign(nt, { fa1: Pp.lead[0] - tg.tl + jit, fa2: Pp.lead[1] - Pp.lead[0], ba1: Pp.off[0] - tg.tl + jit, ba2: Pp.off[1] - Pp.off[0] });   // angles given in the body frame, made relative to the torso / the upper arm
       f.swordAim = { abs: Pp.abs, rate: 40 }; f.swordTurnTo = 1; return nt;
     }
+    if ((P_.on && P_.A.bladeAbs !== undefined) || f.stuckT > 0) { f.swordAim = { abs: P_.on && P_.A.bladeAbs !== undefined ? P_.A.bladeAbs : 0, rate: 40 }; return tg; }   // the blade held at a fixed angle (point down)
     if (P_.on && P_.A.keys) {   // a keyed swing places the arms and the wrist itself; once its keys are done, it eases back into the guard
       if (P_.track && P_.t <= P_.track[P_.track.length - 1].t) return tg;
       if (!f.onGround) { f.swordAim = { abs: S_.air, rate: 11 }; return tg; }
@@ -449,6 +450,20 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // round it, top going forward, after a small cock back. Hits all round you (above, in front, behind, below) and knocks them
     // straight away from you, whichever side they're on (radial), with no ragdoll. Short range: the spin is centred on you.
     // Keys use spin (the blade's turn from wherever it started) instead of blade. cd = how long after it ends before it's ready again.
+    // sword down air (down + attack in the air): the blade turned point-down in both hands and driven under you as you plunge.
+    // It stays out as long as down + attack are held (parry or air dash cancel it as usual). The first enemy the blade meets is
+    // impaled and carried down with you; when the point hits the floor it sends a small shock along it (swordShock): whoever is
+    // impaled comes off with a little pop, and anyone standing in the zone is popped too. Both hits are combo hits (half the
+    // weapon's damage). Stabbing the floor with nobody hit leaves the sword stuck: 0.7 s pulling it out (stuckT).
+    // plunge = the fall speed while it's out (px/s); zone = the shock's reach either side of the point (px)
+    swordDair: { name: 'plunge stab', limb: 'fa', air: true, wind: 0.12, act: 0.1, hold: 0, link: 9, end: 0.36, stun: 0.5, dmg: 1.3, damage: 3, kb: 0, pop: 0,
+      twoHand: true, plunge: 1150, impale: true, zone: 95, stuck: 0.7, bladeAbs: 0, gravW: 0.4, landLag: 0.1,
+      pose(ph, tg) { if (ph === 2) return 14;
+        if (ph === 0) {   // drawn up: both hands at the chest, the point already turned down, knees tucked up
+          tg.tl = 0.05; tg.hd = 0.15; tg.fa1 = -1.6 - tg.tl; tg.fa2 = -1.4; tg.fl1 = -1.4; tg.fl2 = 2.1; tg.bl1 = -0.8; tg.bl2 = 2.0; tg.ff = 0.5; tg.bf = 0.5; return 26; }
+        // driven down: arms pushing the hilt below the hips, the blade leading, legs still tucked, head down after it
+        tg.tl = 0.25; tg.hd = 0.35; tg.fa1 = -0.25 - tg.tl; tg.fa2 = -0.1; tg.fl1 = -1.2; tg.fl2 = 1.9; tg.bl1 = -0.5; tg.bl2 = 1.8; tg.ff = 0.6; tg.bf = 0.6; return 40; } },
+    swordShock: { name: 'ground shock', limb: 'fa', wind: 0, act: 0, link: 9, end: 0, stun: 0.45, dmg: 1.2, damage: 3, kb: 60, pop: 330, fixedPop: true, pose() { return 0; } },
     swordNair: { name: 'sword spin', limb: 'fa', air: true, wind: 0.07, act: 0.2, hold: 0, link: 9, end: 0.4, cd: 0.5, stun: 0.42, dmg: 1.2, damage: 3, kb: 430, pop: 0, radial: true,
       gravW: 0.55, gravK: 0.55, landLag: 0.07, sweep: true, recRate: 14,
       keys: [
@@ -1008,7 +1023,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   const launchScale = (d, max = MAX_DAMAGE) => 1 + LAUNCH_GROW * Math.pow(Math.min(1, d / max), 1.1);
   function kickJoints(b, amt) { for (const k of KEYS) if (k !== 'dx' && k !== 'sp') b.rag.pv[k] = (b.rag.pv[k] || 0) + (grand() - 0.5) * amt; }
   function startRagdoll(b, vx, vy, av) {   // limp: everything they were doing stops
-    Object.assign(b, { dashT: 0, slideT: 0, wallSlide: false, flipT: 0, airCarry: false, lungeT: 0, staggerT: 0, stunT: 0, lockT: 0, parryT: 0, fastFall: false, landT: 0, launched: true, hitShape: null, hurtT: 0, knocked: false });
+    Object.assign(b, { dashT: 0, slideT: 0, wallSlide: false, flipT: 0, airCarry: false, lungeT: 0, staggerT: 0, stunT: 0, lockT: 0, parryT: 0, fastFall: false, landT: 0, launched: true, hitShape: null, hurtT: 0, knocked: false, stuckT: 0, impaledBy: null });
     b.punch.on = false; b.punch.queued = false;
     b.rag = { t: 0, av, pv: {}, phase: 'air', left: ragTime(b.damage, maxDmg(b)), gt: 0, trail: [] };
     kickJoints(b, 16);
@@ -1223,6 +1238,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const ready = (k) => f.time >= ((f.moveReady || {})[k] || 0);   // per-move cooldowns (A.cd): not ready yet = nothing comes out (the press stays buffered)
     if (!f.onGround) {
       if (f.wpn && !dn && !up && !dir) { if (!ready('swordNair')) return null; P_.next = 0; return MOVES.swordNair; }   // holding a sword: neutral air is the sword spin
+      if (f.wpn && dn && !up) { P_.next = 0; return MOVES.swordDair; }   // ...and down air is the plunge stab
       P_.next = 0;
       if (dn && !up) return MOVES.dair;
       if (up) return MOVES.uair;
@@ -1252,7 +1268,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const A = pickMove(f, chain);
     if (!A) return false;   // that move is still cooling down
     P_.A = A; P_.arm = A.limb[1] === 'a' ? A.limb[0] : '';
-    P_.on = true; P_.t = 0; P_.queued = false; P_.flecked = false; P_.hit = false; P_.ghosted = false; P_.lunged = false; P_.hopped = false; P_.floated = false; P_.trail = [];
+    P_.on = true; P_.t = 0; P_.queued = false; P_.flecked = false; P_.hit = false; P_.ghosted = false; P_.lunged = false; P_.hopped = false; P_.floated = false; P_.trail = []; P_.stabbed = false; P_.letGo = false;
     // a keyed sword swing only ever moves the sword for its own animation: anything else that starts clears what it left behind,
     // and a sword attack that isn't a keyed swing starts with the sword back to normal (along the forearm, edge as drawn, full length)
     P_.keyBlade = P_.keyTwist = undefined;
@@ -1297,7 +1313,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (A.ragdoll) { startRagdoll(b, kd * A.kb * ls * wh.kb, -A.pop * ls * wh.kb, (A.spin ?? -7.5) * (A.spin > 0 ? 1 : 1)); if (A.ragT) b.rag.left = A.ragT(b.damage); if (A.down) b.rag.down = true; shakeT = 0.22; }
     else {
       b.stunT = A.stun + wh.stun; b.stunMax = b.stunT; b.hurtT = 0.24; b.hurtKind = A.pop > 200 ? 1 : 0; b.knocked = true;
-      b.punch.on = false; b.punch.queued = false; b.dashT = 0; b.slideT = 0; b.lungeT = 0;   // a hit stops whatever they were doing
+      b.punch.on = false; b.punch.queued = false; b.dashT = 0; b.slideT = 0; b.lungeT = 0; b.stuckT = 0;   // a hit stops whatever they were doing
+      if (A.impale) { b.stunT = 9; b.vx = b.vy = 0; b.impaledBy = att.side; att.impaleOn = b.side; }   // run through: carried on the blade until it lets go
       b.vx = A.keepVx ? b.vx : kd * A.kb * wh.kb * (1 + 0.4 * (ls - 1));   // keepVx: no sideways push, they keep whatever momentum they had
       if (A.radial && b.R && att.R) {   // radial: straight away from you, whichever side they're on (on the floor, a downward hit just shoves them along it)
         let rx = b.R.centre[0] - att.R.centre[0], ry = b.R.centre[1] - att.R.centre[1]; const rl = Math.hypot(rx, ry) || 1; rx /= rl; ry /= rl;
@@ -1748,7 +1765,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
         ragStep(f, dt); f.hitShape = null; return;
     }
     // stunned by a parry, hit-stunned, mid-parry, or stuck after a missed parry: no inputs
-    const locked = f.staggerT > 0 || f.stunT > 0 || f.lockT > 0 || f.parryT > 0;
+    f.stuckT = Math.max(0, (f.stuckT || 0) - dt);
+    const locked = f.staggerT > 0 || f.stunT > 0 || f.lockT > 0 || f.parryT > 0 || f.stuckT > 0;
     if (locked) { for (const a of ['left', 'right', 'up', 'down', 'jump', 'punch', 'shift']) pressed.delete(a); B.jump = B.punch = B.dash = 0; }
     const dir0 = locked ? 0 : (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
 
@@ -1820,6 +1838,10 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (f.punch.on) {
       const P_ = f.punch, A = P_.A, W = f.wpn;
       P_.t += dt * (P_.t < A.wind ? cardStat(f, 'windSpeed') : 1);   // cards can make wind-ups run faster (a weapon's Quick) or slower (its curse)
+      if (A.plunge && P_.t >= A.wind && !P_.letGo) {   // the plunge: out as long as down + attack are held, falling fast
+        if (held('down') && held('punch')) { P_.t = Math.min(P_.t, A.wind + A.act - 1e-3); f.vy = A.plunge; f.vx *= Math.pow(0.15, dt); f.fastFall = false; }
+        else P_.letGo = true;
+      }
       if (A.float && !P_.floated && P_.t >= A.wind - 0.01) { P_.floated = true; A.float(f); f.fastFall = false; }   // aerials drift a little toward their direction
       if (!P_.lunged && P_.t >= (A.lungeAt ?? A.wind * 0.55)) {   // step into it
         P_.lunged = true; f.lungeT = A.lungeT || 0; f.lungeV = (A.lunge || 0) * (f.onGround ? 1 : 0.5);   // (moves with no lunge: 0, never NaN)
@@ -1949,6 +1971,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       if (f.vy > 500) splash(f.x, PLAT.y, 4 + Math.round(f.vy / 400));
       f.y = PLAT.y; f.vy = 0; f.onGround = true; f.flipT = 0; f.airCarry = false;
       if (f.knocked) f.stunT = Math.max(f.stunT, 0.12);   // knocked down onto the floor: a beat before they can act
+      if (f.punch.on && f.punch.A.plunge && f.punch.t >= f.punch.A.wind && !f.punch.letGo) f.stab = true;   // landed mid-plunge: resolveStabs sends the shock if the point hasn't yet, and decides if it's stuck
       if (f.punch.on && f.punch.A.air) { f.landT = f.punch.A.landLag || 0.08; f.punch.on = false; f.punch.queued = false; f.punch.lastEnd = f.time; }
       if (f.dashT > 0 && f.dashAir) { f.dashAir = false; f.dashV = [Math.sign(f.vx) || f.facing, 0]; }   // a downward air dash turns into a ground dash
     }
@@ -1987,6 +2010,12 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     else if (f.hurtT > 0) target = mixPose(target, { ...target, ...(f.hurtKind ? LAUNCH : RECOIL) }, Math.min(1, f.hurtT / 0.12));   // just hit: a flinch
     else if (f.stunT > 0) target = mixPose(target, { ...target, tl: -0.05, hd: 0.25, fa1: -0.2, fa2: -0.9, ba1: 0.25, ba2: -1.1 }, 0.7);   // hit-stunned: dazed, guard dropped (like the bot)
     if (f.landT > 0) target = mixPose(target, idlePose(f.time, 0.8), Math.min(1, f.landT / 0.06));   // landing squat
+    if (f.stuckT > 0) {   // the sword stuck in the floor: bent over it, both hands on the grip, heaving it out over the last part
+      const e = 1 - f.stuckT / MOVES.swordDair.stuck, pull = Math.max(0, (e - 0.55) / 0.45), tug = 0.06 * Math.sin(f.time * 40) * (1 - pull);
+      target = { ...target, tl: 0.85 - 0.6 * pull + tug, hd: -0.2 + 0.25 * pull, dx: 2, fl1: -0.7, fl2: 1.4 - 0.6 * pull, bl1: 0.7, bl2: 1.0 - 0.4 * pull, ff: 0.1, bf: 0.5,
+        fa1: -0.15 - (0.85 - 0.6 * pull) - 0.5 * pull, fa2: -0.15 - 0.6 * pull };
+      f.vx = 0;
+    }
     if (f.wpn) target = swordHold(f, target);   // holding a sword: the arms take its stance
     target = hookPose(f, target);   // cards with their own animation (No Scope's rifle, over a parry's pose: the shot has priority)
     let atkRate = 0, atkPh = -1;
@@ -2044,7 +2073,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       // swinging low beside you on the ground, the blade turns across your body: it's drawn foreshortened just enough that the
       // tip skims along over the floor instead of cutting into it
       f.swordFS = 1;
-      if (P_.on && P_.A.keys && f.x > PLAT.x0 && f.x < PLAT.x1 && f.y <= PLAT.y + 1) {   // (on the floor, or low over it)
+      if (((P_.on && (P_.A.keys || P_.A.plunge)) || f.stuckT > 0) && f.x > PLAT.x0 && f.x < PLAT.x1 && f.y <= PLAT.y + 1) {   // (on the floor, or low over it)
         const m = swordMat(Rp.fa.lo, f.swordW, SWORD_HOLD.scale, 0, 1, f.swordTwist), fy = apply(m, 0, 19)[1], ty = swordTip(Rp, f.wpn, f.swordW, 1, f.swordTwist)[1], lim = PLAT.y - 5;
         if (ty > lim && ty > fy + 1) f.swordFS = Math.max(0.12, (lim - fy) / (ty - fy));
       }
@@ -2107,6 +2136,64 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     return null;
   }
+  // the plunge stab: anyone on the blade rides down on its point; when the point hits the floor, the shock goes out along it
+  function releaseImpale(f, stun) {
+    const t = fighterBySide(f.impaleOn); f.impaleOn = null;
+    if (t && t.impaledBy === f.side) { t.impaledBy = null; t.stunT = Math.min(t.stunT, stun); }
+  }
+  function resolveStabs() {
+    for (const f of FIGHTERS) {
+      const P_ = f.punch, A = P_.A;
+      if (P_.on && A && A.plunge && P_.t >= A.wind && !P_.letGo && !P_.stabbed && f.R) {   // the point reaches the floor: the shock goes out from it
+        const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1);
+        if (tip[0] > PLAT.x0 && tip[0] < PLAT.x1 && tip[1] >= PLAT.y - 2) stabShock(f, tip[0]);
+      }
+      if (f.stab) {   // landed mid-plunge
+        f.stab = false;
+        if (!P_.stabbed) stabShock(f, f.x + f.facing * 20);
+        if (!P_.hit) { f.stuckT = MOVES.swordDair.stuck; f.landT = 0; }   // nobody hit by the stab or the shock: the sword's stuck in the floor
+      }
+      if (f.impaleOn && !(P_.on && A.impale && !P_.letGo)) releaseImpale(f, 0.35);   // let go mid-air (or cancelled)
+      if (f.impaleOn) {   // carried on the point
+        const t = fighterBySide(f.impaleOn);
+        if (!t.R || !canBeHit(t) || t.dead > 0) { releaseImpale(f, 0); continue; }
+        const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1), c = apply(t.R.torso, 0, -12);
+        t.x += tip[0] - c[0]; t.y += tip[1] - 22 - c[1]; t.vx = f.vx; t.vy = f.vy; t.onGround = false;   // run through the middle, the point just out of them
+        if (t.x > PLAT.x0 && t.x < PLAT.x1) t.y = Math.min(t.y, PLAT.y);
+        t.R = rig(t); t.box = rigBox(t.R);
+      }
+    }
+  }
+  function stabShock(f, x) {
+    const A = MOVES.swordShock; f.punch.stabbed = true;
+    if (f.impaleOn) { const t = fighterBySide(f.impaleOn); releaseImpale(f, 0); landHit(f, t, A, x, PLAT.y - 30); }   // off the blade with a little pop
+    else {
+      const E = foeOf(f);
+      if (E.R && canBeHit(E) && E.onGround && Math.abs(E.x - x) < MOVES.swordDair.zone) landHit(f, E, A, E.x, PLAT.y - 20);   // standing in the zone
+    }
+    if (dgCanBeHit() && dg.owner !== f && dg.y >= PLAT.y - 2 && Math.abs(dg.x - x) < MOVES.swordDair.zone + 60) dgTakeHit(f, A, dg.x, PLAT.y - 40);
+    shakeT = Math.max(shakeT, 0.12);
+    stabRubble(x);
+  }
+  // rubble thrown up where the point went in, in the floor's own colour (read off the drawn stage, so any map's floor works)
+  function stabRubble(x) {
+    if (resim) return;
+    const col = floorColourAt(x);
+    for (let i = 0; i < 16; i++) { const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, v = 180 + Math.random() * 380; addMote(x + (Math.random() - 0.5) * 30, PLAT.y - 2, Math.cos(a) * v, Math.sin(a) * v, 0.45 + Math.random() * 0.3, 1.6 + Math.random() * 2.2, 1400, col); }
+    for (let i = 0; i < 6; i++) { const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6, v = 120 + Math.random() * 260; addMote(x, PLAT.y - 2, Math.cos(a) * v, Math.sin(a) * v, 0.35, 1 + Math.random(), 900); }   // and a little ink
+    splash(x, PLAT.y, 4);
+  }
+  function floorColourAt(x) {
+    const k = view.s * view.dpr, fallback = '150,146,138';
+    if (!backdrop) return fallback;
+    try {
+      const g = backdrop.getContext('2d'), px = Math.max(0, Math.min(backdrop.width - 6, Math.round(x * k))), py = Math.max(0, Math.min(backdrop.height - 6, Math.round((PLAT.y + 7) * k)));
+      const d = g.getImageData(px - 2, py, 5, 5).data; let r = 0, gg = 0, b = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; }
+      const n = d.length / 4, dk = 0.82;   // a touch darker than the floor's face, so the chips read against it
+      return [r, gg, b].map(v => Math.round(v / n * dk)).join(',');
+    } catch (e) { return fallback; }
+  }
   function resolveHits() {
     const hits = [];
     for (const f of FIGHTERS) {
@@ -2135,6 +2222,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     FIGHTERS.forEach((f, i) => { f.in = inputs[i]; });
     for (const f of FIGHTERS) fighterStep(f, dt);
     resolveHits();
+    resolveStabs();
     R0 = pl.R;
     worldStep(dt);
   }
@@ -4317,7 +4405,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const f of FIGHTERS) {
       Object.assign(f, { vx: 0, vy: 0, onGround: true, rag: null, out: false, dead: 0, launched: false, damage: 0, rot: 0, roll: 1, staggerT: 0, stunT: 0, hurtT: 0, knocked: false,
         lungeT: 0, lockT: 0, parryT: 0, parryCd: 0, readyT: 0, dashT: 0, dashCd: 0, slideT: 0, flipT: 0, airCarry: false, wallT: 0, wallSlide: false, wallTouch: false, fastFall: false,
-        landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, hitTest: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0, moveReady: {}, combo: 0 });
+        landT: 0, airDashCd: 0, airDashes: 1, airJumps: 1, moveT: 0, hitShape: null, hitTest: null, swordW: 0, swordTwist: 1, swordFS: 1, swordKeyed: false, swordResetT: 0, moveReady: {}, combo: 0, stuckT: 0, impaleOn: null, impaledBy: null, stab: null });
       f.punch.on = false; f.punch.queued = false; f.pose = idlePose(f.time);
       BRAIN[f.side] = { react: -1 };
     }

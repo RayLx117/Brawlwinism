@@ -6,7 +6,7 @@ function packs(seed, n) {   // seeded random players: buttons held for a while, 
     const fr = [];
     for (let k = 0; k < 2; k++) {
       let h = P[k], q = 0;
-      BTN.forEach((b, j) => { const bit = 1 << j, on = h & bit, chance = b === 'punch' ? 0.09 : b === 'shift' ? 0.03 : b === toward[k] ? 0.08 : b === 'left' || b === 'right' ? 0.03 : 0.04;
+      BTN.forEach((b, j) => { const bit = 1 << j, on = h & bit, chance = b === 'punch' ? 0.09 : b === 'shift' ? 0.03 : b === toward[k] ? 0.08 : b === 'left' || b === 'right' ? 0.03 : b === 'down' ? 0.06 : 0.04;
         if (on ? r() < 0.25 : r() < chance) { h ^= bit; if (!on) q |= bit; } });
       if ((h & 1) && (h & 2)) h &= ~(r() < 0.5 ? 1 : 2);   // not left and right at once
       P[k] = h; fr.push([h, q, 0, 0]);
