@@ -2134,6 +2134,26 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     }
     return null;
   }
+  // ---- solid ground. Each block of the map that can't be passed through, with which of its edges are open (you can fall off past
+  // them). Anything that ends up inside one (a glitch, a pin let go too low, a hit at a bad angle) is pushed out the nearest way:
+  // up onto its top, or, nearer an open edge, eased out sideways a little each frame. Feet are what's checked, or a ragdoll's middle.
+  // A new map lists its own blocks here.
+  const SOLIDS = [{ x0: PLAT.x0, x1: WALL + 600, y0: PLAT.y, y1: GH + 2000, open: { left: true, right: false } }];
+  const SOLID_EASE = 10;   // px a frame when pushed out through a side
+  function keepOutOfSolids(f) {
+    if (f.dead > 0 || f.out || f.impaledBy || !f.R) return;
+    const [x, y] = f.rag ? f.R.centre : [f.x, f.y], margin = f.rag ? 16 : 2;
+    for (const S of SOLIDS) {
+      if (x <= S.x0 || x >= S.x1 || y <= S.y0 + margin || y >= S.y1) continue;
+      const up = y - S.y0, left = S.open.left ? x - S.x0 : Infinity, right = S.open.right ? S.x1 - x : Infinity;
+      if (left < up && left <= right) { f.x -= Math.min(left + 2, SOLID_EASE); if (f.vx > 0) f.vx = 0; }
+      else if (right < up) { f.x += Math.min(right + 2, SOLID_EASE); if (f.vx < 0) f.vx = 0; }
+      else if (f.rag) { f.y -= up - margin; f.vy = Math.min(f.vy, 0); }
+      else { f.y = S.y0; f.vy = Math.min(f.vy, 0); f.onGround = true; }
+      f.R = rig(f); f.box = rigBox(f.R);
+      return;
+    }
+  }
   // the plunge stab: anyone on the blade rides down on its point; when the point hits the floor, the shock goes out along it
   function releaseImpale(f, stun) {
     const t = fighterBySide(f.impaleOn); f.impaleOn = null;
@@ -2167,7 +2187,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
   function pinOn(t, f, at) {
     if (!t || !t.R || !canBeHit(t) || t.dead > 0) { if (f.impaleOn) releaseImpale(f, 0); return; }
     let cx, cy;
-    if (at) [cx, cy] = at; else { const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1); cx = tip[0]; cy = tip[1] - 16; }
+    if (at) [cx, cy] = at; else { const tip = swordTip(f.R, f.wpn, f.swordW || 0, 1, f.swordTwist ?? 1); cx = tip[0]; cy = tip[1] - 16; if (cx > PLAT.x0 && cx < WALL) cy = Math.min(cy, PLAT.y - 13); }   // (never carried down into the floor)
     t.rot = -Math.PI / 2; t.facing = -f.facing;   // (on their back, head out in front of the attacker)
     t.stunT = 9; t.vx = f.impaleOn ? f.vx : 0; t.vy = f.impaleOn ? f.vy : 0; t.onGround = false; t.knocked = true;
     for (const k of KEYS) t.pose[k] += (PINNED[k] - t.pose[k]) * 0.3;
@@ -2249,6 +2269,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     for (const f of FIGHTERS) fighterStep(f, dt);
     resolveHits();
     resolveStabs();
+    for (const f of FIGHTERS) keepOutOfSolids(f);   // the safety net: nobody stays inside solid ground
     R0 = pl.R;
     worldStep(dt);
   }

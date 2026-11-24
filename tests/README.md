@@ -91,3 +91,4 @@ pip install pillow        # only needed by the contact-sheet scripts (join.py / 
 - `sword-dair.js`: the sword's plunge stab: impale in the air (on their back), pinned, kicked off when the sword comes out; a whiff (the same 1.5 s pull-out); letting go mid-air. Frames: out/sword-dair-impale.png, out/sword-dair-whiff.png.
 - `teleport-scan.js`: looks for fighters jumping across the stage in one frame (random fights, a downward air dash into the floor, letting go of the plunge low, planting the blade at the edge and falling off) and checks a knockout frees anyone impaled or pinned. Exit 1 on a problem.
 - `cliff-walljump.js`: wall jumping up the cliff face under the left edge, on this build and on the published main.
+- `floor-safety.js`: nobody stays inside solid ground: the plunge stab from 192 heights/positions/let-go timings (pinned, kicked, or let go just above the floor) and random sword fights. Exit 1 if anyone stays inside the floor more than 10 frames.
