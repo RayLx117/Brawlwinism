@@ -390,7 +390,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     // ---- sword moves (used instead of the fist versions while holding a sword; the blade lines up with the forearm in attacks)
     // dash stab: out of a ground dash, a lunge that drives the blade straight out. A semi-kill move: it ragdolls, at half a full kill
     // blow's knockback (a full horizontal kill like the sucker punch is 560 / 230). Ends the string.
-    swordDash: { name: 'dash stab', limb: 'fa', cd: 0.3, wind: 0.1, act: 0.1, hold: 0.12, link: 9, end: 0.52, lunge: 520, lungeT: 0.2, stun: 0.5, dmg: 1.8, damage: 5, kb: 280, pop: 115, ragdoll: true, spin: -5,
+    swordDash: { name: 'dash stab', limb: 'fa', cd: 0.3, wpnShare: 0.5, wind: 0.1, act: 0.1, hold: 0.12, link: 9, end: 0.52, lunge: 520, lungeT: 0.2, stun: 0.5, dmg: 1.8, damage: 5, kb: 280, pop: 115, ragdoll: true, spin: -5,
       pose(ph, tg) { if (ph === 2) { guardHand(tg, 'ba'); return 14; }
         if (ph === 0) {   // drawn back: the sword hand pulled in to the hip, blade level, weight dropping onto the front leg
           tg.tl = 0.7; tg.hd = -0.45; tg.fa1 = 0.75 - tg.tl; tg.fa2 = -2.15; tg.ba1 = -0.6; tg.ba2 = -1.6;
@@ -1324,6 +1324,9 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (num && showDmg) { for (const n of dmgNums) n.y -= 26; dmgNums.push({ x: pt[0] + 30, y: pt[1] + 6, v: d, kill: false, dir: 1, t: 0 }); }
   }
   function procLabel(text, pt) { procs.push({ text, x: pt[0], y: pt[1] - 40, t: 0 }); }
+  // how much of the weapon's damage a move does (Ray's rule for every weapon): kill blows (they ragdoll) the full amount, combo
+  // hits half, unless the move says otherwise (wpnShare: the sword's dash stab is a kill blow but only half, it's so fast)
+  const wpnShare = (A) => A.wpnShare ?? (A.ragdoll ? 1 : 0.5);
   function wpnHit(att, kind, A, pt) {
     const W = att.wpn, has = { ...W.has }, tgt = tgtOf(kind);
     let keen = W.keen, heavy = W.heavy, steal = W.lifesteal;
@@ -1339,7 +1342,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     if (has.riposte && att.time - (att.parryOkT ?? -99) <= 1) m *= 1.5;
     if (has.momentum) m *= 1 + 0.5 * Math.min(1, Math.abs(att.vx || 0) / 760);
     if (has.skyborne && !att.onGround) m *= 1.2;
-    const dmg = Math.round(W.dmg * m * 10) / 10;
+    const dmg = Math.round(W.dmg * wpnShare(A) * m * 10) / 10;
     att.lastHitT = att.time;
     if (steal > 0) att.damage = Math.max(0, (att.damage || 0) - dmg * steal / 100);   // life steal: heals your own damage %
     if (has.bleed) tgt.bleedT = 3;
@@ -2085,7 +2088,7 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
       // hit frames: a capsule (radius r) along the whole limb, tip first, live only during the hit frames
       const active = P_.t >= A.wind && P_.t < A.wind + A.act;
       f.hitShape = active ? chains.map(c => ({ pts: c, r: rr, kill: !!A.ragdoll })) : null;
-      if (active && f.wpn && f.wpn.has.phantom && !P_.ghosted) { P_.ghosted = true; phantoms.push({ t: 0.3 + A.act / 2, chains: chains.map(c => c.map(p => p.slice())), r: rr, dmg: f.wpn.dmg }); }   // Phantom: the same swing again in 0.3 s
+      if (active && f.wpn && f.wpn.has.phantom && !P_.ghosted) { P_.ghosted = true; phantoms.push({ t: 0.3 + A.act / 2, chains: chains.map(c => c.map(p => p.slice())), r: rr, dmg: f.wpn.dmg * wpnShare(A) }); }   // Phantom: the same swing again in 0.3 s
       // a fast blade swing (A.sweep) is also tested where it was between the last frame and this one, so it can't skip past them
       const tested = active && A.sweep && f.prevPose && f.wpn ? [0.34, 0.67].map(k => { const Rm = rig({ ...f, pose: lerpPoseA(f.prevPose, f.pose, k) }); return [swordTip(Rm, f.wpn, f.prevSwordW + wrapA(f.swordW - f.prevSwordW) * k, f.prevSwordFS + ((f.swordFS || 1) - f.prevSwordFS) * k, f.swordTwist ?? 1), ...limbChain(Rm, 'fa')]; }).concat(chains) : chains;
       if (!P_.hit && active) f.hitTest = { A, chains: tested, r: rr, front: !!A.front };   // resolveHits finds who it touches
@@ -5001,8 +5004,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     const ws = c.type === 'weapon' && equipped.weapon === c.id && equipped.weaponSpec;
     if (c.id === 'noScope') return [['CD:', NOSCOPE.cd + ' s'], ['DMG:', NOSCOPE.dmg + '%']];
     if (c.type === 'weapon') {
-      if (ws) { const st = weaponStats(ws); return [['DMG:', st.dmg + '% per hit'], ...(ws.mods.length ? [['MODS:', ws.mods.map(modLabel).join(', ')]] : [])]; }
-      const r = WEAPON_RARITY[c.rarity] || WEAPON_RARITY.common; return [['DMG:', r.dmg[0] + '–' + r.dmg[1] + '% per hit']];
+      if (ws) { const st = weaponStats(ws); return [['DMG:', st.dmg + '% kill hits · ' + st.dmg / 2 + '% combo'], ...(ws.mods.length ? [['MODS:', ws.mods.map(modLabel).join(', ')]] : [])]; }
+      const r = WEAPON_RARITY[c.rarity] || WEAPON_RARITY.common; return [['DMG:', r.dmg[0] + '–' + r.dmg[1] + '% kill hits · ' + r.dmg[0] / 2 + '–' + r.dmg[1] / 2 + '% combo']];
     }
     if (c.id === 'divineGeneral') { const d = Object.values(DG_ATK).map(a => a.dmg).filter(v => v > 0); return [['DMG:', Math.min(...d) + '–' + Math.max(...d) + '%', { wpn: Math.round(DG.wpnScale * 100) }]]; }
     return [['DMG:', '—']];
@@ -5245,8 +5248,8 @@ canvas { display: block; width: 100%; height: 100%; outline: none; }
     ctx.font = 'italic 700 30px Georgia, serif'; ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText(st.dmg + '%', x0 + 96, F.y0 + 170);
     const dw = ctx.measureText(st.dmg + '%').width;
     ctx.font = 'italic 500 16px Georgia, serif'; ctx.fillStyle = 'rgba(21,18,15,0.55)';
-    ctx.fillText('per hit  ·  ' + R.dmg[0] + (R.dmg[1] !== R.dmg[0] ? '–' + R.dmg[1] : '') + '% for ' + RARITIES[w.rarity].label, x0 + 96 + dw + 12, F.y0 + 168);
-    x = x0 + 520; x += forgeButton('dmg-', '− 0.5', x, F.y0 + 168) + 24; x += forgeButton('dmg+', '+ 0.5', x, F.y0 + 168) + 24; forgeButton('reroll', 'Reroll', x, F.y0 + 168);
+    ctx.fillText('kill hits  ·  ' + st.dmg / 2 + '% combo  ·  ' + R.dmg[0] + (R.dmg[1] !== R.dmg[0] ? '–' + R.dmg[1] : '') + '% for ' + RARITIES[w.rarity].label, x0 + 96 + dw + 12, F.y0 + 168);
+    x = x0 + 545; x += forgeButton('dmg-', '− 0.5', x, F.y0 + 168) + 24; x += forgeButton('dmg+', '+ 0.5', x, F.y0 + 168) + 24; forgeButton('reroll', 'Reroll', x, F.y0 + 168);
     // roll a whole copy, or clear
     x = x0 + 96; x += forgeButton('rollall', 'Roll a random ' + RARITIES[w.rarity].label.toLowerCase() + ' copy', x, F.y0 + 214) + 34; forgeButton('clear', 'Clear modifiers', x, F.y0 + 214);
     // modifier slots
